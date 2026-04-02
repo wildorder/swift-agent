@@ -1,0 +1,132 @@
+name: Deploy Dev
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: swiftagent
+  ECS_CLUSTER: dev-swiftagent
+  ECS_SERVICE: dev-swiftagent
+  ENVIRONMENT: dev
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9.15.4'
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/swiftagent-deploy-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: dev-${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5"
+
+      - name: Terraform Init
+        working-directory: infra/envs/dev
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra/envs/dev
+        run: terraform apply -auto-approve -var="image_uri=${{ steps.build.outputs.image_uri }}"
+
+      - name: Wait for ECS service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE
+
+      - name: Run database migration
+        run: |
+          TASK_DEF=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          NETWORK_CONFIG=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].networkConfiguration' \
+            --output json)
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $TASK_DEF \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --overrides '{"containerOverrides": [{"name": "'"$ENVIRONMENT"'-swiftagent", "command": ["node", "dist/migrate.js"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Waiting for migration task to complete..."
+          aws ecs wait tasks-stopped \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          echo "Migration completed successfully"
+
+      - name: Smoke test
+        run: |
+          for i in {1..5}; do
+            STATUS=$(curl -sf https://dev-api.swiftagent.dev/health | jq -r '.status' 2>/dev/null) && break
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$STATUS" != "ok" ]; then
+            echo "Smoke test failed: expected status 'ok', got '$STATUS'"
+            exit 1
+          fi
+          echo "Smoke test passed"
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "Dev deployment succeeded: dev-${{ github.sha }}"
+          else
+            echo "Dev deployment failed: dev-${{ github.sha }}"
+          fi
