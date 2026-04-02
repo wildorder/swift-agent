@@ -20,4 +20,8 @@ export {
   type RunRepo,
   createToolCallRepo,
   type ToolCallRepo,
+  createTraceRepo,
+  type TraceRepo,
+  type TraceRecordRow,
+  type SpanRecordRow,
 } from './repositories/index.js';

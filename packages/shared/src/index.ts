@@ -12,6 +12,8 @@ export {
   PREFIX_AGENT,
   PREFIX_WORKSPACE,
   PREFIX_API_KEY,
+  PREFIX_TRACE,
+  PREFIX_SPAN,
   EVENT_MESSAGE_STARTED,
   EVENT_TOKEN,
   EVENT_TOOL_CALL_STARTED,
@@ -31,6 +33,8 @@ export {
   generateAgentId,
   generateWorkspaceId,
   generateApiKeyId,
+  generateTraceId,
+  generateSpanId,
   parsePrefix,
 } from './utils/id.js';
 

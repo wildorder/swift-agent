@@ -7,6 +7,8 @@ import {
   PREFIX_AGENT,
   PREFIX_WORKSPACE,
   PREFIX_API_KEY,
+  PREFIX_TRACE,
+  PREFIX_SPAN,
   DEFAULT_NANOID_LENGTH,
 } from '../constants.js';
 
@@ -40,6 +42,14 @@ export function generateWorkspaceId(): string {
 
 export function generateApiKeyId(): string {
   return prefixedId(PREFIX_API_KEY);
+}
+
+export function generateTraceId(): string {
+  return prefixedId(PREFIX_TRACE);
+}
+
+export function generateSpanId(): string {
+  return prefixedId(PREFIX_SPAN);
 }
 
 /**

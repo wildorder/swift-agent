@@ -7,6 +7,7 @@ import type {
   MessageRepo,
   RunRepo,
   ToolCallRepo,
+  TraceRepo,
 } from '@swiftagent/db';
 import { registerRequestId } from './middleware/request-id.js';
 import { registerAuth } from './middleware/auth.js';
@@ -19,6 +20,7 @@ import { registerAgentRoutes } from './routes/agents.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { registerTraceRoutes } from './routes/traces.js';
 
 export interface BuildAppOptions {
   repos: {
@@ -28,6 +30,7 @@ export interface BuildAppOptions {
     messageRepo: MessageRepo;
     runRepo: RunRepo;
     toolCallRepo: ToolCallRepo;
+    traceRepo: TraceRepo;
   };
   jwtSecret: string;
   publicWebsocketUrl?: string;
@@ -85,6 +88,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
       });
       registerMessageRoutes(v1, sessionService);
       registerRunRoutes(v1, sessionService);
+      registerTraceRoutes(v1, { traceRepo: opts.repos.traceRepo, sessionService });
     },
     { prefix: '/v1' },
   );

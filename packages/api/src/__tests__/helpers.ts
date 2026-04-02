@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { AgentRecord, ApiKeyRecord, SessionRecord, RunRecord, MessageRecord, ToolCallRecord } from '@swiftagent/shared';
-import type { AgentRepo, ApiKeyRepo, SessionRepo, MessageRepo, RunRepo, ToolCallRepo } from '@swiftagent/db';
+import type { AgentRepo, ApiKeyRepo, SessionRepo, MessageRepo, RunRepo, ToolCallRepo, TraceRepo, TraceRecordRow, SpanRecordRow } from '@swiftagent/db';
 import { buildApp, type AppContext } from '../server.js';
 
 // ── Test API key ───────────────────────────────────────────────────
@@ -269,6 +269,34 @@ export function createMockToolCallRepo(): ToolCallRepo {
   };
 }
 
+export function createMockTraceRepo(): TraceRepo {
+  const tracesMap = new Map<string, TraceRecordRow>();
+  const spansMap = new Map<string, SpanRecordRow[]>();
+
+  return {
+    saveTrace: async (trace) => {
+      tracesMap.set(trace.traceId, trace);
+    },
+    saveSpans: async (spans) => {
+      if (spans.length === 0) return;
+      const traceId = spans[0]?.traceId;
+      if (!traceId) return;
+      const existing = spansMap.get(traceId) ?? [];
+      spansMap.set(traceId, [...existing, ...spans]);
+    },
+    getTraceByRunId: async (runId) => {
+      for (const trace of tracesMap.values()) {
+        if (trace.runId === runId) return trace;
+      }
+      return null;
+    },
+    listSpansByTraceId: async (traceId) => {
+      const spans = spansMap.get(traceId) ?? [];
+      return spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+    },
+  };
+}
+
 // ── Build test app ─────────────────────────────────────────────────
 export async function buildTestApp(): Promise<AppContext> {
   return buildApp({
@@ -279,6 +307,7 @@ export async function buildTestApp(): Promise<AppContext> {
       messageRepo: createMockMessageRepo(),
       runRepo: createMockRunRepo(),
       toolCallRepo: createMockToolCallRepo(),
+      traceRepo: createMockTraceRepo(),
     },
     jwtSecret: TEST_JWT_SECRET,
     publicWebsocketUrl: 'ws://localhost:3001',
