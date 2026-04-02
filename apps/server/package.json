@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "clean": "rm -rf dist .turbo",
-    "start": "node dist/index.js"
+    "start": "node dist/main.js",
+    "start:dev": "tsx watch src/main.ts"
   },
   "dependencies": {
     "@swiftagent/shared": "workspace:*",
@@ -20,7 +21,10 @@
     "@swiftagent/runtime": "workspace:*",
     "@swiftagent/gateway": "workspace:*",
     "@swiftagent/api": "workspace:*",
-    "@swiftagent/observability": "workspace:*"
+    "@swiftagent/observability": "workspace:*",
+    "drizzle-orm": "^0.36",
+    "fastify": "^5",
+    "postgres": "^3.4"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

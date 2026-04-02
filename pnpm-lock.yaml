@@ -65,6 +65,15 @@ importers:
       '@swiftagent/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      drizzle-orm:
+        specifier: ^0.36
+        version: 0.36.4(postgres@3.4.8)
+      fastify:
+        specifier: ^5
+        version: 5.8.4
+      postgres:
+        specifier: ^3.4
+        version: 3.4.8
     devDependencies:
       typescript:
         specifier: ^5.5.0
