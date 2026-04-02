@@ -1,0 +1,279 @@
+{
+  "program": {
+    "id": "product-x",
+    "name": "Swift Agent — Phase 1 MVP",
+    "description": "Hosted real-time agent runtime: SDK to streaming UI for multi-model, tool-calling AI agents.",
+    "status": "planning",
+    "phase": 1,
+    "created": "2026-04-01"
+  },
+  "technology": {
+    "language": "TypeScript",
+    "runtime": "Node.js",
+    "monorepo": "pnpm workspaces + Turborepo",
+    "framework": "Fastify",
+    "database": "PostgreSQL",
+    "orm": "Drizzle",
+    "cache": "Redis (ioredis)",
+    "transport": "WebSocket (ws)",
+    "testing": "Vitest",
+    "validation": "Zod",
+    "logging": "pino",
+    "cloud": "AWS (ECS Fargate, RDS, ElastiCache, ALB, ECR)",
+    "iac": "Terraform",
+    "ci_cd": "GitHub Actions"
+  },
+  "packages": [
+    {
+      "name": "@swiftagent/shared",
+      "path": "packages/shared",
+      "description": "Shared types, event protocol, constants, and utilities"
+    },
+    {
+      "name": "@swiftagent/db",
+      "path": "packages/db",
+      "description": "PostgreSQL schema, migrations, and typed repositories"
+    },
+    {
+      "name": "@swiftagent/models",
+      "path": "packages/models",
+      "description": "Unified model provider abstraction (OpenAI, Anthropic, Google)"
+    },
+    {
+      "name": "@swiftagent/runtime",
+      "path": "packages/runtime",
+      "description": "Agent runtime engine: message loop, tool orchestration, memory"
+    },
+    {
+      "name": "@swiftagent/gateway",
+      "path": "packages/gateway",
+      "description": "WebSocket realtime gateway: connection auth, multiplexing, streaming"
+    },
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "Control plane REST API: sessions, agents, tokens"
+    },
+    {
+      "name": "@swiftagent/sdk",
+      "path": "packages/sdk",
+      "description": "Server-side SDK: agent/tool definition DSL, tool runner"
+    },
+    {
+      "name": "@swiftagent/react",
+      "path": "packages/react",
+      "description": "Client-side React hooks and vanilla JS WebSocket client"
+    },
+    {
+      "name": "@swiftagent/observability",
+      "path": "packages/observability",
+      "description": "Structured tracing, run-level logs, and event capture"
+    }
+  ],
+  "workstreams": [
+    {
+      "id": "WS-01",
+      "name": "Project Foundation & Monorepo",
+      "taskFile": "tasks/product-x/ws-01-foundation.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": [],
+      "packages": []
+    },
+    {
+      "id": "WS-02",
+      "name": "Shared Types & Protocol Definitions",
+      "taskFile": "tasks/product-x/ws-02-shared-types.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["WS-01"],
+      "packages": ["packages/shared"]
+    },
+    {
+      "id": "WS-03",
+      "name": "Database & Data Access Layer",
+      "taskFile": "tasks/product-x/ws-03-database.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-01", "WS-02"],
+      "packages": ["packages/db"]
+    },
+    {
+      "id": "WS-04a",
+      "name": "Model Types, Interface & Registry",
+      "taskFile": "tasks/product-x/ws-04a-model-types-registry.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["WS-01", "WS-02"],
+      "packages": ["packages/models"]
+    },
+    {
+      "id": "WS-04b",
+      "name": "Provider Implementations (OpenAI/Anthropic/Google)",
+      "taskFile": "tasks/product-x/ws-04b-provider-implementations.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-04a"],
+      "packages": ["packages/models"]
+    },
+    {
+      "id": "WS-05a",
+      "name": "Tool Executor (Interface + Local + Remote)",
+      "taskFile": "tasks/product-x/ws-05a-tool-executor.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["WS-01", "WS-02"],
+      "packages": ["packages/runtime"]
+    },
+    {
+      "id": "WS-05b",
+      "name": "Core Loop, Engine & Memory",
+      "taskFile": "tasks/product-x/ws-05b-core-loop-engine.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-03", "WS-04a", "WS-05a"],
+      "packages": ["packages/runtime"]
+    },
+    {
+      "id": "WS-06",
+      "name": "Realtime WebSocket Gateway",
+      "taskFile": "tasks/product-x/ws-06-gateway.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-02", "WS-03", "WS-05b"],
+      "packages": ["packages/gateway"]
+    },
+    {
+      "id": "WS-07",
+      "name": "Control Plane REST API",
+      "taskFile": "tasks/product-x/ws-07-control-plane-api.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-02", "WS-03"],
+      "packages": ["packages/api"]
+    },
+    {
+      "id": "WS-08",
+      "name": "Server SDK (@swiftagent/sdk)",
+      "taskFile": "tasks/product-x/ws-08-server-sdk.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-05b", "WS-07"],
+      "packages": ["packages/sdk"]
+    },
+    {
+      "id": "WS-09",
+      "name": "Client SDKs (@swiftagent/react)",
+      "taskFile": "tasks/product-x/ws-09-client-sdks.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-02", "WS-06"],
+      "packages": ["packages/react"]
+    },
+    {
+      "id": "WS-10",
+      "name": "Observability & Tracing",
+      "taskFile": "tasks/product-x/ws-10-observability-e2e.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-03", "WS-05b", "WS-07"],
+      "packages": ["packages/observability"]
+    },
+    {
+      "id": "WS-11",
+      "name": "Service Composition",
+      "taskFile": "tasks/product-x/ws-11-service-composition.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-01", "WS-02", "WS-03", "WS-04a", "WS-04b", "WS-05a", "WS-05b", "WS-06", "WS-07", "WS-08", "WS-09", "WS-10"],
+      "packages": ["apps/server"]
+    },
+    {
+      "id": "WS-12",
+      "name": "CI Pipeline, Docker & Branch Strategy",
+      "taskFile": "tasks/product-x/ws-12-ci-cd-deployment.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["WS-01"],
+      "packages": [".github/workflows", "apps/server/Dockerfile"]
+    },
+    {
+      "id": "WS-13a",
+      "name": "Terraform Foundation & Data Infrastructure",
+      "taskFile": "tasks/product-x/ws-13a-terraform-foundation.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-12"],
+      "packages": ["infra/modules/networking", "infra/modules/database", "infra/modules/cache", "infra/modules/ecr", "infra/modules/secrets"]
+    },
+    {
+      "id": "WS-13b",
+      "name": "ECS, Load Balancer, DNS & Deploy Workflows",
+      "taskFile": "tasks/product-x/ws-13b-ecs-deploy-workflows.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-11", "WS-12", "WS-13a"],
+      "packages": ["infra/modules/ecs", "infra/modules/loadbalancer", "infra/modules/dns", "infra/envs", ".github/workflows/deploy-*"]
+    }
+  ],
+  "dataModel": {
+    "entities": [
+      {
+        "name": "Workspace",
+        "fields": ["workspaceId", "name", "createdAt", "updatedAt"]
+      },
+      {
+        "name": "ApiKey",
+        "fields": ["apiKeyId", "workspaceId", "keyHash", "name", "createdAt", "revokedAt"]
+      },
+      {
+        "name": "Agent",
+        "fields": ["agentId", "workspaceId", "name", "modelConfig", "systemPrompt", "memoryConfig", "toolRunnerUrl", "createdAt", "updatedAt"]
+      },
+      {
+        "name": "Session",
+        "fields": ["sessionId", "agentId", "userId", "status", "metadata", "createdAt", "closedAt"]
+      },
+      {
+        "name": "Message",
+        "fields": ["messageId", "sessionId", "runId", "role", "content", "createdAt"]
+      },
+      {
+        "name": "Run",
+        "fields": ["runId", "sessionId", "status", "model", "tokenUsage", "startedAt", "completedAt"]
+      },
+      {
+        "name": "ToolCall",
+        "fields": ["callId", "runId", "toolName", "input", "output", "status", "startedAt", "completedAt"]
+      },
+      {
+        "name": "Trace",
+        "fields": ["traceId", "runId", "rootSpanId", "startedAt", "completedAt", "totalDurationMs"]
+      },
+      {
+        "name": "TraceSpan",
+        "fields": ["spanId", "traceId", "parentSpanId", "type", "name", "startedAt", "completedAt", "durationMs", "metadata", "status", "error"]
+      }
+    ]
+  },
+  "streamProtocol": {
+    "events": [
+      "message_started",
+      "token",
+      "tool_call_started",
+      "tool_call_completed",
+      "message_completed",
+      "run_failed"
+    ]
+  },
+  "outOfScope": [
+    "Durable long-running job execution",
+    "Multi-agent orchestration / planner",
+    "Hosted secrets management",
+    "Complex workflow builder",
+    "Vector database / RAG infrastructure",
+    "Browser automation tools",
+    "Prompt versioning / management",
+    "Model fallback rules"
+  ]
+}
