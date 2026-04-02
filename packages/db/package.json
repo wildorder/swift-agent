@@ -19,9 +19,12 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@swiftagent/shared": "workspace:*"
+    "@swiftagent/shared": "workspace:*",
+    "drizzle-orm": "^0.36",
+    "postgres": "^3.4"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.30",
     "typescript": "^5.5.0",
     "vitest": "^3.0.0"
   }

@@ -1,6 +1,23 @@
-import { PACKAGE_NAME as SHARED_PACKAGE } from '@swiftagent/shared';
+// Client
+export { createDbClient, type Db, type DbClient } from './client.js';
 
-export const PACKAGE_NAME = 'db' as const;
+// Schema (for advanced queries and migration tooling)
+export * from './schema/index.js';
 
-/** Smoke-test: proves cross-package import resolves */
-export const DEPENDS_ON = SHARED_PACKAGE;
+// Repositories
+export {
+  createWorkspaceRepo,
+  type WorkspaceRepo,
+  createApiKeyRepo,
+  type ApiKeyRepo,
+  createAgentRepo,
+  type AgentRepo,
+  createSessionRepo,
+  type SessionRepo,
+  createMessageRepo,
+  type MessageRepo,
+  createRunRepo,
+  type RunRepo,
+  createToolCallRepo,
+  type ToolCallRepo,
+} from './repositories/index.js';
