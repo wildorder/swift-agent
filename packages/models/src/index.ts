@@ -40,3 +40,10 @@ export {
 
 // Signal helpers
 export { mergeSignals } from './signals.js';
+
+// Provider implementations
+export {
+  createOpenAIProvider,
+  createAnthropicProvider,
+  createGoogleProvider,
+} from './providers/index.js';
