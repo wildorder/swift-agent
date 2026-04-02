@@ -8,4 +8,13 @@ build-logs/
 !.env.example
 *.log
 .DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+infra/terraform.exe
 Thumbs.db
