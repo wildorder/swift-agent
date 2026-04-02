@@ -149,7 +149,7 @@ describe('ControlPlaneClient', () => {
       await expect(client.getSession('ses_missing')).rejects.toThrow(SdkHttpError);
       try {
         await client.getSession('ses_missing');
-      } catch (e) {
+      } catch {
         // Already threw above
       }
     });

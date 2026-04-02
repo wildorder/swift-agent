@@ -98,7 +98,7 @@ describe('Lifecycle integration', () => {
     );
     expect(registerCall).toBeDefined();
 
-    const registeredBody = JSON.parse(registerCall![1].body as string);
+    const registeredBody = JSON.parse((registerCall as [string, RequestInit])[1].body as string);
     const toolRunnerUrl = registeredBody.toolRunnerUrl as string;
     expect(toolRunnerUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
 

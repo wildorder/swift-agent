@@ -1,0 +1,64 @@
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: swiftagent
+      POSTGRES_PASSWORD: swiftagent_dev
+      POSTGRES_DB: swiftagent
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U swiftagent']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Swift Agent Server ──────────────────────────────────────────────
+  swift-agent:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    ports:
+      - '3000:3000' # API
+      - '3001:3001' # WebSocket Gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database — connects to the postgres service above
+      DATABASE_URL: postgresql://swiftagent:swiftagent_dev@postgres:5432/swiftagent
+      # Redis — connects to the redis service above
+      REDIS_URL: redis://redis:6379
+      # Server ports
+      API_PORT: '3000'
+      GATEWAY_PORT: '3001'
+      # JWT secret for client token signing (dev only)
+      CLIENT_JWT_SECRET: dev-jwt-secret-change-in-production
+      # Public WebSocket URL (for client token responses)
+      PUBLIC_WEBSOCKET_URL: ws://localhost:3001
+      # Auto-run database migrations on startup
+      AUTO_MIGRATE: 'true'
+      # Node environment
+      NODE_ENV: development
+    env_file:
+      - path: .env
+        required: false
+
+volumes:
+  pgdata:

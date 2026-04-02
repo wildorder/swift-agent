@@ -7,7 +7,6 @@ import {
 import type {
   AgentRecord,
   SessionRecord,
-  MessageRecord,
   RunRecord,
 } from '@swiftagent/shared';
 import { SdkHttpError } from './types.js';

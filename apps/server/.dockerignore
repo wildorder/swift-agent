@@ -1,0 +1,16 @@
+node_modules
+.git
+.github
+.turbo
+docs
+tasks
+tests
+test
+coverage
+build-logs
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
+exploration-thread

@@ -1,0 +1,77 @@
+name: Publish SDKs
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # Required for npm provenance
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9.15.4'
+
+jobs:
+  publish:
+    name: Publish SDK Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout at release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set package versions
+        run: |
+          pnpm --filter @swiftagent/sdk exec npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+          pnpm --filter @swiftagent/react exec npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Build SDK packages
+        run: |
+          pnpm --filter @swiftagent/sdk... build
+          pnpm --filter @swiftagent/react... build
+
+      - name: Publish @swiftagent/sdk
+        run: |
+          PUBLISHED=$(npm view @swiftagent/sdk version 2>/dev/null || echo "")
+          if [ "$PUBLISHED" != "${{ steps.version.outputs.version }}" ]; then
+            pnpm publish --filter @swiftagent/sdk --no-git-checks --provenance --access public
+          else
+            echo "⏭ @swiftagent/sdk@${{ steps.version.outputs.version }} already published, skipping."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @swiftagent/react
+        run: |
+          PUBLISHED=$(npm view @swiftagent/react version 2>/dev/null || echo "")
+          if [ "$PUBLISHED" != "${{ steps.version.outputs.version }}" ]; then
+            pnpm publish --filter @swiftagent/react --no-git-checks --provenance --access public
+          else
+            echo "⏭ @swiftagent/react@${{ steps.version.outputs.version }} already published, skipping."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,6 +1,6 @@
 import { ENV_KEYS } from '@swiftagent/shared';
 import { buildApp, type AppContext } from '@swiftagent/api';
-import { createGatewayServer, type GatewayContext, ConnectionManager } from '@swiftagent/gateway';
+import { createGatewayServer, type GatewayContext } from '@swiftagent/gateway';
 import { loadServerConfig, redactConfig, type ServerConfig } from './config.js';
 import { buildContainer, type Container } from './container.js';
 import { registerHealthCheck } from './health.js';

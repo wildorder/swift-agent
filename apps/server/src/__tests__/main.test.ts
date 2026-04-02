@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock all packages used by main.ts
 vi.mock('@swiftagent/shared', async () => {
-  const actual = await vi.importActual<typeof import('@swiftagent/shared')>('@swiftagent/shared');
+  const actual = await vi.importActual('@swiftagent/shared');
   return actual;
 });
 

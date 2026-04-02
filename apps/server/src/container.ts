@@ -108,21 +108,21 @@ export function buildContainer(config: ServerConfig): Container {
 
   if (config[ENV_KEYS.OPENAI_API_KEY]) {
     modelRegistry.register('openai', createOpenAIProvider, {
-      apiKey: config[ENV_KEYS.OPENAI_API_KEY]!,
+      apiKey: config[ENV_KEYS.OPENAI_API_KEY] as string,
     });
     registeredProviders.push('openai');
   }
 
   if (config[ENV_KEYS.ANTHROPIC_API_KEY]) {
     modelRegistry.register('anthropic', createAnthropicProvider, {
-      apiKey: config[ENV_KEYS.ANTHROPIC_API_KEY]!,
+      apiKey: config[ENV_KEYS.ANTHROPIC_API_KEY] as string,
     });
     registeredProviders.push('anthropic');
   }
 
   if (config[ENV_KEYS.GOOGLE_API_KEY]) {
     modelRegistry.register('google', createGoogleProvider, {
-      apiKey: config[ENV_KEYS.GOOGLE_API_KEY]!,
+      apiKey: config[ENV_KEYS.GOOGLE_API_KEY] as string,
     });
     registeredProviders.push('google');
   }

@@ -1,0 +1,12 @@
+# Default — all PRs require review from the core team
+* @swiftagent/core
+
+# Database schema and migrations
+packages/db/ @swiftagent/database
+
+# Agent runtime engine
+packages/runtime/ @swiftagent/runtime
+
+# CI/CD and infrastructure
+.github/workflows/ @swiftagent/infra
+infra/ @swiftagent/infra
