@@ -19,11 +19,18 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@fastify/websocket": "^11",
+    "@swiftagent/runtime": "workspace:*",
     "@swiftagent/shared": "workspace:*",
-    "@swiftagent/runtime": "workspace:*"
+    "fastify": "^5",
+    "ioredis": "^5",
+    "jose": "^6",
+    "zod": "^3.24"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "typescript": "^5.5.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "ws": "^8.20.0"
   }
 }
