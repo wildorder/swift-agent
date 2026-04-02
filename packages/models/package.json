@@ -19,7 +19,8 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@swiftagent/shared": "workspace:*"
+    "@swiftagent/shared": "workspace:*",
+    "zod": "^3.24"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
