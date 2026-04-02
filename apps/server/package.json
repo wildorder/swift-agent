@@ -1,0 +1,29 @@
+{
+  "name": "@swiftagent/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist .turbo",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@swiftagent/shared": "workspace:*",
+    "@swiftagent/db": "workspace:*",
+    "@swiftagent/models": "workspace:*",
+    "@swiftagent/runtime": "workspace:*",
+    "@swiftagent/gateway": "workspace:*",
+    "@swiftagent/api": "workspace:*",
+    "@swiftagent/observability": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0"
+  }
+}

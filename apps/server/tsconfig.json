@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/models" },
+    { "path": "../../packages/runtime" },
+    { "path": "../../packages/gateway" },
+    { "path": "../../packages/api" },
+    { "path": "../../packages/observability" }
+  ]
+}

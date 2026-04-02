@@ -42,3 +42,48 @@ If no type-checker is configured, state that explicitly instead of claiming succ
     - Re-exports and barrel file entries
     - Test files and mocks
     Do not assume a single grep caught everything.
+
+---
+
+## Project: Swift Agent
+
+See `swift-agent.md` for full product vision. See `tasks/product-x/` for workstream specs.
+
+### Tech Stack
+
+- Node 22 LTS, TypeScript strict, ESM (`"type": "module"`)
+- pnpm workspaces + Turborepo
+- Fastify 5 + @fastify/websocket
+- Drizzle ORM + postgres.js driver (NOT pg)
+- Vitest + Testcontainers (@testcontainers/postgresql)
+- Zod 3.24+ for runtime validation
+- jose for JWT (not jsonwebtoken)
+- ioredis 5 for Redis
+- nanoid for ID generation
+
+### Conventions
+
+- All packages scoped `@swiftagent/*` under `packages/`, deployable app under `apps/server`
+- Zod schemas are source of truth — derive TypeScript types via `z.infer<>`, not the reverse
+- IDs are prefixed: `ses_`, `msg_`, `run_`, `tc_`, `agt_`, `ws_`, `ak_`
+- Repositories are factory functions: `createXxxRepo(db: Db)`, not classes
+- Model providers implement a `ModelProvider` interface; registered in a `ProviderRegistry`
+- Stream events use the `ChatEvent` discriminated union from `@swiftagent/shared`
+- The core loop is an async generator yielding `ChatEvent`
+- Tests: unit tests use mocks, integration tests use Testcontainers Postgres
+- All env vars defined in `@swiftagent/shared` `ENV_KEYS` — single source of truth
+
+### Dependency Versions (pin these)
+
+| Package | Version |
+|---|---|
+| drizzle-orm | ^0.36 |
+| drizzle-kit | ^0.30 |
+| fastify | ^5 |
+| @fastify/websocket | ^11 |
+| jose | ^6 |
+| zod | ^3.24 |
+| ioredis | ^5 |
+| vitest | ^3 |
+| nanoid | ^5 |
+| postgres | ^3.4 |
