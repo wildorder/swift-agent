@@ -42,6 +42,8 @@ vi.mock('../container.js', () => ({
       runRepo: {},
       toolCallRepo: {},
       traceRepo: {},
+      userRepo: {},
+      userWorkspaceRepo: {},
     },
     modelRegistry: {},
     tracer: {},

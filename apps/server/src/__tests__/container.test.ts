@@ -18,6 +18,8 @@ vi.mock('@swiftagent/db', () => {
     createRunRepo: vi.fn(() => ({ name: 'run' })),
     createToolCallRepo: vi.fn(() => ({ name: 'toolCall' })),
     createTraceRepo: vi.fn(() => ({ name: 'trace', saveTrace: vi.fn(), saveSpans: vi.fn() })),
+    createUserRepo: vi.fn(() => ({ name: 'user' })),
+    createUserWorkspaceRepo: vi.fn(() => ({ name: 'userWorkspace' })),
   };
 });
 

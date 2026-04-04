@@ -18,6 +18,10 @@ import {
   type ToolCallRepo,
   createTraceRepo,
   type TraceRepo,
+  createUserRepo,
+  type UserRepo,
+  createUserWorkspaceRepo,
+  type UserWorkspaceRepo,
 } from '@swiftagent/db';
 import {
   ProviderRegistry,
@@ -53,6 +57,8 @@ export interface Container {
     runRepo: RunRepo;
     toolCallRepo: ToolCallRepo;
     traceRepo: TraceRepo;
+    userRepo: UserRepo;
+    userWorkspaceRepo: UserWorkspaceRepo;
   };
 
   /** Model provider registry with registered providers */
@@ -100,6 +106,8 @@ export function buildContainer(config: ServerConfig): Container {
     runRepo: createRunRepo(db),
     toolCallRepo: createToolCallRepo(db),
     traceRepo: createTraceRepo(db),
+    userRepo: createUserRepo(db),
+    userWorkspaceRepo: createUserWorkspaceRepo(db),
   };
 
   // 3. Model provider registry — only register providers whose API keys are present

@@ -8,10 +8,13 @@ import type {
   RunRepo,
   ToolCallRepo,
   TraceRepo,
+  UserRepo,
+  UserWorkspaceRepo,
+  WorkspaceRepo,
 } from '@swiftagent/db';
 import { registerRequestId } from './middleware/request-id.js';
 import { registerAuth } from './middleware/auth.js';
-import { registerCognitoAuth } from './middleware/cognito-auth.js';
+import { managementPlugin } from './routes/management/index.js';
 import { registerErrorHandler } from './middleware/error-handler.js';
 import { createTokenService, type TokenService } from './services/token-service.js';
 import { createAgentService, type AgentService } from './services/agent-service.js';
@@ -32,6 +35,9 @@ export interface BuildAppOptions {
     runRepo: RunRepo;
     toolCallRepo: ToolCallRepo;
     traceRepo: TraceRepo;
+    userRepo: UserRepo;
+    userWorkspaceRepo: UserWorkspaceRepo;
+    workspaceRepo: WorkspaceRepo;
   };
   jwtSecret: string;
   publicWebsocketUrl?: string;
@@ -98,16 +104,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
 
   // Management API — Cognito JWT auth (scoped to /v1/management)
   if (opts.cognitoIssuerUrl && opts.cognitoClientId) {
-    await app.register(
-      async (management) => {
-        registerCognitoAuth(management, {
-          issuerUrl: opts.cognitoIssuerUrl!,
-          audience: opts.cognitoClientId!,
-        });
-        // Management routes will be registered here in WS-17
-      },
-      { prefix: '/v1/management' },
-    );
+    await app.register(managementPlugin, {
+      prefix: '/v1/management',
+      issuerUrl: opts.cognitoIssuerUrl,
+      audience: opts.cognitoClientId,
+      userRepo: opts.repos.userRepo,
+      userWorkspaceRepo: opts.repos.userWorkspaceRepo,
+      workspaceRepo: opts.repos.workspaceRepo,
+      apiKeyRepo: opts.repos.apiKeyRepo,
+    });
   }
 
   // Also register health at root for load balancers

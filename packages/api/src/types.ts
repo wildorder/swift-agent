@@ -71,3 +71,44 @@ export const CreateSessionResponseSchema = z.object({
   websocketUrl: z.string(),
 });
 export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>;
+
+// ── Management DTOs ───────────────────────────────────────────────
+
+export const UserResponseSchema = z.object({
+  userId: z.string(),
+  cognitoSub: z.string(),
+  email: z.string(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type UserResponse = z.infer<typeof UserResponseSchema>;
+
+export const CreateWorkspaceBodySchema = z.object({
+  name: z.string().min(1).max(100),
+}).strict();
+export type CreateWorkspaceBody = z.infer<typeof CreateWorkspaceBodySchema>;
+
+export const WorkspaceResponseSchema = z.object({
+  workspaceId: z.string(),
+  name: z.string(),
+  createdAt: z.coerce.date(),
+});
+export type WorkspaceResponse = z.infer<typeof WorkspaceResponseSchema>;
+
+export const CreateApiKeyBodySchema = z.object({
+  name: z.string().min(1).max(100),
+}).strict();
+export type CreateApiKeyBody = z.infer<typeof CreateApiKeyBodySchema>;
+
+export const ApiKeyResponseSchema = z.object({
+  apiKeyId: z.string(),
+  name: z.string(),
+  createdAt: z.coerce.date(),
+  revokedAt: z.coerce.date().nullable(),
+});
+export type ApiKeyResponse = z.infer<typeof ApiKeyResponseSchema>;
+
+export const CreateApiKeyResponseSchema = ApiKeyResponseSchema.extend({
+  rawKey: z.string(),
+});
+export type CreateApiKeyResponse = z.infer<typeof CreateApiKeyResponseSchema>;

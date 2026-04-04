@@ -5,6 +5,7 @@ import { SwiftAgentError } from '@swiftagent/shared';
 import type { AuthenticatedRequest } from '../types.js';
 
 const SKIP_AUTH_PATHS = new Set(['/health', '/v1/health']);
+const SKIP_AUTH_PREFIXES = ['/v1/management'];
 
 function hashApiKey(key: string): string {
   return createHash('sha256').update(key).digest('hex');
@@ -14,6 +15,7 @@ export function registerAuth(app: FastifyInstance, apiKeyRepo: ApiKeyRepo): void
   app.addHook('onRequest', async (req, _reply) => {
     const path = req.url.split('?')[0] ?? '';
     if (SKIP_AUTH_PATHS.has(path)) return;
+    if (SKIP_AUTH_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
 
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

@@ -10,7 +10,17 @@ export { createSessionService } from './services/session-service.js';
 export type { SessionService } from './services/session-service.js';
 
 // Types
-export type { AuthenticatedRequest, ErrorBody } from './types.js';
+export type {
+  AuthenticatedRequest,
+  ManagementAuthenticatedRequest,
+  ErrorBody,
+  CreateWorkspaceBody,
+  CreateApiKeyBody,
+  UserResponse,
+  WorkspaceResponse,
+  ApiKeyResponse,
+  CreateApiKeyResponse,
+} from './types.js';
 export {
   ErrorBodySchema,
   CreateAgentBodySchema,
@@ -19,4 +29,10 @@ export {
   ListMessagesQuerySchema,
   CreateRunBodySchema,
   CreateSessionResponseSchema,
+  UserResponseSchema,
+  CreateWorkspaceBodySchema,
+  WorkspaceResponseSchema,
+  CreateApiKeyBodySchema,
+  ApiKeyResponseSchema,
+  CreateApiKeyResponseSchema,
 } from './types.js';

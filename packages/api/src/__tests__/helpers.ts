@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { AgentRecord, ApiKeyRecord, SessionRecord, RunRecord, MessageRecord, ToolCallRecord } from '@swiftagent/shared';
-import type { AgentRepo, ApiKeyRepo, SessionRepo, MessageRepo, RunRepo, ToolCallRepo, TraceRepo, TraceRecordRow, SpanRecordRow } from '@swiftagent/db';
+import type { AgentRecord, ApiKeyRecord, SessionRecord, RunRecord, MessageRecord, ToolCallRecord, UserRecord, UserWorkspaceRecord, WorkspaceRecord } from '@swiftagent/shared';
+import type { AgentRepo, ApiKeyRepo, SessionRepo, MessageRepo, RunRepo, ToolCallRepo, TraceRepo, TraceRecordRow, SpanRecordRow, UserRepo, UserWorkspaceRepo, WorkspaceRepo } from '@swiftagent/db';
 import { buildApp, type AppContext } from '../server.js';
 
 // ── Test API key ───────────────────────────────────────────────────
@@ -297,6 +297,69 @@ export function createMockTraceRepo(): TraceRepo {
   };
 }
 
+export function createMockUserRepo(): UserRepo {
+  const users = new Map<string, UserRecord>();
+
+  return {
+    create: async (record) => {
+      const user: UserRecord = {
+        userId: record.userId,
+        cognitoSub: record.cognitoSub,
+        email: record.email,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      users.set(record.cognitoSub, user);
+      return user;
+    },
+    getByCognitoSub: async (cognitoSub) => users.get(cognitoSub) ?? null,
+    getById: async (userId) =>
+      [...users.values()].find((u) => u.userId === userId) ?? null,
+  };
+}
+
+export function createMockUserWorkspaceRepo(): UserWorkspaceRepo {
+  const memberships: UserWorkspaceRecord[] = [];
+
+  return {
+    create: async (record) => {
+      const membership: UserWorkspaceRecord = {
+        userId: record.userId,
+        workspaceId: record.workspaceId,
+        role: record.role as 'owner' | 'member',
+        createdAt: new Date(),
+      };
+      memberships.push(membership);
+      return membership;
+    },
+    listByUserId: async (userId) =>
+      memberships.filter((m) => m.userId === userId),
+    getByUserAndWorkspace: async (userId, workspaceId) =>
+      memberships.find((m) => m.userId === userId && m.workspaceId === workspaceId) ?? null,
+    isMember: async (userId, workspaceId) =>
+      memberships.some((m) => m.userId === userId && m.workspaceId === workspaceId),
+  };
+}
+
+export function createMockWorkspaceRepo(): WorkspaceRepo {
+  const workspaces = new Map<string, WorkspaceRecord>();
+
+  return {
+    create: async (record) => {
+      const workspace: WorkspaceRecord = {
+        workspaceId: record.workspaceId,
+        name: record.name,
+        createdAt: new Date(),
+      };
+      workspaces.set(record.workspaceId, workspace);
+      return workspace;
+    },
+    getById: async (id) => workspaces.get(id) ?? null,
+    getByName: async (name) =>
+      [...workspaces.values()].find((w) => w.name === name) ?? null,
+  };
+}
+
 // ── Build test app ─────────────────────────────────────────────────
 export async function buildTestApp(): Promise<AppContext> {
   return buildApp({
@@ -308,6 +371,9 @@ export async function buildTestApp(): Promise<AppContext> {
       runRepo: createMockRunRepo(),
       toolCallRepo: createMockToolCallRepo(),
       traceRepo: createMockTraceRepo(),
+      userRepo: createMockUserRepo(),
+      userWorkspaceRepo: createMockUserWorkspaceRepo(),
+      workspaceRepo: createMockWorkspaceRepo(),
     },
     jwtSecret: TEST_JWT_SECRET,
     publicWebsocketUrl: 'ws://localhost:3001',

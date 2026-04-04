@@ -48,9 +48,14 @@ export async function startServer(): Promise<ServerContext> {
       runRepo: container.repos.runRepo,
       toolCallRepo: container.repos.toolCallRepo,
       traceRepo: container.repos.traceRepo,
+      userRepo: container.repos.userRepo,
+      userWorkspaceRepo: container.repos.userWorkspaceRepo,
+      workspaceRepo: container.repos.workspaceRepo,
     },
     jwtSecret: config[ENV_KEYS.CLIENT_JWT_SECRET],
     publicWebsocketUrl: config[ENV_KEYS.PUBLIC_WEBSOCKET_URL],
+    cognitoIssuerUrl: config[ENV_KEYS.COGNITO_ISSUER_URL],
+    cognitoClientId: config[ENV_KEYS.COGNITO_CLIENT_ID],
     logger: { level: 'info' },
   });
 
