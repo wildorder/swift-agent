@@ -8,6 +8,7 @@ export const PREFIX_WORKSPACE = 'ws_' as const;
 export const PREFIX_API_KEY = 'ak_' as const;
 export const PREFIX_TRACE = 'tr_' as const;
 export const PREFIX_SPAN = 'sp_' as const;
+export const PREFIX_USER = 'usr_' as const;
 
 // Event type string literals
 export const EVENT_MESSAGE_STARTED = 'message_started' as const;

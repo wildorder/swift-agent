@@ -24,4 +24,8 @@ export {
   type TraceRepo,
   type TraceRecordRow,
   type SpanRecordRow,
+  createUserRepo,
+  type UserRepo,
+  createUserWorkspaceRepo,
+  type UserWorkspaceRepo,
 } from './repositories/index.js';

@@ -31,6 +31,22 @@ export async function setup() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE users (
+      user_id TEXT PRIMARY KEY,
+      cognito_sub TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE user_workspaces (
+      user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
+      role TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, workspace_id)
+    );
+
     CREATE TABLE api_keys (
       api_key_id TEXT PRIMARY KEY,
       workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),

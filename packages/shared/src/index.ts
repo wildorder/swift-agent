@@ -14,6 +14,7 @@ export {
   PREFIX_API_KEY,
   PREFIX_TRACE,
   PREFIX_SPAN,
+  PREFIX_USER,
   EVENT_MESSAGE_STARTED,
   EVENT_TOKEN,
   EVENT_TOOL_CALL_STARTED,
@@ -35,6 +36,7 @@ export {
   generateApiKeyId,
   generateTraceId,
   generateSpanId,
+  generateUserId,
   parsePrefix,
 } from './utils/id.js';
 
@@ -127,3 +129,11 @@ export type { ApiKeyRecord } from './types/api-key.js';
 // Auth types
 export { ClientTokenClaimsSchema } from './types/auth.js';
 export type { ClientTokenClaims } from './types/auth.js';
+
+// User types
+export { UserRecordSchema } from './types/user.js';
+export type { UserRecord } from './types/user.js';
+
+// User workspace types
+export { UserWorkspaceRecordSchema } from './types/user-workspace.js';
+export type { UserWorkspaceRecord } from './types/user-workspace.js';

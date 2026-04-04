@@ -4,15 +4,16 @@ import {
   PACKAGE_NAME,
   // Constants
   PREFIX_SESSION, PREFIX_MESSAGE, PREFIX_RUN, PREFIX_TOOL_CALL,
-  PREFIX_AGENT, PREFIX_WORKSPACE, PREFIX_API_KEY,
+  PREFIX_AGENT, PREFIX_WORKSPACE, PREFIX_API_KEY, PREFIX_USER,
   // ID utils
   generateSessionId, generateMessageId, generateRunId,
   generateToolCallId, generateAgentId, generateWorkspaceId,
-  generateApiKeyId, parsePrefix,
+  generateApiKeyId, generateUserId, parsePrefix,
   // Schemas
   AgentRecordSchema, SessionRecordSchema, MessageRecordSchema,
   RunRecordSchema, ToolCallRecordSchema, WorkspaceRecordSchema,
   ApiKeyRecordSchema, ClientTokenClaimsSchema, ChatEventSchema,
+  UserRecordSchema, UserWorkspaceRecordSchema,
   // Errors
   SwiftAgentError, SwiftAgentErrorCode, isSwiftAgentError,
   // Config
@@ -31,6 +32,7 @@ describe('ID generation', () => {
     { fn: generateAgentId, prefix: PREFIX_AGENT, name: 'agent' },
     { fn: generateWorkspaceId, prefix: PREFIX_WORKSPACE, name: 'workspace' },
     { fn: generateApiKeyId, prefix: PREFIX_API_KEY, name: 'api-key' },
+    { fn: generateUserId, prefix: PREFIX_USER, name: 'user' },
   ];
 
   for (const { fn, prefix, name } of generators) {
@@ -178,6 +180,37 @@ describe('Zod schemas — valid payloads', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('UserRecord parses valid data', () => {
+    const result = UserRecordSchema.safeParse({
+      userId: 'usr_abc',
+      cognitoSub: 'cognito-sub-123',
+      email: 'user@example.com',
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('UserWorkspaceRecord parses valid data', () => {
+    const result = UserWorkspaceRecordSchema.safeParse({
+      userId: 'usr_abc',
+      workspaceId: 'ws_def',
+      role: 'owner',
+      createdAt: now,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('UserWorkspaceRecord parses member role', () => {
+    const result = UserWorkspaceRecordSchema.safeParse({
+      userId: 'usr_abc',
+      workspaceId: 'ws_def',
+      role: 'member',
+      createdAt: now,
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 // ─── Zod Schemas: Invalid Payloads ──────────────────────────────────────────
@@ -281,6 +314,59 @@ describe('Zod schemas — invalid payloads', () => {
       name: 'key',
       createdAt: new Date(),
       // revokedAt missing (required, must be null or Date)
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('UserRecord fails with wrong prefix', () => {
+    const result = UserRecordSchema.safeParse({
+      userId: 'ws_wrong',
+      cognitoSub: 'sub-123',
+      email: 'user@example.com',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('UserRecord fails with invalid email', () => {
+    const result = UserRecordSchema.safeParse({
+      userId: 'usr_abc',
+      cognitoSub: 'sub-123',
+      email: 'not-an-email',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('UserRecord fails with empty cognitoSub', () => {
+    const result = UserRecordSchema.safeParse({
+      userId: 'usr_abc',
+      cognitoSub: '',
+      email: 'user@example.com',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('UserWorkspaceRecord fails with invalid role', () => {
+    const result = UserWorkspaceRecordSchema.safeParse({
+      userId: 'usr_abc',
+      workspaceId: 'ws_def',
+      role: 'admin',
+      createdAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('UserWorkspaceRecord fails with wrong userId prefix', () => {
+    const result = UserWorkspaceRecordSchema.safeParse({
+      userId: 'ws_wrong',
+      workspaceId: 'ws_def',
+      role: 'owner',
+      createdAt: new Date(),
     });
     expect(result.success).toBe(false);
   });

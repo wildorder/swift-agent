@@ -7,6 +7,7 @@ import {
   generateRunId,
   generateMessageId,
   generateToolCallId,
+  generateUserId,
 } from '@swiftagent/shared';
 import type { ModelConfig, MemoryConfig, TokenUsage } from '@swiftagent/shared';
 import {
@@ -18,6 +19,8 @@ import {
   createMessageRepo,
   createRunRepo,
   createToolCallRepo,
+  createUserRepo,
+  createUserWorkspaceRepo,
 } from '@swiftagent/db';
 import type { Db } from '@swiftagent/db';
 
@@ -681,6 +684,156 @@ describe('FK Integrity', () => {
         toolName: 'test',
         input: {},
       }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('UserRepo', () => {
+  it('creates and retrieves a user by id', async () => {
+    const repo = createUserRepo(db);
+    const userId = generateUserId();
+    const created = await repo.create({
+      userId,
+      cognitoSub: `sub-${Date.now()}`,
+      email: `user-${Date.now()}@example.com`,
+    });
+
+    expect(created.userId).toBe(userId);
+    expect(created.createdAt).toBeInstanceOf(Date);
+    expect(created.updatedAt).toBeInstanceOf(Date);
+
+    const fetched = await repo.getById(userId);
+    expect(fetched).not.toBeNull();
+    expect(fetched!.userId).toBe(userId);
+  });
+
+  it('retrieves a user by cognitoSub', async () => {
+    const repo = createUserRepo(db);
+    const sub = `sub-unique-${Date.now()}`;
+    await repo.create({
+      userId: generateUserId(),
+      cognitoSub: sub,
+      email: `user-${Date.now()}@example.com`,
+    });
+
+    const fetched = await repo.getByCognitoSub(sub);
+    expect(fetched).not.toBeNull();
+    expect(fetched!.cognitoSub).toBe(sub);
+  });
+
+  it('returns null for non-existent user', async () => {
+    const repo = createUserRepo(db);
+    const fetched = await repo.getById('usr_nonexistent');
+    expect(fetched).toBeNull();
+  });
+
+  it('rejects duplicate cognitoSub', async () => {
+    const repo = createUserRepo(db);
+    const sub = `sub-dup-${Date.now()}`;
+    await repo.create({
+      userId: generateUserId(),
+      cognitoSub: sub,
+      email: 'first@example.com',
+    });
+    await expect(
+      repo.create({
+        userId: generateUserId(),
+        cognitoSub: sub,
+        email: 'second@example.com',
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('UserWorkspaceRepo', () => {
+  async function seedUser() {
+    const repo = createUserRepo(db);
+    return repo.create({
+      userId: generateUserId(),
+      cognitoSub: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      email: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`,
+    });
+  }
+
+  it('creates a membership and retrieves it', async () => {
+    const user = await seedUser();
+    const workspace = await seedWorkspace();
+    const repo = createUserWorkspaceRepo(db);
+
+    const created = await repo.create({
+      userId: user.userId,
+      workspaceId: workspace.workspaceId,
+      role: 'owner',
+    });
+
+    expect(created.userId).toBe(user.userId);
+    expect(created.workspaceId).toBe(workspace.workspaceId);
+    expect(created.role).toBe('owner');
+    expect(created.createdAt).toBeInstanceOf(Date);
+
+    const fetched = await repo.getByUserAndWorkspace(user.userId, workspace.workspaceId);
+    expect(fetched).not.toBeNull();
+    expect(fetched!.role).toBe('owner');
+  });
+
+  it('listByUserId returns memberships ordered by createdAt asc', async () => {
+    const user = await seedUser();
+    const ws1 = await seedWorkspace();
+    const ws2 = await seedWorkspace();
+    const repo = createUserWorkspaceRepo(db);
+
+    await repo.create({ userId: user.userId, workspaceId: ws1.workspaceId, role: 'owner' });
+    await repo.create({ userId: user.userId, workspaceId: ws2.workspaceId, role: 'member' });
+
+    const memberships = await repo.listByUserId(user.userId);
+    expect(memberships).toHaveLength(2);
+    expect(memberships[0]!.createdAt.getTime()).toBeLessThanOrEqual(memberships[1]!.createdAt.getTime());
+  });
+
+  it('isMember returns true for existing membership', async () => {
+    const user = await seedUser();
+    const workspace = await seedWorkspace();
+    const repo = createUserWorkspaceRepo(db);
+
+    await repo.create({ userId: user.userId, workspaceId: workspace.workspaceId, role: 'member' });
+
+    const result = await repo.isMember(user.userId, workspace.workspaceId);
+    expect(result).toBe(true);
+  });
+
+  it('isMember returns false for non-existing membership', async () => {
+    const user = await seedUser();
+    const workspace = await seedWorkspace();
+    const repo = createUserWorkspaceRepo(db);
+
+    const result = await repo.isMember(user.userId, workspace.workspaceId);
+    expect(result).toBe(false);
+  });
+
+  it('rejects duplicate (userId, workspaceId) insert (composite PK)', async () => {
+    const user = await seedUser();
+    const workspace = await seedWorkspace();
+    const repo = createUserWorkspaceRepo(db);
+
+    await repo.create({ userId: user.userId, workspaceId: workspace.workspaceId, role: 'owner' });
+    await expect(
+      repo.create({ userId: user.userId, workspaceId: workspace.workspaceId, role: 'member' }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects membership with non-existent userId', async () => {
+    const workspace = await seedWorkspace();
+    const repo = createUserWorkspaceRepo(db);
+    await expect(
+      repo.create({ userId: 'usr_nonexistent', workspaceId: workspace.workspaceId, role: 'member' }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects membership with non-existent workspaceId', async () => {
+    const user = await seedUser();
+    const repo = createUserWorkspaceRepo(db);
+    await expect(
+      repo.create({ userId: user.userId, workspaceId: 'ws_nonexistent', role: 'member' }),
     ).rejects.toThrow();
   });
 });

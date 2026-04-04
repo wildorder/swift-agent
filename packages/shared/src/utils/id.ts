@@ -9,6 +9,7 @@ import {
   PREFIX_API_KEY,
   PREFIX_TRACE,
   PREFIX_SPAN,
+  PREFIX_USER,
   DEFAULT_NANOID_LENGTH,
 } from '../constants.js';
 
@@ -50,6 +51,10 @@ export function generateTraceId(): string {
 
 export function generateSpanId(): string {
   return prefixedId(PREFIX_SPAN);
+}
+
+export function generateUserId(): string {
+  return prefixedId(PREFIX_USER);
 }
 
 /**
