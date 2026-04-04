@@ -11,6 +11,7 @@ import type {
 } from '@swiftagent/db';
 import { registerRequestId } from './middleware/request-id.js';
 import { registerAuth } from './middleware/auth.js';
+import { registerCognitoAuth } from './middleware/cognito-auth.js';
 import { registerErrorHandler } from './middleware/error-handler.js';
 import { createTokenService, type TokenService } from './services/token-service.js';
 import { createAgentService, type AgentService } from './services/agent-service.js';
@@ -34,6 +35,8 @@ export interface BuildAppOptions {
   };
   jwtSecret: string;
   publicWebsocketUrl?: string;
+  cognitoIssuerUrl?: string;
+  cognitoClientId?: string;
   logger?: boolean | object;
 }
 
@@ -92,6 +95,20 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
     },
     { prefix: '/v1' },
   );
+
+  // Management API — Cognito JWT auth (scoped to /v1/management)
+  if (opts.cognitoIssuerUrl && opts.cognitoClientId) {
+    await app.register(
+      async (management) => {
+        registerCognitoAuth(management, {
+          issuerUrl: opts.cognitoIssuerUrl!,
+          audience: opts.cognitoClientId!,
+        });
+        // Management routes will be registered here in WS-17
+      },
+      { prefix: '/v1/management' },
+    );
+  }
 
   // Also register health at root for load balancers
   registerHealthRoutes(app);

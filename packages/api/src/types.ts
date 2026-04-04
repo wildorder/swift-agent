@@ -11,6 +11,12 @@ export interface AuthenticatedRequest extends FastifyRequest {
   apiKeyId: string;
 }
 
+// ── Management (Cognito) authenticated request ────────────────────
+export interface ManagementAuthenticatedRequest extends FastifyRequest {
+  cognitoSub: string;
+  email: string;
+}
+
 // ── Error response body ────────────────────────────────────────────
 export const ErrorBodySchema = z.object({
   error: z.object({
