@@ -123,6 +123,23 @@ variable "lock_table_arn" {
   description = "ARN of DynamoDB lock table"
 }
 
+variable "cognito_domain_prefix" {
+  type        = string
+  description = "Cognito hosted UI domain prefix (globally unique within region)"
+}
+
+variable "cognito_callback_urls" {
+  type        = list(string)
+  description = "OAuth callback URLs for the Cognito app client"
+  default     = ["http://localhost:3000/callback"]
+}
+
+variable "cognito_logout_urls" {
+  type        = list(string)
+  description = "OAuth logout URLs for the Cognito app client"
+  default     = ["http://localhost:3000/logout"]
+}
+
 # -----------------------------------------------------------------------------
 # Modules
 # -----------------------------------------------------------------------------
@@ -167,11 +184,20 @@ module "secrets" {
   redis_url    = module.cache.connection_string
 }
 
+module "cognito" {
+  source = "../../modules/cognito"
+
+  environment   = var.environment
+  domain_prefix = var.cognito_domain_prefix
+  callback_urls = var.cognito_callback_urls
+  logout_urls   = var.cognito_logout_urls
+}
+
 module "iam" {
   source = "../../modules/iam"
 
   environment          = var.environment
-  ssm_parameter_arns   = values(module.secrets.parameter_arns)
+  ssm_parameter_arns   = values(merge(module.secrets.parameter_arns, module.cognito.parameter_arns))
   ecr_repository_arn   = module.ecr.repository_arn
   state_bucket_arn     = var.state_bucket_arn
   lock_table_arn       = var.lock_table_arn
@@ -211,7 +237,7 @@ module "ecs" {
   target_group_arn        = module.loadbalancer.target_group_arn
   task_execution_role_arn = module.iam.ecs_task_execution_role_arn
   task_role_arn           = module.iam.ecs_task_role_arn
-  ssm_parameter_arns      = module.secrets.parameter_arns
+  ssm_parameter_arns      = merge(module.secrets.parameter_arns, module.cognito.parameter_arns)
   log_group_name          = "/ecs/${var.environment}-swiftagent"
   enable_autoscaling      = var.enable_autoscaling
   autoscaling_min         = var.autoscaling_min

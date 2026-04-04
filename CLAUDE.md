@@ -1,3 +1,4 @@
+<!-- BEGIN UNIVERSAL — source: ~/.cursor/templates/claude-base.md -->
 # Agent Directives: Mechanical Overrides
 
 You are operating within a constrained context window and strict system prompts. To produce production-grade code, you MUST adhere to these overrides:
@@ -42,6 +43,7 @@ If no type-checker is configured, state that explicitly instead of claiming succ
     - Re-exports and barrel file entries
     - Test files and mocks
     Do not assume a single grep caught everything.
+<!-- END UNIVERSAL -->
 
 ---
 
@@ -57,21 +59,26 @@ See `swift-agent.md` for full product vision. See `tasks/product-x/` for workstr
 - Drizzle ORM + postgres.js driver (NOT pg)
 - Vitest + Testcontainers (@testcontainers/postgresql)
 - Zod 3.24+ for runtime validation
-- jose for JWT (not jsonwebtoken)
+- jose for JWT — used for both client tokens (HS256, self-signed) and Cognito JWT validation (RS256, JWKS)
 - ioredis 5 for Redis
 - nanoid for ID generation
+- AWS Cognito (OIDC) — shared user pool for management API auth (NO Amplify, NO AWS SDK for auth — use jose JWKS)
 
 ### Conventions
 
 - All packages scoped `@swiftagent/*` under `packages/`, deployable app under `apps/server`
 - Zod schemas are source of truth — derive TypeScript types via `z.infer<>`, not the reverse
-- IDs are prefixed: `ses_`, `msg_`, `run_`, `tc_`, `agt_`, `ws_`, `ak_`
+- IDs are prefixed: `ses_`, `msg_`, `run_`, `tc_`, `agt_`, `ws_`, `ak_`, `usr_`
 - Repositories are factory functions: `createXxxRepo(db: Db)`, not classes
 - Model providers implement a `ModelProvider` interface; registered in a `ProviderRegistry`
 - Stream events use the `ChatEvent` discriminated union from `@swiftagent/shared`
 - The core loop is an async generator yielding `ChatEvent`
 - Tests: unit tests use mocks, integration tests use Testcontainers Postgres
 - All env vars defined in `@swiftagent/shared` `ENV_KEYS` — single source of truth
+- **Two auth layers:** API key auth on `/v1/*` (runtime), Cognito JWT auth on `/v1/management/*` (dashboard/CLI)
+- Cognito JWTs validated via JWKS (`jose` `createRemoteJWKSet`) — no AWS SDK needed
+- Management routes use a separate Fastify plugin/prefix with its own auth middleware
+- User ↔ Workspace mapping: `users` table (Cognito sub → `usr_` ID), `user_workspaces` join table
 
 ### Dependency Versions (pin these)
 

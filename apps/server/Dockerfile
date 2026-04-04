@@ -1,12 +1,12 @@
-# ── Stage 1: Dependencies ─────────────────────────────────────────────
-FROM node:22-alpine AS deps
+# ── Stage 1: Builder ────────────────────────────────────────────────
+FROM node:22-alpine AS builder
 
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 WORKDIR /app
 
-# Copy lockfile and workspace config first for layer caching
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# Copy lockfile, workspace config, and .npmrc first for layer caching
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 
 # Copy all package.json files to resolve workspace dependencies
 COPY apps/server/package.json apps/server/package.json
@@ -20,22 +20,16 @@ COPY packages/observability/package.json packages/observability/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/react/package.json packages/react/package.json
 
+# Install all deps (layer is cached when lockfile + package.jsons don't change)
 RUN pnpm install --frozen-lockfile
 
-# ── Stage 2: Builder ─────────────────────────────────────────────────
-FROM node:22-alpine AS builder
-
-RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
-
-WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source code
 COPY . .
 
-# Build the server and all its workspace dependencies
-RUN pnpm --filter @swiftagent/server... build
+# Build via Turborepo (respects ^build dependency ordering from turbo.json)
+RUN pnpm turbo run build --filter=@swiftagent/server...
 
-# ── Stage 3: Runner ──────────────────────────────────────────────────
+# ── Stage 2: Runner ─────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
@@ -43,9 +37,9 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 WORKDIR /app
 
 # Copy workspace config and root package.json
-COPY --from=builder /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/package.json ./
+COPY --from=builder /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/package.json /app/.npmrc ./
 
-# Copy all package.json files for pnpm deploy
+# Copy all package.json files
 COPY --from=builder /app/apps/server/package.json apps/server/package.json
 COPY --from=builder /app/packages/shared/package.json packages/shared/package.json
 COPY --from=builder /app/packages/db/package.json packages/db/package.json
@@ -65,8 +59,8 @@ COPY --from=builder /app/packages/gateway/dist packages/gateway/dist
 COPY --from=builder /app/packages/api/dist packages/api/dist
 COPY --from=builder /app/packages/observability/dist packages/observability/dist
 
-# Install production dependencies only
-COPY --from=builder /app/node_modules ./node_modules
+# Install production dependencies only (fresh install preserves symlinks)
+RUN pnpm install --frozen-lockfile --prod
 
 ENV NODE_ENV=production
 

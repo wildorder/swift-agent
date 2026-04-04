@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@swiftagent/shared": ["./packages/shared/src/index.ts"],
+      "@swiftagent/db": ["./packages/db/src/index.ts"],
+      "@swiftagent/models": ["./packages/models/src/index.ts"],
+      "@swiftagent/runtime": ["./packages/runtime/src/index.ts"],
+      "@swiftagent/gateway": ["./packages/gateway/src/index.ts"],
+      "@swiftagent/api": ["./packages/api/src/index.ts"],
+      "@swiftagent/sdk": ["./packages/sdk/src/index.ts"],
+      "@swiftagent/react": ["./packages/react/src/index.ts"],
+      "@swiftagent/observability": ["./packages/observability/src/index.ts"]
+    }
+  },
+  "references": [
+    { "path": "packages/shared" },
+    { "path": "packages/db" },
+    { "path": "packages/models" },
+    { "path": "packages/runtime" },
+    { "path": "packages/gateway" },
+    { "path": "packages/api" },
+    { "path": "packages/observability" },
+    { "path": "packages/sdk" },
+    { "path": "packages/react" },
+    { "path": "apps/server" }
+  ],
+  "files": []
+}

@@ -1,0 +1,11 @@
+---
+description: Maps standard pipeline paths to this project's layout
+globs: ["docs/**", "tasks/**"]
+---
+
+# Pipeline Path Overrides
+
+- Vision doc: `swift-agent.md` (project root, not `docs/vision.md`)
+- Agent directives: `CLAUDE.md` (standard location)
+- Programs: `docs/programs/` (standard location)
+- Tasks: `tasks/` (standard location)

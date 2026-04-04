@@ -1,0 +1,156 @@
+{
+  "program": {
+    "id": "management-api",
+    "name": "Swift Agent — Management API",
+    "description": "Cognito User Pool infrastructure, user identity layer, JWT auth middleware, and /v1/management/* routes for workspace and API key lifecycle.",
+    "status": "planning",
+    "created": "2026-04-03"
+  },
+  "technology": {
+    "identity_provider": "AWS Cognito User Pool (OIDC)",
+    "iac": "Terraform (AWS provider)"
+  },
+  "packages": [
+    {
+      "name": "infra/modules/cognito",
+      "path": "infra/modules/cognito",
+      "description": "Terraform module: Cognito User Pool, app client, domain, outputs"
+    },
+    {
+      "name": "@swiftagent/db",
+      "path": "packages/db",
+      "description": "Users and user_workspaces tables, repos (extends existing package)"
+    },
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "Cognito JWT auth plugin and /v1/management/* route handlers (extends existing package)"
+    },
+    {
+      "name": "@swiftagent/shared",
+      "path": "packages/shared",
+      "description": "Cognito env var keys added to ENV_KEYS (extends existing package)"
+    },
+    {
+      "name": "apps/server",
+      "path": "apps/server",
+      "description": "Management plugin wired into service composition (extends existing app)"
+    }
+  ],
+  "workstreams": [
+    {
+      "id": "WS-14",
+      "name": "Cognito User Pool Infrastructure",
+      "taskFile": "tasks/management-api/ws-14-cognito-infra.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["product-x:WS-13a"],
+      "packages": ["infra/modules/cognito", "infra/envs/dev"]
+    },
+    {
+      "id": "WS-15",
+      "name": "Management Data Layer",
+      "taskFile": "tasks/management-api/ws-15-management-data-layer.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["product-x:WS-02", "product-x:WS-03"],
+      "packages": ["packages/db"]
+    },
+    {
+      "id": "WS-16",
+      "name": "Cognito JWT Auth Plugin",
+      "taskFile": "tasks/management-api/ws-16-cognito-auth-plugin.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["product-x:WS-02", "product-x:WS-07"],
+      "packages": ["packages/api", "packages/shared"]
+    },
+    {
+      "id": "WS-17",
+      "name": "Management API Routes",
+      "taskFile": "tasks/management-api/ws-17-management-routes.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": ["WS-15", "WS-16"],
+      "packages": ["packages/api"]
+    },
+    {
+      "id": "WS-18",
+      "name": "Management Integration & E2E Tests",
+      "taskFile": "tasks/management-api/ws-18-management-integration.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": ["WS-14", "WS-17", "product-x:WS-11"],
+      "packages": ["apps/server"]
+    }
+  ],
+  "dataModel": {
+    "entities": [
+      {
+        "name": "User",
+        "fields": ["userId", "cognitoSub", "email", "createdAt", "updatedAt"],
+        "notes": "New table. Maps Cognito identity to internal usr_ ID."
+      },
+      {
+        "name": "UserWorkspace",
+        "fields": ["userId", "workspaceId", "role", "createdAt"],
+        "notes": "New join table. role: owner | member."
+      }
+    ],
+    "extendedEntities": [
+      {
+        "name": "Workspace",
+        "notes": "Existing table from product-x WS-03. No schema changes; new repos query via user_workspaces join."
+      },
+      {
+        "name": "ApiKey",
+        "notes": "Existing table from product-x WS-03. No schema changes; management routes add create/list/revoke lifecycle."
+      }
+    ]
+  },
+  "managementEndpoints": [
+    {
+      "method": "GET",
+      "path": "/v1/management/me",
+      "purpose": "Get current user profile (auto-create on first call)"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/management/workspaces",
+      "purpose": "Create a workspace"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/management/workspaces",
+      "purpose": "List user's workspaces"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/management/workspaces/:id",
+      "purpose": "Get workspace details"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/management/workspaces/:id/keys",
+      "purpose": "Create an API key (returns raw key once)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/management/workspaces/:id/keys",
+      "purpose": "List API keys (hashes only)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/management/workspaces/:id/keys/:keyId",
+      "purpose": "Revoke an API key"
+    }
+  ],
+  "outOfScope": [
+    "Team/organization management (multi-user workspace invitations, role changes)",
+    "Usage metering or billing",
+    "Rate limiting on management endpoints",
+    "API key rotation",
+    "Workspace deletion",
+    "Audit logging of management operations"
+  ]
+}
