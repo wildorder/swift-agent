@@ -1,24 +1,31 @@
 import type { FastifyInstance } from 'fastify';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { SwiftAgentError } from '@swiftagent/shared';
 import type { ManagementAuthenticatedRequest } from '../types.js';
 
 export interface CognitoAuthOptions {
   issuerUrl: string;
   audience: string;
+  /** Optional override for JWT key resolution — use `createLocalJWKSet` in tests. */
+  getKey?: JWTVerifyGetKey;
 }
 
 export function registerCognitoAuth(
   app: FastifyInstance,
   opts: CognitoAuthOptions,
 ): void {
-  // Normalize issuerUrl to end with /
-  const normalizedIssuer = opts.issuerUrl.endsWith('/')
-    ? opts.issuerUrl
-    : `${opts.issuerUrl}/`;
+  let JWKS: JWTVerifyGetKey;
 
-  const jwksUri = new URL('.well-known/jwks.json', normalizedIssuer);
-  const JWKS = createRemoteJWKSet(jwksUri);
+  if (opts.getKey) {
+    JWKS = opts.getKey;
+  } else {
+    // Normalize issuerUrl to end with /
+    const normalizedIssuer = opts.issuerUrl.endsWith('/')
+      ? opts.issuerUrl
+      : `${opts.issuerUrl}/`;
+    const jwksUri = new URL('.well-known/jwks.json', normalizedIssuer);
+    JWKS = createRemoteJWKSet(jwksUri);
+  }
 
   app.addHook('onRequest', async (req, _reply) => {
     const authHeader = req.headers.authorization;

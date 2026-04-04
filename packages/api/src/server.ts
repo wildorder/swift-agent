@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import type { JWTVerifyGetKey } from 'jose';
 import type {
   AgentRepo,
   ApiKeyRepo,
@@ -43,6 +44,8 @@ export interface BuildAppOptions {
   publicWebsocketUrl?: string;
   cognitoIssuerUrl?: string;
   cognitoClientId?: string;
+  /** Optional override for JWT key resolution — use `createLocalJWKSet` in tests. */
+  cognitoGetKey?: JWTVerifyGetKey;
   logger?: boolean | object;
 }
 
@@ -108,6 +111,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
       prefix: '/v1/management',
       issuerUrl: opts.cognitoIssuerUrl,
       audience: opts.cognitoClientId,
+      getKey: opts.cognitoGetKey,
       userRepo: opts.repos.userRepo,
       userWorkspaceRepo: opts.repos.userWorkspaceRepo,
       workspaceRepo: opts.repos.workspaceRepo,

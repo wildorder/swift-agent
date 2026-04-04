@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { JWTVerifyGetKey } from 'jose';
 import type { UserRepo, UserWorkspaceRepo, WorkspaceRepo, ApiKeyRepo } from '@swiftagent/db';
 import { registerCognitoAuth } from '../../middleware/cognito-auth.js';
 import { registerMeRoutes } from './me.js';
@@ -8,6 +9,8 @@ import { registerKeyRoutes } from './keys.js';
 export interface ManagementPluginOptions {
   issuerUrl: string;
   audience: string;
+  /** Optional override for JWT key resolution — use `createLocalJWKSet` in tests. */
+  getKey?: JWTVerifyGetKey;
   userRepo: UserRepo;
   userWorkspaceRepo: UserWorkspaceRepo;
   workspaceRepo: WorkspaceRepo;
@@ -22,6 +25,7 @@ export async function managementPlugin(
   registerCognitoAuth(app, {
     issuerUrl: opts.issuerUrl,
     audience: opts.audience,
+    getKey: opts.getKey,
   });
 
   // Routes

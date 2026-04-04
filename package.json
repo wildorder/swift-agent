@@ -16,15 +16,20 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@swiftagent/api": "workspace:^",
+    "@swiftagent/db": "workspace:^",
+    "@swiftagent/shared": "workspace:^",
+    "@testcontainers/postgresql": "^10.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
-    "typescript-eslint": "^8.0.0",
+    "fastify": "^5",
+    "jose": "^6",
     "postgres": "^3.4.0",
     "prettier": "^3.0.0",
     "testcontainers": "^10.0.0",
-    "@testcontainers/postgresql": "^10.0.0",
     "turbo": "^2.0.0",
     "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^3.0.0"
   }
 }
