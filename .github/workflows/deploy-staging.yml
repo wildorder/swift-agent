@@ -13,7 +13,6 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-east-1
   ECR_REPOSITORY: swiftagent
   ECS_CLUSTER: staging-swiftagent
   ECS_SERVICE: staging-swiftagent
@@ -33,8 +32,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/swiftagent-deploy-staging
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr-login
