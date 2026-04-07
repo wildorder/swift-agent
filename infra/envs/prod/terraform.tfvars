@@ -1,0 +1,14 @@
+environment            = "prod"
+db_instance_class      = "db.t4g.medium"
+cache_node_type        = "cache.t4g.medium"
+num_cache_nodes        = 2
+cpu                    = 1024
+memory                 = 2048
+desired_count          = 2
+nat_gateway_count      = 2
+multi_az               = true
+backup_retention_period = 30
+enable_autoscaling     = true
+autoscaling_min        = 2
+autoscaling_max        = 10
+domain_prefix          = "api"
