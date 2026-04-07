@@ -70,12 +70,13 @@ describe('Agents routes', () => {
     expect(res.json().name).toBe('test-agent');
   });
 
-  it('GET /v1/agents without name returns 400', async () => {
+  it('GET /v1/agents without name lists all agents', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/v1/agents',
       headers,
     });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json())).toBe(true);
   });
 });

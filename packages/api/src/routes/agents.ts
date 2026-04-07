@@ -23,16 +23,14 @@ export function registerAgentRoutes(app: FastifyInstance, agentService: AgentSer
     return reply.send(agent);
   });
 
-  // GET /agents?name=... — get agent by name
+  // GET /agents?name=... — get agent by name, or list all agents for the workspace
   app.get('/agents', async (req, reply) => {
     const { workspaceId } = req as AuthenticatedRequest;
     const { name } = req.query as { name?: string };
 
     if (!name) {
-      // Could list all agents; for now require name query
-      return reply.status(400).send({
-        error: { code: 'VALIDATION', message: 'Query parameter "name" is required' },
-      });
+      const agents = await agentService.list(workspaceId);
+      return reply.send(agents);
     }
 
     const agent = await agentService.getByName(workspaceId, name);

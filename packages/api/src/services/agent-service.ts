@@ -4,6 +4,7 @@ import { generateAgentId, SwiftAgentError } from '@swiftagent/shared';
 import { CreateAgentBodySchema, type CreateAgentBody } from '../types.js';
 
 export interface AgentService {
+  list(workspaceId: string): Promise<AgentRecord[]>;
   registerOrUpdateAgent(workspaceId: string, input: CreateAgentBody): Promise<AgentRecord>;
   getById(workspaceId: string, agentId: string): Promise<AgentRecord>;
   getByName(workspaceId: string, name: string): Promise<AgentRecord>;
@@ -13,6 +14,10 @@ const DEFAULT_MEMORY_CONFIG: MemoryConfig = { strategy: 'last_n', maxMessages: 5
 
 export function createAgentService(agentRepo: AgentRepo): AgentService {
   return {
+    async list(workspaceId) {
+      return agentRepo.getByWorkspaceId(workspaceId);
+    },
+
     async registerOrUpdateAgent(workspaceId, input) {
       const parsed = CreateAgentBodySchema.parse(input);
 
