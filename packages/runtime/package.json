@@ -19,11 +19,12 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@swiftagent/shared": "workspace:*",
     "@swiftagent/db": "workspace:*",
-    "@swiftagent/models": "workspace:*"
+    "@swiftagent/models": "workspace:*",
+    "@swiftagent/shared": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^25.5.2",
     "typescript": "^5.5.0",
     "vitest": "^3.0.0"
   }

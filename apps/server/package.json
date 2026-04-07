@@ -15,18 +15,19 @@
     "start:dev": "tsx watch src/main.ts"
   },
   "dependencies": {
-    "@swiftagent/shared": "workspace:*",
-    "@swiftagent/db": "workspace:*",
-    "@swiftagent/models": "workspace:*",
-    "@swiftagent/runtime": "workspace:*",
-    "@swiftagent/gateway": "workspace:*",
     "@swiftagent/api": "workspace:*",
+    "@swiftagent/db": "workspace:*",
+    "@swiftagent/gateway": "workspace:*",
+    "@swiftagent/models": "workspace:*",
     "@swiftagent/observability": "workspace:*",
+    "@swiftagent/runtime": "workspace:*",
+    "@swiftagent/shared": "workspace:*",
     "drizzle-orm": "^0.36",
     "fastify": "^5",
     "postgres": "^3.4"
   },
   "devDependencies": {
+    "@types/node": "^25.5.2",
     "typescript": "^5.5.0",
     "vitest": "^3.0.0"
   }
