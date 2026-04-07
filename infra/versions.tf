@@ -14,7 +14,7 @@ terraform {
 
   backend "s3" {
     # Configured per-environment via -backend-config
-    # bucket         = "swiftagent-terraform-state-<account-id>"
+    # bucket         = "swiftagent-tf-state"
     # key            = "<environment>/terraform.tfstate"
     # region         = via -backend-config
     # dynamodb_table = "swiftagent-terraform-locks"
