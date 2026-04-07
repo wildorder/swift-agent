@@ -1,3 +1,11 @@
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+locals {
+  azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
+}
+
 ################################################################################
 # VPC
 ################################################################################
@@ -18,28 +26,28 @@ resource "aws_vpc" "main" {
 ################################################################################
 
 resource "aws_subnet" "public" {
-  count = length(var.availability_zones)
+  count = length(local.azs)
 
   vpc_id                  = aws_vpc.main.id
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index) # offsets 0, 1
-  availability_zone       = var.availability_zones[count.index]
+  availability_zone       = local.azs[count.index]
   map_public_ip_on_launch = true
 
   tags = {
-    Name        = "${var.environment}-public-${var.availability_zones[count.index]}"
+    Name        = "${var.environment}-public-${local.azs[count.index]}"
     Environment = var.environment
   }
 }
 
 resource "aws_subnet" "private" {
-  count = length(var.availability_zones)
+  count = length(local.azs)
 
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 2) # offsets 2, 3
-  availability_zone = var.availability_zones[count.index]
+  availability_zone = local.azs[count.index]
 
   tags = {
-    Name        = "${var.environment}-private-${var.availability_zones[count.index]}"
+    Name        = "${var.environment}-private-${local.azs[count.index]}"
     Environment = var.environment
   }
 }
@@ -104,7 +112,7 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table_association" "public" {
-  count = length(var.availability_zones)
+  count = length(local.azs)
 
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
@@ -131,7 +139,7 @@ resource "aws_route_table" "private" {
 }
 
 resource "aws_route_table_association" "private" {
-  count = length(var.availability_zones)
+  count = length(local.azs)
 
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private[count.index % var.nat_gateway_count].id

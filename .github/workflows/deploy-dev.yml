@@ -42,11 +42,11 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra/envs/dev
-        run: terraform init
+        run: terraform init -backend-config="region=${{ secrets.AWS_REGION }}"
 
       - name: Ensure ECR repository exists
         working-directory: infra/envs/dev
-        run: terraform apply -auto-approve -target=module.ecr
+        run: terraform apply -auto-approve -target=module.ecr -var="aws_region=${{ secrets.AWS_REGION }}"
 
       - name: Login to Amazon ECR
         id: ecr-login
@@ -64,7 +64,7 @@ jobs:
 
       - name: Terraform Apply
         working-directory: infra/envs/dev
-        run: terraform apply -auto-approve -var="image_uri=${{ steps.build.outputs.image_uri }}"
+        run: terraform apply -auto-approve -var="aws_region=${{ secrets.AWS_REGION }}" -var="image_uri=${{ steps.build.outputs.image_uri }}"
 
       - name: Wait for ECS service stability
         run: |

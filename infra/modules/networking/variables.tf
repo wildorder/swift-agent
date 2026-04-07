@@ -9,10 +9,10 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-variable "availability_zones" {
-  description = "List of availability zones to deploy into"
-  type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
+variable "az_count" {
+  description = "Number of availability zones to deploy into"
+  type        = number
+  default     = 2
 }
 
 variable "nat_gateway_count" {

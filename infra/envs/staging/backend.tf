@@ -2,7 +2,6 @@ terraform {
   backend "s3" {
     bucket         = "swiftagent-terraform-state"
     key            = "staging/terraform.tfstate"
-    region         = "us-east-1"
     dynamodb_table = "swiftagent-terraform-locks"
     encrypt        = true
   }

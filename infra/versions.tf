@@ -16,7 +16,7 @@ terraform {
     # Configured per-environment via -backend-config
     # bucket         = "swiftagent-terraform-state-<account-id>"
     # key            = "<environment>/terraform.tfstate"
-    # region         = "us-east-1"
+    # region         = via -backend-config
     # dynamodb_table = "swiftagent-terraform-locks"
     # encrypt        = true
   }
@@ -25,7 +25,6 @@ terraform {
 variable "aws_region" {
   description = "AWS region for all resources"
   type        = string
-  default     = "us-east-1"
 }
 
 provider "aws" {
