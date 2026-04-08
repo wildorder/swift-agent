@@ -45,8 +45,9 @@ jobs:
         run: terraform init -backend-config="region=${{ secrets.AWS_REGION }}"
 
       - name: Ensure ECR repository exists
-        working-directory: infra/envs/dev
-        run: terraform apply -auto-approve -target=module.ecr -var="aws_region=${{ secrets.AWS_REGION }}"
+        run: |
+          aws ecr describe-repositories --repository-names $ECR_REPOSITORY 2>/dev/null || \
+            aws ecr create-repository --repository-name $ECR_REPOSITORY --image-scanning-configuration scanOnPush=true
 
       - name: Login to Amazon ECR
         id: ecr-login
