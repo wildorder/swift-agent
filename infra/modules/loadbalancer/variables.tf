@@ -19,8 +19,9 @@ variable "vpc_id" {
 }
 
 variable "certificate_arn" {
-  description = "ACM certificate ARN for HTTPS listener"
+  description = "ACM certificate ARN for HTTPS listener (empty = HTTP-only mode)"
   type        = string
+  default     = ""
 }
 
 variable "health_check_path" {

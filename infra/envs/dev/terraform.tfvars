@@ -9,7 +9,6 @@ nat_gateway_count       = 1
 multi_az                = false
 backup_retention_period = 7
 enable_autoscaling      = false
-domain_prefix           = "dev-api"
 state_bucket_arn        = "arn:aws:s3:::swiftagent-tf-state"
 lock_table_arn          = "arn:aws:dynamodb:us-west-2:992646609226:table/swiftagent-terraform-locks"
 cognito_domain_prefix   = "swiftagent-dev"

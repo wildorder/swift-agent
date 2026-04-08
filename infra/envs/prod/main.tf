@@ -96,8 +96,15 @@ variable "autoscaling_cpu_target" {
   default = 70
 }
 
+variable "enable_dns" {
+  type        = bool
+  default     = false
+  description = "Enable DNS + TLS (requires domain to be registered and delegated)"
+}
+
 variable "domain_prefix" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "image_uri" {
@@ -171,6 +178,7 @@ module "iam" {
 }
 
 module "dns" {
+  count  = var.enable_dns ? 1 : 0
   source = "../../modules/dns"
 
   environment   = var.environment
@@ -187,7 +195,7 @@ module "loadbalancer" {
   public_subnet_ids = module.networking.public_subnet_ids
   security_group_id = module.networking.alb_security_group_id
   vpc_id            = module.networking.vpc_id
-  certificate_arn   = module.dns.certificate_arn
+  certificate_arn   = var.enable_dns ? module.dns[0].certificate_arn : ""
 }
 
 module "ecs" {
@@ -231,7 +239,7 @@ output "alb_dns_name" {
 }
 
 output "domain_name" {
-  value = module.dns.domain_name
+  value = var.enable_dns ? module.dns[0].domain_name : module.loadbalancer.alb_dns_name
 }
 
 output "ecs_service_name" {

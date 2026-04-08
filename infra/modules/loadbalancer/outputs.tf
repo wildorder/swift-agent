@@ -19,8 +19,8 @@ output "target_group_arn" {
 }
 
 output "listener_arn" {
-  description = "ARN of the HTTPS listener"
-  value       = aws_lb_listener.https.arn
+  description = "ARN of the primary listener (HTTPS when TLS enabled, HTTP otherwise)"
+  value       = local.tls_enabled ? aws_lb_listener.https[0].arn : aws_lb_listener.http_forward[0].arn
 }
 
 output "alb_arn_suffix" {

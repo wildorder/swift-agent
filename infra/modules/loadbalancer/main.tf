@@ -7,6 +7,10 @@ terraform {
   }
 }
 
+locals {
+  tls_enabled = var.certificate_arn != ""
+}
+
 resource "aws_lb" "this" {
   name               = "${var.environment}-swiftagent-alb"
   internal           = false
@@ -53,7 +57,11 @@ resource "aws_lb_target_group" "this" {
   }
 }
 
+# --- TLS mode: HTTPS listener + HTTP→HTTPS redirect ---
+
 resource "aws_lb_listener" "https" {
+  count = local.tls_enabled ? 1 : 0
+
   load_balancer_arn = aws_lb.this.arn
   port              = 443
   protocol          = "HTTPS"
@@ -67,6 +75,8 @@ resource "aws_lb_listener" "https" {
 }
 
 resource "aws_lb_listener" "http_redirect" {
+  count = local.tls_enabled ? 1 : 0
+
   load_balancer_arn = aws_lb.this.arn
   port              = 80
   protocol          = "HTTP"
@@ -79,5 +89,20 @@ resource "aws_lb_listener" "http_redirect" {
       protocol    = "HTTPS"
       status_code = "HTTP_301"
     }
+  }
+}
+
+# --- HTTP-only mode: forward directly ---
+
+resource "aws_lb_listener" "http_forward" {
+  count = local.tls_enabled ? 0 : 1
+
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this.arn
   }
 }
