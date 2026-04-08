@@ -20,9 +20,15 @@ variable "github_org" {
 }
 
 variable "github_repo" {
-  description = "GitHub repository name"
+  description = "GitHub repository name (backend)"
   type        = string
   default     = "swift-agent"
+}
+
+variable "github_site_repo" {
+  description = "GitHub repository name (marketing site)"
+  type        = string
+  default     = "swift-agent-site"
 }
 
 variable "state_bucket_arn" {

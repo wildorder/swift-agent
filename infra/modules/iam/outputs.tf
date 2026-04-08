@@ -13,6 +13,11 @@ output "deploy_role_arns" {
   value       = { for k, v in aws_iam_role.deploy : k => v.arn }
 }
 
+output "site_deploy_role_arns" {
+  description = "Map of environment name to site deploy role ARN"
+  value       = { for k, v in aws_iam_role.site_deploy : k => v.arn }
+}
+
 output "github_oidc_provider_arn" {
   description = "ARN of the GitHub Actions OIDC provider"
   value       = data.aws_iam_openid_connect_provider.github.arn

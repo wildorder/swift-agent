@@ -42,14 +42,14 @@ resource "aws_cognito_user_pool" "main" {
 }
 
 # ------------------------------------------------------------------------------
-# App Client (public SPA — no client secret, PKCE required)
+# App Client (confidential — server-side next-auth OAuth flow)
 # ------------------------------------------------------------------------------
 
 resource "aws_cognito_user_pool_client" "main" {
   name         = "swiftagent-${var.environment}-client"
   user_pool_id = aws_cognito_user_pool.main.id
 
-  generate_secret = false
+  generate_secret = true
 
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
@@ -118,6 +118,26 @@ resource "aws_ssm_parameter" "client_id" {
   }
 }
 
+resource "aws_ssm_parameter" "client_secret" {
+  name  = "/${var.environment}/swiftagent/COGNITO_CLIENT_SECRET"
+  type  = "SecureString"
+  value = aws_cognito_user_pool_client.main.client_secret
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_ssm_parameter" "cognito_domain" {
+  name  = "/${var.environment}/swiftagent/COGNITO_DOMAIN"
+  type  = "String"
+  value = "https://${var.domain_prefix}.auth.${data.aws_region.current.name}.amazoncognito.com"
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
 # ------------------------------------------------------------------------------
 # Locals — canonical map of parameter ARNs and names
 # ------------------------------------------------------------------------------
@@ -127,6 +147,11 @@ locals {
     COGNITO_USER_POOL_ID = aws_ssm_parameter.user_pool_id.arn
     COGNITO_ISSUER_URL   = aws_ssm_parameter.issuer_url.arn
     COGNITO_CLIENT_ID    = aws_ssm_parameter.client_id.arn
+  }
+
+  site_parameter_arns = {
+    COGNITO_CLIENT_SECRET = aws_ssm_parameter.client_secret.arn
+    COGNITO_DOMAIN        = aws_ssm_parameter.cognito_domain.arn
   }
 
   parameter_names = {

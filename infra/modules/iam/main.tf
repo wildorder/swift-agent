@@ -252,3 +252,161 @@ resource "aws_iam_role_policy" "deploy" {
     )
   })
 }
+
+# ------------------------------------------------------------------------------
+# Site Deploy Role (marketing site — App Runner via GitHub OIDC)
+# ------------------------------------------------------------------------------
+
+locals {
+  site_deploy_envs = {
+    dev  = "refs/heads/main"
+    prod = "refs/heads/main"
+  }
+}
+
+resource "aws_iam_role" "site_deploy" {
+  for_each = local.site_deploy_envs
+
+  name = "swiftagent-site-deploy-${each.key}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = data.aws_iam_openid_connect_provider.github.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = [
+              "repo:${var.github_org}/${var.github_site_repo}:ref:${each.value}",
+              "repo:${var.github_org}/${var.github_site_repo}:environment:${each.key}"
+            ]
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = each.key
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "site_deploy" {
+  for_each = local.site_deploy_envs
+
+  name = "site-deploy-permissions"
+  role = aws_iam_role.site_deploy[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:CreateRepository",
+          "ecr:DescribeRepositories"
+        ]
+        Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/swiftagent/site"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "apprunner:CreateService",
+          "apprunner:UpdateService",
+          "apprunner:DescribeService",
+          "apprunner:ListServices",
+          "apprunner:CreateAutoScalingConfiguration",
+          "apprunner:DescribeAutoScalingConfiguration",
+          "apprunner:DeleteAutoScalingConfiguration",
+          "apprunner:ListAutoScalingConfigurations",
+          "apprunner:TagResource",
+          "apprunner:UntagResource",
+          "apprunner:ListTagsForResource"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:CreateServiceLinkedRole"
+        ]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/apprunner.amazonaws.com/*"
+        Condition = {
+          StringLike = {
+            "iam:AWSServiceName" = "apprunner.amazonaws.com"
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/swiftagent-site-*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameters",
+          "ssm:GetParameter",
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "ssm:DescribeParameters",
+          "ssm:AddTagsToResource",
+          "ssm:ListTagsForResource",
+          "ssm:RemoveTagsFromResource"
+        ]
+        Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment}/swiftagent-site/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameters",
+          "ssm:GetParameter"
+        ]
+        Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment}/swiftagent/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          var.state_bucket_arn,
+          "${var.state_bucket_arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = var.lock_table_arn
+      }
+    ]
+  })
+}

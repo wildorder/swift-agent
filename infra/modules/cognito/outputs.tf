@@ -14,13 +14,18 @@ output "jwks_uri" {
 }
 
 output "app_client_id" {
-  description = "Cognito App Client ID (public, no secret)"
+  description = "Cognito App Client ID"
   value       = aws_cognito_user_pool_client.main.id
 }
 
 output "parameter_arns" {
   description = "Map of Cognito SSM parameter name to ARN — merge with module.secrets.parameter_arns"
   value       = local.parameter_arns
+}
+
+output "site_parameter_arns" {
+  description = "Map of site-specific Cognito SSM parameter name to ARN (client secret, domain)"
+  value       = local.site_parameter_arns
 }
 
 output "parameter_names" {

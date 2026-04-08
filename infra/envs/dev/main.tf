@@ -131,13 +131,13 @@ variable "cognito_domain_prefix" {
 variable "cognito_callback_urls" {
   type        = list(string)
   description = "OAuth callback URLs for the Cognito app client"
-  default     = ["http://localhost:3000/callback"]
+  default     = ["http://localhost:3000/api/auth/callback/cognito"]
 }
 
 variable "cognito_logout_urls" {
   type        = list(string)
   description = "OAuth logout URLs for the Cognito app client"
-  default     = ["http://localhost:3000/logout"]
+  default     = ["http://localhost:3000"]
 }
 
 # -----------------------------------------------------------------------------
@@ -196,11 +196,11 @@ module "cognito" {
 module "iam" {
   source = "../../modules/iam"
 
-  environment          = var.environment
-  ssm_parameter_arns   = values(merge(module.secrets.parameter_arns, module.cognito.parameter_arns))
-  ecr_repository_arn   = module.ecr.repository_arn
-  state_bucket_arn     = var.state_bucket_arn
-  lock_table_arn       = var.lock_table_arn
+  environment        = var.environment
+  ssm_parameter_arns = values(merge(module.secrets.parameter_arns, module.cognito.parameter_arns))
+  ecr_repository_arn = module.ecr.repository_arn
+  state_bucket_arn   = var.state_bucket_arn
+  lock_table_arn     = var.lock_table_arn
 }
 
 module "dns" {
