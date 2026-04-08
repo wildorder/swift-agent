@@ -119,9 +119,6 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
     });
   }
 
-  // Also register health at root for load balancers
-  registerHealthRoutes(app);
-
   return { app, tokenService, agentService, sessionService };
 }
 
