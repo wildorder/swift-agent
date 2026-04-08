@@ -100,12 +100,6 @@ variable "domain_prefix" {
   type = string
 }
 
-variable "route53_zone_id" {
-  type        = string
-  default     = ""
-  description = "Pre-existing Route 53 hosted zone ID for swiftagent.dev"
-}
-
 variable "image_uri" {
   type        = string
   default     = ""
@@ -180,7 +174,7 @@ module "dns" {
   source = "../../modules/dns"
 
   environment   = var.environment
-  zone_id       = var.route53_zone_id
+  create_zone   = false
   domain_prefix = var.domain_prefix
   alb_dns_name  = module.loadbalancer.alb_dns_name
   alb_zone_id   = module.loadbalancer.alb_zone_id

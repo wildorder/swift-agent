@@ -3,9 +3,16 @@ variable "environment" {
   type        = string
 }
 
-variable "zone_id" {
-  description = "Pre-existing Route 53 hosted zone ID"
+variable "parent_domain" {
+  description = "Parent domain for the hosted zone (e.g. swiftagent.dev)"
   type        = string
+  default     = "swiftagent.dev"
+}
+
+variable "create_zone" {
+  description = "Whether to create the hosted zone (true for first env deployed, false to look up existing)"
+  type        = bool
+  default     = true
 }
 
 variable "domain_prefix" {
