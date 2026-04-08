@@ -127,7 +127,7 @@ jobs:
             --task-definition $TASK_DEF \
             --launch-type FARGATE \
             --network-configuration "$NETWORK_CONFIG" \
-            --overrides '{"containerOverrides": [{"name": "'"$ENVIRONMENT"'-swiftagent", "command": ["node", "dist/migrate.js"]}]}' \
+            --overrides '{"containerOverrides": [{"name": "'"$ENVIRONMENT"'-swiftagent", "command": ["node", "packages/db/dist/migrate.js"]}]}' \
             --query 'tasks[0].taskArn' \
             --output text)
 
