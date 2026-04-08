@@ -87,5 +87,5 @@ resource "aws_db_instance" "this" {
 ################################################################################
 
 locals {
-  connection_string = "postgresql://${aws_db_instance.this.username}:${random_password.master.result}@${aws_db_instance.this.endpoint}/${aws_db_instance.this.db_name}"
+  connection_string = "postgresql://${aws_db_instance.this.username}:${urlencode(random_password.master.result)}@${aws_db_instance.this.endpoint}/${aws_db_instance.this.db_name}"
 }
