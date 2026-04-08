@@ -127,3 +127,10 @@ export async function startServer(): Promise<ServerContext> {
 
   return { config, container, api, gateway };
 }
+
+// ── Entry point (invoked when run directly via `node dist/main.js`) ──
+
+startServer().catch((err) => {
+  console.error('Fatal: failed to start server', err);
+  process.exit(1);
+});
