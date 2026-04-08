@@ -1,9 +1,13 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ENV_KEYS } from '@swiftagent/shared';
 import { buildApp, type AppContext } from '@swiftagent/api';
 import { createGatewayServer, type GatewayContext } from '@swiftagent/gateway';
 import { loadServerConfig, redactConfig, type ServerConfig } from './config.js';
 import { buildContainer, type Container } from './container.js';
 import { registerHealthCheck } from './health.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── Server context ────────────────────────────────────────────────────
 
@@ -32,7 +36,8 @@ export async function startServer(): Promise<ServerContext> {
     const migrationPool = postgres(config[ENV_KEYS.DATABASE_URL], { max: 1 });
     const migrationDb = drizzle(migrationPool);
     console.log('Running database migrations...');
-    await migrate(migrationDb, { migrationsFolder: './drizzle' });
+    const migrationsFolder = resolve(__dirname, '../../../packages/db/drizzle');
+    await migrate(migrationDb, { migrationsFolder });
     console.log('Migrations complete.');
     await migrationPool.end();
   }

@@ -53,6 +53,7 @@ COPY --from=builder /app/packages/observability/package.json packages/observabil
 COPY --from=builder /app/apps/server/dist apps/server/dist
 COPY --from=builder /app/packages/shared/dist packages/shared/dist
 COPY --from=builder /app/packages/db/dist packages/db/dist
+COPY --from=builder /app/packages/db/drizzle packages/db/drizzle
 COPY --from=builder /app/packages/models/dist packages/models/dist
 COPY --from=builder /app/packages/runtime/dist packages/runtime/dist
 COPY --from=builder /app/packages/gateway/dist packages/gateway/dist
@@ -75,4 +76,5 @@ EXPOSE 3000 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
+ENTRYPOINT []
 CMD ["node", "apps/server/dist/main.js"]

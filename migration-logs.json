@@ -1,0 +1,27 @@
+
+{
+'charmap' codec can't encode characters in position 1-38: character maps to <undefined>
+    "events": [
+        {
+            "timestamp": 1775678999493,
+            "message": "(node:1) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.",
+            "ingestionTime": 1775679002970
+        },
+        {
+            "timestamp": 1775678999493,
+            "message": "(Use `node --trace-deprecation ...` to show where the warning was created)",
+            "ingestionTime": 1775679002970
+        },
+        {
+            "timestamp": 1775678999875,
+            "message": "{\"level\":30,\"time\":1775678999874,\"pid\":1,\"hostname\":\"ip-10-0-3-95.us-west-2.compute.internal\",\"msg\":\"Server listening at http://127.0.0.1:3000\"}",
+            "ingestionTime": 1775679002970
+        },
+        {
+            "timestamp": 1775678999878,
+            "message": "{\"level\":30,\"time\":1775678999878,\"pid\":1,\"hostname\":\"ip-10-0-3-95.us-west-2.compute.internal\",\"msg\":\"Server listening at http://127.0.0.1:3001\"}",
+            "ingestionTime": 1775679002970
+        },
+        {
+            "timestamp": 1775678999878,
+            "message": 
