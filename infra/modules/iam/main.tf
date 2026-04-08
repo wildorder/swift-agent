@@ -319,7 +319,16 @@ resource "aws_iam_role_policy" "site_deploy" {
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
           "ecr:CreateRepository",
-          "ecr:DescribeRepositories"
+          "ecr:DeleteRepository",
+          "ecr:DescribeRepositories",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "ecr:ListTagsForResource",
+          "ecr:PutLifecyclePolicy",
+          "ecr:GetLifecyclePolicy",
+          "ecr:DeleteLifecyclePolicy",
+          "ecr:SetRepositoryPolicy",
+          "ecr:GetRepositoryPolicy"
         ]
         Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/swiftagent/site"
       },
@@ -331,17 +340,7 @@ resource "aws_iam_role_policy" "site_deploy" {
       {
         Effect = "Allow"
         Action = [
-          "apprunner:CreateService",
-          "apprunner:UpdateService",
-          "apprunner:DescribeService",
-          "apprunner:ListServices",
-          "apprunner:CreateAutoScalingConfiguration",
-          "apprunner:DescribeAutoScalingConfiguration",
-          "apprunner:DeleteAutoScalingConfiguration",
-          "apprunner:ListAutoScalingConfigurations",
-          "apprunner:TagResource",
-          "apprunner:UntagResource",
-          "apprunner:ListTagsForResource"
+          "apprunner:*"
         ]
         Resource = "*"
       },
@@ -360,7 +359,21 @@ resource "aws_iam_role_policy" "site_deploy" {
       {
         Effect = "Allow"
         Action = [
-          "iam:PassRole"
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:PassRole",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:UpdateRole",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:GetRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole"
         ]
         Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/swiftagent-site-*"
       },
@@ -377,6 +390,13 @@ resource "aws_iam_role_policy" "site_deploy" {
           "ssm:RemoveTagsFromResource"
         ]
         Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment}/swiftagent-site/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:DescribeParameters"
+        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
