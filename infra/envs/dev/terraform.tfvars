@@ -12,3 +12,14 @@ enable_autoscaling      = false
 state_bucket_arn        = "arn:aws:s3:::swiftagent-tf-state"
 lock_table_arn          = "arn:aws:dynamodb:us-west-2:992646609226:table/swiftagent-terraform-locks"
 cognito_domain_prefix   = "swiftagent-dev"
+
+# TODO: replace AppRunner URLs with custom domain once DNS is set up.
+# Must stay in sync with auth_url in swift-agent-site's tfvars.
+cognito_callback_urls = [
+  "http://localhost:3000/api/auth/callback/cognito",
+  "https://8zpwmhpuzp.us-west-2.awsapprunner.com/api/auth/callback/cognito",
+]
+cognito_logout_urls = [
+  "http://localhost:3000",
+  "https://8zpwmhpuzp.us-west-2.awsapprunner.com",
+]
