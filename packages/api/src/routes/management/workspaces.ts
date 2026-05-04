@@ -48,8 +48,7 @@ export function registerWorkspaceRoutes(
       memberships.map((m) => workspaceRepo.getById(m.workspaceId)),
     );
 
-    // Filter out any null (shouldn't happen, but be safe) and preserve membership order
-    return reply.send(workspaces.filter(Boolean));
+    return reply.send({ workspaces: workspaces.filter(Boolean) });
   });
 
   // GET /workspaces/:id — workspace detail (member only)
