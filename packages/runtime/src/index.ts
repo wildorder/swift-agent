@@ -15,6 +15,7 @@ export { RemoteToolExecutor } from './tool-executor-remote.js';
 export type { RemoteToolExecutorOptions } from './tool-executor-remote.js';
 
 export { createToolExecutor } from './tool-executor-factory.js';
+export type { CreateToolExecutorOptions } from './tool-executor-factory.js';
 
 // Per-agent executor resolution (WS-21)
 export { createToolExecutorResolver } from './tool-executor-resolver.js';
@@ -22,6 +23,22 @@ export type {
   ToolExecutorResolver,
   CreateToolExecutorResolverOptions,
 } from './tool-executor-resolver.js';
+
+// Scoped runner credentials + SSRF guard (WS-22)
+export {
+  mintRunnerToken,
+  importRunnerPrivateKey,
+  RUNNER_TOKEN_ALG,
+  DEFAULT_RUNNER_TOKEN_TTL_SECONDS,
+  MAX_RUNNER_TOKEN_TTL_SECONDS,
+} from './runner-credentials.js';
+export type { RunnerTokenClaims, RunnerSigningKey } from './runner-credentials.js';
+export {
+  resolveAllowedOutboundTarget,
+  createPinnedDispatcher,
+  isDisallowedAddress,
+} from './ssrf.js';
+export type { OutboundUrlPolicy } from './ssrf.js';
 
 // Types (WS-05b)
 export type {

@@ -93,6 +93,25 @@ export type { RunStatus, TokenUsage, RunRecord } from './types/run.js';
 export { ToolCallStatusSchema, ToolCallRecordSchema } from './types/tool-call.js';
 export type { ToolCallStatus, ToolCallRecord } from './types/tool-call.js';
 
+// Runner protocol (WS-22) — versioned, bounded remote tool-runner wire contract
+export {
+  RUNNER_PROTOCOL_VERSION,
+  RUNNER_MAX_INPUT_BYTES,
+  RUNNER_MAX_OUTPUT_BYTES,
+  RUNNER_MAX_ERROR_BYTES,
+  RunnerRequestContextSchema,
+  RunnerRequestSchema,
+  RunnerSuccessResponseSchema,
+  RunnerErrorResponseSchema,
+} from './types/runner-protocol.js';
+export type {
+  RunnerRequestContext,
+  RunnerRequest,
+  RunnerSuccessResponse,
+  RunnerErrorResponse,
+  RunnerResponse,
+} from './types/runner-protocol.js';
+
 // Stream events
 export {
   MessageStartedEventSchema,

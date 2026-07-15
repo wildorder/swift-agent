@@ -3,6 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { LocalToolExecutor } from './tool-executor-local.js';
 import { RemoteToolExecutor } from './tool-executor-remote.js';
+import type { RemoteToolExecutorOptions } from './tool-executor-remote.js';
 import { createToolExecutor } from './tool-executor-factory.js';
 import type { ToolCallContext } from './tool-executor.js';
 import type { AgentRecord } from '@swiftagent/shared';
@@ -150,8 +151,20 @@ describe('LocalToolExecutor', () => {
 });
 
 // ---------------------------------------------------------------------------
-// RemoteToolExecutor (with real HTTP mock server)
+// RemoteToolExecutor (with real HTTP mock server) — WS-22 versioned protocol
 // ---------------------------------------------------------------------------
+
+// Loopback is only permitted in dev/test policy; production requires https and
+// rejects loopback (covered in remote-runner-security.test.ts).
+const LOCAL_POLICY = { requireHttps: false, allowLoopback: true } as const;
+
+/** Versioned success/error bodies matching the shared runner protocol. */
+function ok(result: unknown): string {
+  return JSON.stringify({ version: '1', result });
+}
+function err(code: string, message: string): string {
+  return JSON.stringify({ version: '1', error: { code, message } });
+}
 
 describe('RemoteToolExecutor', () => {
   let server: http.Server;
@@ -160,6 +173,16 @@ describe('RemoteToolExecutor', () => {
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ) => void;
+
+  function remote(overrides: Partial<RemoteToolExecutorOptions> = {}) {
+    return new RemoteToolExecutor({
+      toolRunnerUrl: baseUrl,
+      agentId: 'agt_test',
+      policy: LOCAL_POLICY,
+      mintToken: async () => 'scoped-token',
+      ...overrides,
+    });
+  }
 
   beforeAll(
     () =>
@@ -180,41 +203,43 @@ describe('RemoteToolExecutor', () => {
       }),
   );
 
-  it('success — returns result and sends auth header', async () => {
+  it('success — returns result and sends the scoped bearer + versioned envelope', async () => {
     let capturedAuth = '';
+    let capturedBody = '';
     handler = (req, res) => {
       capturedAuth = req.headers.authorization ?? '';
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ result: { temp: 72 } }));
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        capturedBody = raw;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(ok({ temp: 72 }));
+      });
     };
 
-    const exec = new RemoteToolExecutor({
-      toolRunnerUrl: baseUrl,
-      authToken: 'sk_test_token',
-    });
-
-    const result = await exec.execute(
+    const result = await remote().execute(
       { toolName: 'weather', callId: 'tc_7', arguments: { city: 'NYC' } },
       ctx,
       neverAbort(),
     );
 
     expect(result).toEqual({ ok: true, output: { temp: 72 } });
-    expect(capturedAuth).toBe('Bearer sk_test_token');
+    expect(capturedAuth).toBe('Bearer scoped-token');
+    const parsed = JSON.parse(capturedBody);
+    expect(parsed.version).toBe('1');
+    expect(parsed.idempotencyKey).toBe('tc_7');
+    expect(parsed.context.agentId).toBe('agt_test');
+    expect(parsed.context.callId).toBe('tc_7');
+    expect(parsed.context.runId).toBe('run_test456');
   });
 
-  it('error payload in 200 response', async () => {
+  it('error-shaped 200 response surfaces the handler message', async () => {
     handler = (_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'not found' } }));
+      res.end(err('EXECUTION_ERROR', 'not found'));
     };
 
-    const exec = new RemoteToolExecutor({
-      toolRunnerUrl: baseUrl,
-      authToken: 'sk_test',
-    });
-
-    const result = await exec.execute(
+    const result = await remote().execute(
       { toolName: 'lookup', callId: 'tc_8', arguments: {} },
       ctx,
       neverAbort(),
@@ -228,17 +253,11 @@ describe('RemoteToolExecutor', () => {
     let requestCount = 0;
     handler = (_req, res) => {
       requestCount++;
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
-      res.end('Bad request');
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(err('VALIDATION', 'bad input'));
     };
 
-    const exec = new RemoteToolExecutor({
-      toolRunnerUrl: baseUrl,
-      authToken: 'sk_test',
-      maxRetries: 2,
-    });
-
-    const result = await exec.execute(
+    const result = await remote({ maxRetries: 2 }).execute(
       { toolName: 'bad', callId: 'tc_9', arguments: {} },
       ctx,
       neverAbort(),
@@ -246,7 +265,7 @@ describe('RemoteToolExecutor', () => {
 
     expect(requestCount).toBe(1);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain('400');
+    if (!result.ok) expect(result.error).toBe('bad input');
   });
 
   it('retries on 500 then succeeds', async () => {
@@ -254,22 +273,15 @@ describe('RemoteToolExecutor', () => {
     handler = (_req, res) => {
       requestCount++;
       if (requestCount === 1) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Internal error');
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(err('INTERNAL', 'boom'));
       } else {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ result: 'recovered' }));
+        res.end(ok('recovered'));
       }
     };
 
-    const exec = new RemoteToolExecutor({
-      toolRunnerUrl: baseUrl,
-      authToken: 'sk_test',
-      maxRetries: 1,
-      retryDelayMs: 10,
-    });
-
-    const result = await exec.execute(
+    const result = await remote({ maxRetries: 1, retryDelayMs: 10 }).execute(
       { toolName: 'flaky', callId: 'tc_10', arguments: {} },
       ctx,
       neverAbort(),
@@ -283,18 +295,11 @@ describe('RemoteToolExecutor', () => {
     let requestCount = 0;
     handler = (_req, res) => {
       requestCount++;
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Server Error');
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(err('INTERNAL', 'Server Error'));
     };
 
-    const exec = new RemoteToolExecutor({
-      toolRunnerUrl: baseUrl,
-      authToken: 'sk_test',
-      maxRetries: 1,
-      retryDelayMs: 10,
-    });
-
-    const result = await exec.execute(
+    const result = await remote({ maxRetries: 1, retryDelayMs: 10 }).execute(
       { toolName: 'down', callId: 'tc_11', arguments: {} },
       ctx,
       neverAbort(),
@@ -312,14 +317,7 @@ describe('RemoteToolExecutor', () => {
       // Never respond
     };
 
-    const exec = new RemoteToolExecutor({
-      toolRunnerUrl: baseUrl,
-      authToken: 'sk_test',
-      timeoutMs: 100,
-      maxRetries: 0,
-    });
-
-    const result = await exec.execute(
+    const result = await remote({ timeoutMs: 100, maxRetries: 0 }).execute(
       { toolName: 'hang', callId: 'tc_12', arguments: {} },
       ctx,
       neverAbort(),
@@ -332,7 +330,9 @@ describe('RemoteToolExecutor', () => {
   it('network failure — connection refused', async () => {
     const exec = new RemoteToolExecutor({
       toolRunnerUrl: 'http://127.0.0.1:1',
-      authToken: 'sk_test',
+      agentId: 'agt_test',
+      policy: LOCAL_POLICY,
+      mintToken: async () => 'scoped-token',
       maxRetries: 0,
       timeoutMs: 2_000,
     });
@@ -355,10 +355,15 @@ describe('RemoteToolExecutor', () => {
 // ---------------------------------------------------------------------------
 
 describe('createToolExecutor', () => {
+  const factoryOpts = {
+    policy: { requireHttps: false, allowLoopback: true },
+    mintToken: async () => 'scoped-token',
+  };
+
   it('returns RemoteToolExecutor when toolRunnerUrl is set', () => {
     const executor = createToolExecutor(
       makeAgent({ toolRunnerUrl: 'http://localhost:4000' }),
-      { authToken: 'sk_test' },
+      factoryOpts,
     );
     expect(executor).toBeInstanceOf(RemoteToolExecutor);
   });
@@ -366,7 +371,7 @@ describe('createToolExecutor', () => {
   it('returns LocalToolExecutor when toolRunnerUrl is null', () => {
     const executor = createToolExecutor(
       makeAgent({ toolRunnerUrl: null }),
-      { authToken: 'sk_test' },
+      factoryOpts,
     );
     expect(executor).toBeInstanceOf(LocalToolExecutor);
   });

@@ -1,8 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import { generateKeyPair, exportSPKI } from 'jose';
 import { createAgentApp } from '../app.js';
 import { defineAgent } from '../agent.js';
 import { tool } from '../tool.js';
+
+let publicKeyPem: string;
+
+beforeAll(async () => {
+  const { publicKey } = await generateKeyPair('EdDSA');
+  publicKeyPem = await exportSPKI(publicKey);
+});
 
 // Mock fetch for control-plane client calls
 const mockFetch = vi.fn();
@@ -84,27 +92,33 @@ describe('AgentApp', () => {
       tools: [weatherTool],
     });
 
-    app.agent(agent);
-    await app.listen(0); // Random port
+    // A runner needs its verification public key + owning workspace to start (WS-22).
+    const runnerApp = createAgentApp({
+      apiKey: 'test-key',
+      baseUrl: 'http://localhost:3000',
+      runnerPublicKey: publicKeyPem,
+      runnerWorkspaceId: 'ws_abc123',
+    });
+    runnerApp.agent(agent);
+    await runnerApp.listen(0); // Random port
 
     // Should have called POST /v1/agents to register the agent
-    const postCalls = mockFetch.mock.calls.filter(
+    const registerCalls = mockFetch.mock.calls.filter(
       (call: any[]) => call[1]?.method === 'POST' && (call[0] as string).includes('/v1/agents'),
     );
-    expect(postCalls.length).toBe(1);
+    expect(registerCalls.length).toBe(1);
+    const registerBody = JSON.parse(registerCalls[0][1].body as string);
+    expect(registerBody.name).toBe('test-agent');
+    expect(registerBody.modelConfig.model).toBe('openai/gpt-4');
+    expect(registerBody.systemPrompt).toBe('You are helpful.');
+    expect(registerBody.toolRunnerUrl).toBeDefined();
+    expect(registerBody.tools).toHaveLength(1);
+    expect(registerBody.tools[0].name).toBe('weather');
+    expect(registerBody.tools[0]).toHaveProperty('inputSchema');
+    expect(registerBody.tools[0]).not.toHaveProperty('parameters');
+    expect(registerBody.tools[0]).not.toHaveProperty('execute');
 
-    const body = JSON.parse(postCalls[0][1].body as string);
-    expect(body.name).toBe('test-agent');
-    expect(body.modelConfig.model).toBe('openai/gpt-4');
-    expect(body.systemPrompt).toBe('You are helpful.');
-    expect(body.toolRunnerUrl).toBeDefined();
-
-    // Normalized tool definitions are sent with inputSchema (not parameters/execute)
-    expect(body.tools).toHaveLength(1);
-    expect(body.tools[0].name).toBe('weather');
-    expect(body.tools[0]).toHaveProperty('inputSchema');
-    expect(body.tools[0]).not.toHaveProperty('parameters');
-    expect(body.tools[0]).not.toHaveProperty('execute');
+    await runnerApp.close();
   });
 
   describe('sessions', () => {

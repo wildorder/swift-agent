@@ -21,6 +21,7 @@
   "dependencies": {
     "@swiftagent/shared": "workspace:*",
     "fastify": "^5",
+    "jose": "^6",
     "zod": "^3.24",
     "zod-to-json-schema": "^3.24"
   },

@@ -30,7 +30,14 @@ import {
   createGoogleProvider,
 } from '@swiftagent/models';
 import { Tracer, type TraceSink } from '@swiftagent/observability';
-import { AgentEngine, createToolExecutorResolver } from '@swiftagent/runtime';
+import {
+  AgentEngine,
+  createToolExecutorResolver,
+  mintRunnerToken,
+  importRunnerPrivateKey,
+  type RunnerSigningKey,
+  type OutboundUrlPolicy,
+} from '@swiftagent/runtime';
 import {
   createTokenService,
   type TokenService,
@@ -142,19 +149,50 @@ export function buildContainer(config: ServerConfig): Container {
   // Executors are resolved per-agent at run time (WS-21): agents with a
   // toolRunnerUrl get a RemoteToolExecutor for that URL; agents with no
   // execution config fail fast. No server-wide LocalToolExecutor singleton.
-  const internalRunnerToken = config[ENV_KEYS.INTERNAL_RUNNER_TOKEN];
+  //
+  // WS-22: the resolver mints a short-lived, asymmetrically-signed scoped token
+  // per tool invocation. The PRIVATE signing key lives only here (hosted
+  // runtime); the SDK runner verifies with the distributed PUBLIC key. The raw
+  // workspace API key is never used as a runner credential.
+  const privateKeyMaterial = config[ENV_KEYS.RUNNER_TOKEN_PRIVATE_KEY];
+  // Import lazily + once: buildContainer is sync, and tool-less deployments
+  // never mint, so a missing key only fails when a remote tool actually runs.
+  let signingKeyPromise: Promise<RunnerSigningKey> | null = null;
+  const getSigningKey = (): Promise<RunnerSigningKey> => {
+    if (!privateKeyMaterial) {
+      throw new Error(
+        `Remote tool execution requires ${ENV_KEYS.RUNNER_TOKEN_PRIVATE_KEY} to be configured`,
+      );
+    }
+    signingKeyPromise ??= importRunnerPrivateKey(privateKeyMaterial);
+    return signingKeyPromise;
+  };
+
+  // Deployed environments require HTTPS and disallow loopback; dev/test (https
+  // not required) allow loopback for a local runner.
+  const requireHttps = config[ENV_KEYS.RUNNER_REQUIRE_HTTPS] !== false;
+  const runnerPolicy: OutboundUrlPolicy = {
+    requireHttps,
+    allowLoopback: !requireHttps,
+  };
+
   const toolExecutorResolver = createToolExecutorResolver({
-    // TODO(WS-22): interim server-configured token. Raw workspace API keys are
-    // unrecoverable (ApiKeyRepo stores SHA-256 hashes only), so we do NOT read
-    // apiKeyRepo here. WS-22 replaces this with short-lived per-call scoped
-    // credentials minted per tool invocation.
-    resolveAuthToken: () => {
-      if (!internalRunnerToken) {
-        throw new Error(
-          `Remote tool execution requires ${ENV_KEYS.INTERNAL_RUNNER_TOKEN} to be configured`,
-        );
+    policy: runnerPolicy,
+    mintToken: async (agent, call, ctx) => {
+      const audience = agent.toolRunnerUrl;
+      if (!audience) {
+        throw new Error(`Agent ${agent.agentId} has no tool runner URL to scope a token to`);
       }
-      return internalRunnerToken;
+      const signingKey = await getSigningKey();
+      return mintRunnerToken(signingKey, {
+        aud: audience,
+        workspaceId: agent.workspaceId,
+        agentId: agent.agentId,
+        runId: ctx.runId,
+        callId: call.callId,
+        idempotencyKey: call.callId,
+        toolName: call.toolName,
+      });
     },
   });
   const engine = new AgentEngine({

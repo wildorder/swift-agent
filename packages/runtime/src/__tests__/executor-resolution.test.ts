@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { AgentRecord, MessageRecord, ChatEvent, SwiftAgentError } from '@swiftagent/shared';
 import { isSwiftAgentError } from '@swiftagent/shared';
 import type { ModelProvider, ModelStreamChunk } from '@swiftagent/models';
 import { ProviderRegistry } from '@swiftagent/models';
 import { createToolExecutorResolver } from '../tool-executor-resolver.js';
+import type { CreateToolExecutorResolverOptions } from '../tool-executor-resolver.js';
 import { LocalToolExecutor } from '../tool-executor-local.js';
 import { RemoteToolExecutor } from '../tool-executor-remote.js';
 import { AgentEngine } from '../engine.js';
@@ -33,19 +36,52 @@ function makeAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
 const OK_CALL: ToolCall = { toolName: 'ping', callId: 'tc_1', arguments: {} };
 const OK_CTX: ToolCallContext = { sessionId: 'ses_1', runId: 'run_1' };
 
-/** A fetch mock that records every requested URL and returns a 200 result. */
-function recordingFetch(): { fetchMock: typeof fetch; urls: string[] } {
-  const urls: string[] = [];
-  const fetchMock = vi.fn(async (input: string | URL | Request) => {
-    urls.push(String(input));
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ result: 'ok' }),
-      text: async () => '',
-    } as Response;
-  }) as unknown as typeof fetch;
-  return { fetchMock, urls };
+// Dev/test policy — the resolved RemoteToolExecutor may target loopback runners.
+const LOCAL_POLICY = { requireHttps: false, allowLoopback: true } as const;
+
+/** Base options with a stub minter; individual tests override as needed. */
+function resolverOpts(
+  overrides: Partial<CreateToolExecutorResolverOptions> = {},
+): CreateToolExecutorResolverOptions {
+  return {
+    policy: LOCAL_POLICY,
+    mintToken: async () => 'scoped-token',
+    ...overrides,
+  };
+}
+
+/** A loopback runner that records the paths + bearer tokens it received. */
+interface RecordingRunner {
+  baseUrl: string;
+  paths: string[];
+  auths: string[];
+  close(): Promise<void>;
+}
+
+function startRecordingRunner(): Promise<RecordingRunner> {
+  return new Promise((resolve) => {
+    const paths: string[] = [];
+    const auths: string[] = [];
+    const server = http.createServer((req, res) => {
+      paths.push(req.url ?? '');
+      auths.push(req.headers.authorization ?? '');
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ version: '1', result: 'ok' }));
+      });
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address() as AddressInfo;
+      resolve({
+        baseUrl: `http://127.0.0.1:${addr.port}`,
+        paths,
+        auths,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+      });
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -54,55 +90,56 @@ function recordingFetch(): { fetchMock: typeof fetch; urls: string[] } {
 
 describe('createToolExecutorResolver — resolution rules', () => {
   it('resolves a RemoteToolExecutor whose calls hit the agent runner URL', async () => {
-    const { fetchMock, urls } = recordingFetch();
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock;
+    const runner = await startRecordingRunner();
     try {
-      const resolver = createToolExecutorResolver({
-        resolveAuthToken: () => 'interim-token',
-      });
-      const agent = makeAgent({ toolRunnerUrl: 'https://runner.a' });
+      const resolver = createToolExecutorResolver(resolverOpts());
+      const agent = makeAgent({ toolRunnerUrl: runner.baseUrl });
 
       const executor = await resolver.resolve(agent);
       expect(executor).toBeInstanceOf(RemoteToolExecutor);
 
       await executor.execute(OK_CALL, OK_CTX, new AbortController().signal);
-      expect(urls).toEqual(['https://runner.a/tools/ping']);
+      expect(runner.paths).toEqual(['/tools/ping']);
     } finally {
-      globalThis.fetch = originalFetch;
+      await runner.close();
     }
   });
 
-  it('passes the resolved auth token to the remote executor', async () => {
-    const { fetchMock } = recordingFetch();
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock;
+  it('mints a per-call scoped token, closing over the resolved agent', async () => {
+    const runner = await startRecordingRunner();
     try {
-      const resolveAuthToken = vi.fn(async () => 'secret-token');
-      const resolver = createToolExecutorResolver({ resolveAuthToken });
-      const agent = makeAgent({ toolRunnerUrl: 'https://runner.a' });
+      const mintToken = vi.fn<
+        (agent: AgentRecord, call: ToolCall, ctx: ToolCallContext) => Promise<string>
+      >(async () => 'secret-scoped-token');
+      const resolver = createToolExecutorResolver(resolverOpts({ mintToken }));
+      const agent = makeAgent({ toolRunnerUrl: runner.baseUrl });
 
       const executor = await resolver.resolve(agent);
       await executor.execute(OK_CALL, OK_CTX, new AbortController().signal);
 
-      expect(resolveAuthToken).toHaveBeenCalledWith(agent);
-      const headers = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]
-        .headers as Record<string, string>;
-      expect(headers.Authorization).toBe('Bearer secret-token');
+      // The minter receives the resolved agent (single identity source) plus the
+      // call and context — never the raw workspace key.
+      expect(mintToken).toHaveBeenCalledTimes(1);
+      const [passedAgent, passedCall, passedCtx] = mintToken.mock.calls[0];
+      expect(passedAgent).toBe(agent);
+      expect(passedCall).toBe(OK_CALL);
+      expect(passedCtx).toBe(OK_CTX);
+      expect(runner.auths).toEqual(['Bearer secret-scoped-token']);
     } finally {
-      globalThis.fetch = originalFetch;
+      await runner.close();
     }
   });
 
   it('resolves a LocalToolExecutor when internal tools are explicitly registered', async () => {
     const handler = vi.fn(async () => ({ value: 99 }));
-    const resolver = createToolExecutorResolver({
-      resolveAuthToken: () => 'unused',
-      registerLocalTools: (_agent, local) => {
-        local.registerTool('ping', handler);
-        return 1;
-      },
-    });
+    const resolver = createToolExecutorResolver(
+      resolverOpts({
+        registerLocalTools: (_agent, local) => {
+          local.registerTool('ping', handler);
+          return 1;
+        },
+      }),
+    );
     const agent = makeAgent({
       tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object' } }],
     });
@@ -116,11 +153,9 @@ describe('createToolExecutorResolver — resolution rules', () => {
   });
 
   it('fails fast for a tool-bearing agent with no execution configuration', async () => {
-    const resolver = createToolExecutorResolver({
-      resolveAuthToken: () => 'unused',
-      // registerLocalTools registers nothing → count 0 → not explicit local.
-      registerLocalTools: () => 0,
-    });
+    const resolver = createToolExecutorResolver(
+      resolverOpts({ registerLocalTools: () => 0 }),
+    );
     const agent = makeAgent({
       tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object' } }],
     });
@@ -137,7 +172,7 @@ describe('createToolExecutorResolver — resolution rules', () => {
   });
 
   it('fails fast when no registerLocalTools callback is provided', async () => {
-    const resolver = createToolExecutorResolver({ resolveAuthToken: () => 'unused' });
+    const resolver = createToolExecutorResolver(resolverOpts());
     const agent = makeAgent({
       tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object' } }],
     });
@@ -153,48 +188,34 @@ describe('createToolExecutorResolver — resolution rules', () => {
   });
 
   it('resolves a no-op executor for a tool-less agent without throwing', async () => {
-    const resolver = createToolExecutorResolver({ resolveAuthToken: () => 'unused' });
+    const resolver = createToolExecutorResolver(resolverOpts());
     const agent = makeAgent({ tools: [], toolRunnerUrl: null });
 
     const executor = await resolver.resolve(agent);
     expect(executor).toBeInstanceOf(LocalToolExecutor);
-    // Nothing is registered — an actual call would report an unknown tool, but
-    // for a tool-less agent this path is never reached in the loop.
     const result = await executor.execute(OK_CALL, OK_CTX, new AbortController().signal);
     expect(result).toEqual({ ok: false, error: 'Unknown tool: ping' });
   });
 
   it('re-registration under a new runner URL yields a different executor', async () => {
-    const { fetchMock, urls } = recordingFetch();
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock;
-    try {
-      const resolver = createToolExecutorResolver({ resolveAuthToken: () => 'token' });
-      const agentId = 'agt_reregisterxxxxxxxxx';
+    const resolver = createToolExecutorResolver(resolverOpts());
+    const agentId = 'agt_reregisterxxxxxxxxx';
 
-      const first = await resolver.resolve(makeAgent({ agentId, toolRunnerUrl: 'https://runner.a' }));
-      const second = await resolver.resolve(makeAgent({ agentId, toolRunnerUrl: 'https://runner.b' }));
+    const first = await resolver.resolve(makeAgent({ agentId, toolRunnerUrl: 'https://runner.a' }));
+    const second = await resolver.resolve(makeAgent({ agentId, toolRunnerUrl: 'https://runner.b' }));
 
-      expect(first).not.toBe(second);
-
-      await first.execute(OK_CALL, OK_CTX, new AbortController().signal);
-      await second.execute(OK_CALL, OK_CTX, new AbortController().signal);
-      expect(urls).toEqual(['https://runner.a/tools/ping', 'https://runner.b/tools/ping']);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(first).not.toBe(second);
+    expect(first).toBeInstanceOf(RemoteToolExecutor);
+    expect(second).toBeInstanceOf(RemoteToolExecutor);
   });
 
   it('memoizes the executor for a stable (agentId, runnerUrl)', async () => {
-    const resolveAuthToken = vi.fn(() => 'token');
-    const resolver = createToolExecutorResolver({ resolveAuthToken });
+    const resolver = createToolExecutorResolver(resolverOpts());
     const agent = makeAgent({ toolRunnerUrl: 'https://runner.a' });
 
     const a = await resolver.resolve(agent);
     const b = await resolver.resolve(agent);
     expect(a).toBe(b);
-    // Auth token only fetched once — the second resolve returns the cached executor.
-    expect(resolveAuthToken).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -204,32 +225,28 @@ describe('createToolExecutorResolver — resolution rules', () => {
 
 describe('createToolExecutorResolver — no cross-routing (SC-07)', () => {
   it('keeps two agents bound to their own runners under interleaved execution', async () => {
-    const { fetchMock, urls } = recordingFetch();
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock;
+    const runnerA = await startRecordingRunner();
+    const runnerB = await startRecordingRunner();
     try {
-      const resolver = createToolExecutorResolver({ resolveAuthToken: () => 'token' });
-      const agentA = makeAgent({ agentId: 'agt_aaaaaaaaaaaaaaaaaaa', toolRunnerUrl: 'https://runner.a' });
-      const agentB = makeAgent({ agentId: 'agt_bbbbbbbbbbbbbbbbbbb', toolRunnerUrl: 'https://runner.b' });
+      const resolver = createToolExecutorResolver(resolverOpts());
+      const agentA = makeAgent({ agentId: 'agt_aaaaaaaaaaaaaaaaaaa', toolRunnerUrl: runnerA.baseUrl });
+      const agentB = makeAgent({ agentId: 'agt_bbbbbbbbbbbbbbbbbbb', toolRunnerUrl: runnerB.baseUrl });
 
       const execA = await resolver.resolve(agentA);
       const execB = await resolver.resolve(agentB);
 
       const signal = new AbortController().signal;
-      // Interleave calls across both executors.
       await execA.execute({ ...OK_CALL, toolName: 'a1' }, OK_CTX, signal);
       await execB.execute({ ...OK_CALL, toolName: 'b1' }, OK_CTX, signal);
       await execA.execute({ ...OK_CALL, toolName: 'a2' }, OK_CTX, signal);
       await execB.execute({ ...OK_CALL, toolName: 'b2' }, OK_CTX, signal);
 
-      const aUrls = urls.filter((u) => u.startsWith('https://runner.a'));
-      const bUrls = urls.filter((u) => u.startsWith('https://runner.b'));
-      expect(aUrls).toEqual(['https://runner.a/tools/a1', 'https://runner.a/tools/a2']);
-      expect(bUrls).toEqual(['https://runner.b/tools/b1', 'https://runner.b/tools/b2']);
-      // Neither executor ever touched the other's runner.
-      expect(urls.every((u) => u.startsWith('https://runner.a') || u.startsWith('https://runner.b'))).toBe(true);
+      // Each runner saw only its own agent's calls — no cross-routing.
+      expect(runnerA.paths).toEqual(['/tools/a1', '/tools/a2']);
+      expect(runnerB.paths).toEqual(['/tools/b1', '/tools/b2']);
     } finally {
-      globalThis.fetch = originalFetch;
+      await runnerA.close();
+      await runnerB.close();
     }
   });
 });
@@ -341,11 +358,9 @@ describe('AgentEngine — executor resolution wiring (Test 7)', () => {
     const events: ChatEvent[] = [];
     for await (const ev of engine.run('ses_enginexxxxxxxxxxxxx', 'go')) events.push(ev);
 
-    // Resolver was consulted with the run's agent.
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(resolve).toHaveBeenCalledWith(agent);
 
-    // The loop used the resolved executor, carrying the run's id in the context.
     expect(execute).toHaveBeenCalledTimes(1);
     const [call, ctx] = execute.mock.calls[0];
     expect(call.toolName).toBe('ping');

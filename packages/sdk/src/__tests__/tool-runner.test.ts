@@ -1,19 +1,76 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod';
+import { SignJWT, generateKeyPair, type CryptoKey } from 'jose';
 import type { FastifyInstance } from 'fastify';
 import { startToolRunner } from '../tool-runner.js';
 import { tool } from '../tool.js';
-import type { ToolDefinition, ToolRegistry } from '../types.js';
+import type { ToolDefinition, ToolRegistry, RunnerAuthConfig } from '../types.js';
 
-const API_KEY = 'test-secret-key';
-const PORT = 0; // Random port
+const AUDIENCE = 'https://runner.example';
+const WORKSPACE = 'ws_owner';
+const PORT = 0;
+
+let privateKey: CryptoKey;
+let publicKey: CryptoKey;
+
+beforeAll(async () => {
+  const pair = await generateKeyPair('EdDSA');
+  privateKey = pair.privateKey as CryptoKey;
+  publicKey = pair.publicKey as CryptoKey;
+});
+
+function authConfig(overrides: Partial<RunnerAuthConfig> = {}): RunnerAuthConfig {
+  return { publicKey, expectedAudience: AUDIENCE, expectedWorkspaceId: WORKSPACE, ...overrides };
+}
 
 function buildRegistry(...tools: ToolDefinition[]): ToolRegistry {
   const map: ToolRegistry = new Map();
-  for (const t of tools) {
-    map.set(t.name, t);
-  }
+  for (const t of tools) map.set(t.name, t);
   return map;
+}
+
+interface ScopeClaims {
+  aud?: string;
+  workspaceId?: string;
+  agentId?: string;
+  runId?: string;
+  callId?: string;
+  idempotencyKey?: string;
+  toolName?: string;
+  expSeconds?: number; // absolute epoch seconds; default now + 60
+}
+
+async function mint(claims: ScopeClaims = {}): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({
+    workspaceId: claims.workspaceId ?? WORKSPACE,
+    agentId: claims.agentId ?? 'agt_1',
+    runId: claims.runId ?? 'run_1',
+    callId: claims.callId ?? 'tc_1',
+    idempotencyKey: claims.idempotencyKey ?? 'tc_1',
+    toolName: claims.toolName ?? 'weather',
+  })
+    .setProtectedHeader({ alg: 'EdDSA' })
+    .setAudience(claims.aud ?? AUDIENCE)
+    .setIssuedAt(now)
+    .setExpirationTime(claims.expSeconds ?? now + 60)
+    .sign(privateKey);
+}
+
+function makeBody(overrides: Record<string, unknown> = {}, ctxOverrides: Record<string, unknown> = {}) {
+  return {
+    version: '1',
+    idempotencyKey: 'tc_1',
+    input: { city: 'NYC' },
+    context: {
+      sessionId: 'ses_abc',
+      agentId: 'agt_1',
+      runId: 'run_1',
+      callId: 'tc_1',
+      ...ctxOverrides,
+    },
+    ...overrides,
+  };
 }
 
 async function getPort(app: FastifyInstance): Promise<number> {
@@ -33,7 +90,7 @@ async function post(
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  const json = await res.json().catch(() => null) as Record<string, any>;
+  const json = (await res.json().catch(() => null)) as Record<string, any> | null;
   return { status: res.status, body: json };
 }
 
@@ -71,149 +128,145 @@ describe('tool-runner', () => {
   });
 
   it('GET /health returns 200 without auth', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(weatherTool),
-      apiKey: API_KEY,
-    });
-
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
     const port = await getPort(server);
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, any>;
-    expect(body.status).toBe('ok');
+    expect(((await res.json()) as Record<string, any>).status).toBe('ok');
   });
 
-  it('POST /tools/weather with valid auth and input returns 200', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(weatherTool),
-      apiKey: API_KEY,
+  it('POST /tools/weather with a valid scoped token returns 200', async () => {
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
+    const port = await getPort(server);
+    const token = await mint({ toolName: 'weather' });
+
+    const { status, body } = await post(port, '/tools/weather', makeBody(), {
+      Authorization: `Bearer ${token}`,
     });
 
-    const port = await getPort(server);
-    const { status, body } = await post(
-      port,
-      '/tools/weather',
-      { input: { city: 'NYC' }, context: { sessionId: 'ses_abc' } },
-      { Authorization: `Bearer ${API_KEY}` },
-    );
-
     expect(status).toBe(200);
-    expect(body.result).toEqual({ temp: 72, city: 'NYC' });
+    expect(body?.version).toBe('1');
+    expect(body?.result).toEqual({ temp: 72, city: 'NYC' });
   });
 
   it('returns 401 when auth header is missing', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(weatherTool),
-      apiKey: API_KEY,
-    });
-
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
     const port = await getPort(server);
-    const { status, body } = await post(port, '/tools/weather', {
-      input: { city: 'NYC' },
-      context: { sessionId: 'ses_abc' },
-    });
-
+    const { status, body } = await post(port, '/tools/weather', makeBody());
     expect(status).toBe(401);
-    expect(body.error.code).toBe('UNAUTHORIZED');
+    expect(body?.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('returns 401 with wrong API key', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(weatherTool),
-      apiKey: API_KEY,
-    });
-
+  it('returns 401 with a bogus (non-JWT) token', async () => {
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
     const port = await getPort(server);
-    const { status, body } = await post(
-      port,
-      '/tools/weather',
-      { input: { city: 'NYC' }, context: { sessionId: 'ses_abc' } },
-      { Authorization: 'Bearer wrong-key' },
-    );
-
+    const { status, body } = await post(port, '/tools/weather', makeBody(), {
+      Authorization: 'Bearer not-a-real-token',
+    });
     expect(status).toBe(401);
-    expect(body.error.code).toBe('UNAUTHORIZED');
+    expect(body?.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('returns 404 for unknown tool', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(weatherTool),
-      apiKey: API_KEY,
-    });
-
+  it('returns 404 for unknown tool (token scoped to that tool)', async () => {
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
     const port = await getPort(server);
+    const token = await mint({ toolName: 'unknown' });
     const { status, body } = await post(
       port,
       '/tools/unknown',
-      { input: {}, context: { sessionId: 'ses_abc' } },
-      { Authorization: `Bearer ${API_KEY}` },
+      makeBody({ input: {} }),
+      { Authorization: `Bearer ${token}` },
     );
-
     expect(status).toBe(404);
-    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body?.error.code).toBe('NOT_FOUND');
   });
 
-  it('returns 400 on Zod validation failure', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(weatherTool),
-      apiKey: API_KEY,
-    });
-
+  it('returns 400 on Zod input validation failure', async () => {
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
     const port = await getPort(server);
+    const token = await mint({ toolName: 'weather' });
     const { status, body } = await post(
       port,
       '/tools/weather',
-      { input: { city: 123 }, context: { sessionId: 'ses_abc' } },
-      { Authorization: `Bearer ${API_KEY}` },
+      makeBody({ input: { city: 123 } }),
+      { Authorization: `Bearer ${token}` },
     );
-
     expect(status).toBe(400);
-    expect(body.error.code).toBe('VALIDATION');
+    expect(body?.error.code).toBe('VALIDATION');
+  });
+
+  it('returns 400 on unsupported protocol version', async () => {
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(weatherTool), auth: authConfig() });
+    const port = await getPort(server);
+    const token = await mint({ toolName: 'weather' });
+    const { status, body } = await post(
+      port,
+      '/tools/weather',
+      makeBody({ version: '2' }),
+      { Authorization: `Bearer ${token}` },
+    );
+    expect(status).toBe(400);
+    expect(body?.error.code).toBe('VALIDATION');
+    expect(body?.error.message).toContain('version');
   });
 
   it('returns 500 with structured error when handler throws', async () => {
-    server = await startToolRunner({
-      port: PORT,
-      registry: buildRegistry(failingTool),
-      apiKey: API_KEY,
-    });
-
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(failingTool), auth: authConfig() });
     const port = await getPort(server);
+    const token = await mint({ toolName: 'failing', callId: 'tc_fail', idempotencyKey: 'tc_fail' });
     const { status, body } = await post(
       port,
       '/tools/failing',
-      { input: {}, context: { sessionId: 'ses_abc' } },
-      { Authorization: `Bearer ${API_KEY}` },
+      makeBody({ input: {}, idempotencyKey: 'tc_fail' }, { callId: 'tc_fail' }),
+      { Authorization: `Bearer ${token}` },
     );
-
     expect(status).toBe(500);
-    expect(body.error.code).toBe('EXECUTION_ERROR');
-    expect(body.error.message).toBe('Something went wrong');
+    expect(body?.error.code).toBe('EXECUTION_ERROR');
+    expect(body?.error.message).toBe('Something went wrong');
   });
 
   it('returns 504 on timeout', async () => {
     server = await startToolRunner({
       port: PORT,
       registry: buildRegistry(slowTool),
-      apiKey: API_KEY,
-      toolTimeoutMs: 100, // Very short timeout
+      auth: authConfig(),
+      toolTimeoutMs: 100,
     });
-
     const port = await getPort(server);
+    const token = await mint({ toolName: 'slow', callId: 'tc_slow', idempotencyKey: 'tc_slow' });
     const { status, body } = await post(
       port,
       '/tools/slow',
-      { input: {}, context: { sessionId: 'ses_abc' } },
-      { Authorization: `Bearer ${API_KEY}` },
+      makeBody({ input: {}, idempotencyKey: 'tc_slow' }, { callId: 'tc_slow' }),
+      { Authorization: `Bearer ${token}` },
     );
-
     expect(status).toBe(504);
-    expect(body.error.code).toBe('TIMEOUT');
+    expect(body?.error.code).toBe('TIMEOUT');
+  });
+
+  it('passes agentId/runId/callId into the handler context', async () => {
+    let received: Record<string, unknown> | null = null;
+    const identityTool = tool({
+      name: 'identity',
+      description: 'echoes context',
+      inputSchema: z.object({}),
+      execute: async (_input, ctx) => {
+        received = { ...ctx };
+        return 'ok';
+      },
+    });
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(identityTool), auth: authConfig() });
+    const port = await getPort(server);
+    const token = await mint({ toolName: 'identity' });
+    await post(port, '/tools/identity', makeBody({ input: {} }), {
+      Authorization: `Bearer ${token}`,
+    });
+
+    expect(received).toMatchObject({
+      sessionId: 'ses_abc',
+      agentId: 'agt_1',
+      runId: 'run_1',
+      callId: 'tc_1',
+    });
   });
 });

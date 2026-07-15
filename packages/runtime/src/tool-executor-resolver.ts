@@ -1,8 +1,9 @@
 import type { AgentRecord } from '@swiftagent/shared';
 import { SwiftAgentError, SwiftAgentErrorCode } from '@swiftagent/shared';
-import type { ToolExecutor } from './tool-executor.js';
+import type { ToolExecutor, ToolCall, ToolCallContext } from './tool-executor.js';
 import { LocalToolExecutor } from './tool-executor-local.js';
 import { createToolExecutor } from './tool-executor-factory.js';
+import type { OutboundUrlPolicy } from './ssrf.js';
 
 /**
  * Maps an {@link AgentRecord} to the {@link ToolExecutor} that must service
@@ -16,11 +17,19 @@ export interface ToolExecutorResolver {
 
 export interface CreateToolExecutorResolverOptions {
   /**
-   * Produces the bearer token a {@link RemoteToolExecutor} sends to the agent's
-   * tool runner. TODO(WS-22): replaced by short-lived, per-call scoped
-   * credentials — this callback and the resolver's contract change then.
+   * Mints a short-lived, asymmetrically-signed scoped runner token for a single
+   * tool invocation (WS-22, SC-08). Receives the resolved agent alongside the
+   * call and context so the signed claims bind to the exact invocation — the
+   * resolver is the single source of the agent identity, so `context.agentId`
+   * and `claims.agentId` cannot drift. Closes over the private signing key
+   * server-side; the raw workspace API key is never used as a runner credential.
    */
-  resolveAuthToken: (agent: AgentRecord) => Promise<string> | string;
+  mintToken: (agent: AgentRecord, call: ToolCall, ctx: ToolCallContext) => Promise<string>;
+  /**
+   * Outbound SSRF policy applied to each agent's runner URL (SC-09). Deployed
+   * environments set `requireHttps: true`; dev/test may allow loopback.
+   */
+  policy: OutboundUrlPolicy;
   /**
    * Registers explicit platform-internal/test tool handlers on a fresh
    * {@link LocalToolExecutor}. MUST return the number of handlers registered —
@@ -35,7 +44,7 @@ export interface CreateToolExecutorResolverOptions {
  * Default {@link ToolExecutorResolver}. Resolution rules:
  *
  * 1. `agent.toolRunnerUrl` set → {@link RemoteToolExecutor} bound to that URL,
- *    authenticated with `resolveAuthToken(agent)`.
+ *    authenticated with a per-call scoped token from `mintToken(agent, …)`.
  * 2. No runner URL but `registerLocalTools` registers ≥1 handler → the
  *    configured {@link LocalToolExecutor}.
  * 3. No runner URL, no local registration, but the agent declares tools →
@@ -59,12 +68,14 @@ export function createToolExecutorResolver(
       if (cached) return cached;
 
       // Rule 1: remote runner — one executor bound to exactly one URL. The
-      // factory returns a RemoteToolExecutor because toolRunnerUrl is set.
+      // factory returns a RemoteToolExecutor because toolRunnerUrl is set. The
+      // per-call minter closes over THIS resolved agent so the request context
+      // and the signed token claims share a single agent-identity source.
       if (agent.toolRunnerUrl) {
-        // TODO(WS-22): interim server-configured token — superseded by
-        // short-lived, per-call scoped credentials.
-        const authToken = await opts.resolveAuthToken(agent);
-        const executor = createToolExecutor(agent, { authToken });
+        const executor = createToolExecutor(agent, {
+          policy: opts.policy,
+          mintToken: (call, ctx) => opts.mintToken(agent, call, ctx),
+        });
         cache.set(cacheKey, executor);
         return executor;
       }
