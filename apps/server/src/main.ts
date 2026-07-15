@@ -45,6 +45,7 @@ export async function startServer(): Promise<ServerContext> {
   // 4. Build API server (control plane routes)
   const apiPort = config[ENV_KEYS.API_PORT];
   const api = await buildApp({
+    runExecutionService: container.runExecutionService,
     repos: {
       apiKeyRepo: container.repos.apiKeyRepo,
       agentRepo: container.repos.agentRepo,
@@ -64,7 +65,8 @@ export async function startServer(): Promise<ServerContext> {
     logger: { level: 'info' },
   });
 
-  // 5. Build WebSocket gateway — wired to container.engine as RuntimeDelegate
+  // 5. Build WebSocket gateway — wired to the SAME run execution service as the
+  // REST API, so both entry points share one session lock + active-run registry.
   const redisUrl = config[ENV_KEYS.REDIS_URL];
   const redisEnabled = !!redisUrl;
   const gateway = await createGatewayServer(
@@ -75,7 +77,7 @@ export async function startServer(): Promise<ServerContext> {
       redisEnabled,
       logger: { level: 'info' },
     },
-    container.engine, // AgentEngine satisfies RuntimeDelegate
+    container.runExecutionService, // RunExecutionService satisfies RuntimeDelegate
   );
 
   // 6. Register combined health check on the API server

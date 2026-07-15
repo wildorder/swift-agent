@@ -29,23 +29,24 @@ function getSent(ws: WebSocket): string[] {
   return (ws as unknown as { __sent: string[] }).__sent;
 }
 
-/** Create a mock async runtime. */
+/** Create a mock async runtime that forwards a preset event sequence. */
 function createAsyncMockRuntime(events: ChatEvent[]): RuntimeDelegate {
   return {
-    run: vi.fn(async function* () {
+    start: vi.fn(async (_input, opts?: { onEvent?: (e: ChatEvent) => void }) => {
       for (const event of events) {
-        yield event;
+        opts?.onEvent?.(event);
       }
-    }) as unknown as RuntimeDelegate['run'],
+      return { runId: 'run_1' };
+    }) as unknown as RuntimeDelegate['start'],
   };
 }
 
-/** Create a runtime that throws on run(). */
+/** Create a runtime that rejects from start(). */
 function createThrowingRuntime(error: Error): RuntimeDelegate {
   return {
-    run: vi.fn(() => {
+    start: vi.fn(async () => {
       throw error;
-    }) as unknown as RuntimeDelegate['run'],
+    }) as unknown as RuntimeDelegate['start'],
   };
 }
 
@@ -180,15 +181,16 @@ describe('SessionBridge', () => {
       let resolveGenerator: (() => void) | undefined;
 
       const runtime: RuntimeDelegate = {
-        run: vi.fn(async function* () {
-          yield makeStartEvent();
-          yield makeTokenEvent('Hello');
+        start: vi.fn(async (_input, opts?: { onEvent?: (e: ChatEvent) => void }) => {
+          opts?.onEvent?.(makeStartEvent());
+          opts?.onEvent?.(makeTokenEvent('Hello'));
           // Hang here to simulate an in-progress run
           await new Promise<void>((resolve) => {
             resolveGenerator = resolve;
           });
-          yield makeCompletedEvent();
-        }) as unknown as RuntimeDelegate['run'],
+          opts?.onEvent?.(makeCompletedEvent());
+          return { runId: 'run_1' };
+        }) as unknown as RuntimeDelegate['start'],
       };
 
       const bridge = createSessionBridge({ connectionManager: cm, runtime });
@@ -239,10 +241,11 @@ describe('SessionBridge', () => {
     it('removes the replay buffer for a session', async () => {
       let resolveGenerator: (() => void) | undefined;
       const runtime: RuntimeDelegate = {
-        run: vi.fn(async function* () {
-          yield makeStartEvent();
+        start: vi.fn(async (_input, opts?: { onEvent?: (e: ChatEvent) => void }) => {
+          opts?.onEvent?.(makeStartEvent());
           await new Promise<void>((resolve) => { resolveGenerator = resolve; });
-        }) as unknown as RuntimeDelegate['run'],
+          return { runId: 'run_1' };
+        }) as unknown as RuntimeDelegate['start'],
       };
 
       const bridge = createSessionBridge({ connectionManager: cm, runtime });

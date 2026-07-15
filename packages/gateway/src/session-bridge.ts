@@ -112,67 +112,66 @@ export class SessionBridge {
     content: string,
     senderWs: WebSocket,
   ): Promise<void> {
-    let generator: AsyncGenerator<ChatEvent>;
+    // Whether any event was forwarded before an error surfaced. Distinguishes a
+    // setup failure (sender-only RUNTIME_ERROR) from a mid-run failure
+    // (broadcast RUN_FAILED to all connections).
+    let emitted = false;
 
     try {
-      generator = this.runtime.run(sessionId, content);
+      await this.runtime.start(
+        { sessionId, content },
+        {
+          onEvent: (event) => {
+            emitted = true;
+
+            // Track runId for the reconnection replay buffer.
+            if ('runId' in event && event.runId) {
+              let buffer = this.replayBuffers.get(sessionId);
+              if (!buffer || buffer.runId !== event.runId) {
+                buffer = { runId: event.runId, events: [] };
+                this.replayBuffers.set(sessionId, buffer);
+              }
+              if (buffer.events.length < this.maxReplayBufferSize) {
+                buffer.events.push(event);
+              }
+            }
+
+            // Broadcast to all connections for this session.
+            this.connectionManager.broadcast(sessionId, event);
+
+            // Also publish to Redis for horizontal scaling (fire-and-forget:
+            // onEvent is synchronous; the no-op default never rejects).
+            void this.redis.publish(`session:${sessionId}`, JSON.stringify(event));
+          },
+        },
+      );
+
+      // Run drained to a terminal state — clear replay buffer.
+      this.replayBuffers.delete(sessionId);
     } catch (err) {
-      // RUN_IN_PROGRESS: send error to sender only, not all session connections
+      this.replayBuffers.delete(sessionId);
+
+      // RUN_IN_PROGRESS: send error to sender only, not all session connections.
       if (isSwiftAgentError(err) && err.code === SwiftAgentErrorCode.CONFLICT) {
         const errorEvent = toErrorEvent('RUN_IN_PROGRESS', err.message);
         this.connectionManager.sendError(sessionId, senderWs, errorEvent);
         return;
       }
-      // Other errors: also send to sender only
-      const message = err instanceof Error ? err.message : 'Unknown runtime error';
-      const errorEvent = toErrorEvent('RUNTIME_ERROR', message);
-      this.connectionManager.sendError(sessionId, senderWs, errorEvent);
-      return;
-    }
 
-    // Consume the generator and broadcast events
-    try {
-      let currentRunId: string | undefined;
-
-      for await (const event of generator) {
-        // Track runId for replay buffer
-        if ('runId' in event && event.runId && !currentRunId) {
-          currentRunId = event.runId;
-          this.replayBuffers.set(sessionId, { runId: currentRunId, events: [] });
-        }
-
-        // Buffer event for reconnection replay
-        if (currentRunId) {
-          const buffer = this.replayBuffers.get(sessionId);
-          if (buffer && buffer.runId === currentRunId) {
-            if (buffer.events.length < this.maxReplayBufferSize) {
-              buffer.events.push(event);
-            }
-          }
-        }
-
-        // Broadcast to all connections for this session
-        this.connectionManager.broadcast(sessionId, event);
-
-        // Also publish to Redis for horizontal scaling
-        await this.redis.publish(
-          `session:${sessionId}`,
-          JSON.stringify(event),
-        );
-      }
-
-      // Run completed — clear replay buffer
-      if (currentRunId) {
-        this.replayBuffers.delete(sessionId);
-      }
-    } catch (err) {
-      // Generator threw — broadcast run_failed to all session connections
       const message = err instanceof Error ? err.message : 'Agent run failed';
+
+      if (!emitted) {
+        // Setup failure before any event streamed — sender only.
+        const errorEvent = toErrorEvent('RUNTIME_ERROR', message);
+        this.connectionManager.sendError(sessionId, senderWs, errorEvent);
+        return;
+      }
+
+      // Mid-run failure — broadcast to all session connections.
       const errorEvent = toErrorEvent('RUN_FAILED', message);
       for (const ws of this.connectionManager.getConnections(sessionId)) {
         this.connectionManager.sendError(sessionId, ws, errorEvent);
       }
-      this.replayBuffers.delete(sessionId);
     }
   }
 

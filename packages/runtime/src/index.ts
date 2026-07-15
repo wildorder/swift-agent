@@ -78,4 +78,16 @@ export { SessionLock, RUN_IN_PROGRESS } from './session-lock.js';
 export { runAgentLoop } from './loop.js';
 
 // Agent engine
-export { AgentEngine } from './engine.js';
+export { AgentEngine, resolveRunPrereqs } from './engine.js';
+
+// Unified run execution service (WS-23) — the single run-id + lock owner for
+// both REST and the gateway.
+export { createRunExecutionService } from './run-execution-service.js';
+export type {
+  RunExecutionService,
+  StartRunInput,
+  StartRunOptions,
+} from './run-execution-service.js';
+
+// Loop persistence-prepared marker
+export type { PreparedRunPersistence } from './loop.js';

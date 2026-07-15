@@ -192,3 +192,13 @@ export interface CreateRunOptions {
   sessionId: string;
   content: string;
 }
+
+/**
+ * Result of an accepted async run (202). Execution is process-bound on the
+ * server; poll `runs`/`getRun` for terminal status. Cancellation returns the
+ * same shape.
+ */
+export interface AcceptedRun {
+  runId: string;
+  status: string;
+}

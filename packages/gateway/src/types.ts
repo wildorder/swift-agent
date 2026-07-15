@@ -60,15 +60,18 @@ export interface GatewayConfig {
 // ── Runtime delegate ───────────────────────────────────────────────────
 
 /**
- * Interface for the runtime that processes user messages.
- * AgentEngine from @swiftagent/runtime implements this contract.
+ * Interface for the unified run execution service that processes user messages
+ * (WS-23). `RunExecutionService` from @swiftagent/runtime satisfies this
+ * contract. The gateway supplies an `onEvent` sink; `start` drives the run to a
+ * terminal state, forwarding every event, and resolves once fully drained. It
+ * throws `SwiftAgentError(CONFLICT)` when the session already has an active run
+ * — shared with the REST path via one session lock (SC-12).
  */
 export interface RuntimeDelegate {
-  run(
-    sessionId: string,
-    userMessage: string,
-    signal?: AbortSignal,
-  ): AsyncGenerator<ChatEvent>;
+  start(
+    input: { sessionId: string; content: string },
+    opts?: { onEvent?: (event: ChatEvent) => void; signal?: AbortSignal },
+  ): Promise<{ runId: string }>;
 }
 
 // ── WebSocket with metadata ────────────────────────────────────────────

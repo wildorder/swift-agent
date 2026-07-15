@@ -66,6 +66,14 @@ export const CreateRunBodySchema = z.object({
 }).strict();
 export type CreateRunBody = z.infer<typeof CreateRunBodySchema>;
 
+// Async run acceptance body (202) — REST no longer returns a full RunRecord;
+// execution is process-bound and observed via GET /runs/:runId.
+export const AcceptedRunResponseSchema = z.object({
+  runId: z.string(),
+  status: z.string(),
+}).strict();
+export type AcceptedRunResponse = z.infer<typeof AcceptedRunResponseSchema>;
+
 // ── Session creation response ──────────────────────────────────────
 export const CreateSessionResponseSchema = z.object({
   sessionId: z.string(),

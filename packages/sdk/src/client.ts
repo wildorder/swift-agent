@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   AgentRecordSchema,
   SessionRecordSchema,
@@ -11,9 +12,17 @@ import type {
 } from '@swiftagent/shared';
 import { SdkHttpError } from './types.js';
 import type {
+  AcceptedRun,
   CreateSessionResult,
   ListMessagesResult,
 } from './types.js';
+
+// The async run-creation / cancel endpoints return `{ runId, status }` (202),
+// not a full RunRecord. Kept in lockstep with the API's AcceptedRunResponseSchema.
+const AcceptedRunSchema = z.object({
+  runId: z.string(),
+  status: z.string(),
+});
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3000';
 
@@ -110,18 +119,26 @@ export class ControlPlaneClient {
 
   // ── Runs ────────────────────────────────────────────────────────
 
-  async createRun(sessionId: string, body: CreateRunBody): Promise<RunRecord> {
+  async createRun(sessionId: string, body: CreateRunBody): Promise<AcceptedRun> {
     const res = await this.request(
       'POST',
       `/v1/sessions/${encodeURIComponent(sessionId)}/runs`,
       body,
     );
-    return RunRecordSchema.parse(res);
+    return AcceptedRunSchema.parse(res);
   }
 
   async getRun(runId: string): Promise<RunRecord> {
     const res = await this.request('GET', `/v1/runs/${encodeURIComponent(runId)}`);
     return RunRecordSchema.parse(res);
+  }
+
+  async cancelRun(runId: string): Promise<AcceptedRun> {
+    const res = await this.request(
+      'POST',
+      `/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    );
+    return AcceptedRunSchema.parse(res);
   }
 
   // ── Internal ────────────────────────────────────────────────────

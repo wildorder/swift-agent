@@ -16,18 +16,18 @@ describe('Runs routes', () => {
 
   const headers = { authorization: `Bearer ${TEST_API_KEY}` };
 
-  it('POST /v1/sessions/:sessionId/runs creates a run', async () => {
+  it('POST /v1/sessions/:sessionId/runs accepts a run (202)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/v1/sessions/${SEED_SESSION.sessionId}/runs`,
       headers,
       payload: { content: 'Hello, agent!' },
     });
-    expect(res.statusCode).toBe(201);
+    // Async execution: 202 Accepted with { runId, status } — no full RunRecord.
+    expect(res.statusCode).toBe(202);
     const body = res.json();
     expect(body.runId).toMatch(/^run_/);
     expect(body.status).toBe('running');
-    expect(body.model).toBe('openai/gpt-4');
   });
 
   it('GET /v1/runs/:runId returns run status', async () => {

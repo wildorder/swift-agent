@@ -32,9 +32,12 @@ import {
 import { Tracer, type TraceSink } from '@swiftagent/observability';
 import {
   AgentEngine,
+  createRunExecutionService,
   createToolExecutorResolver,
   mintRunnerToken,
   importRunnerPrivateKey,
+  type AgentEngineDeps,
+  type RunExecutionService,
   type RunnerSigningKey,
   type OutboundUrlPolicy,
 } from '@swiftagent/runtime';
@@ -74,8 +77,12 @@ export interface Container {
   /** Observability tracer */
   tracer: Tracer;
 
-  /** Agent runtime engine — implements RuntimeDelegate */
+  /** Agent runtime engine — legacy lock-owning entry point. */
   engine: AgentEngine;
+
+  /** Unified run execution service (WS-23) — the single run-id + session-lock
+   *  owner shared by the REST API and the WebSocket gateway. */
+  runExecutionService: RunExecutionService;
 
   /** API services */
   tokenService: TokenService;
@@ -195,7 +202,7 @@ export function buildContainer(config: ServerConfig): Container {
       });
     },
   });
-  const engine = new AgentEngine({
+  const engineDeps: AgentEngineDeps = {
     db: {
       messages: repos.messageRepo,
       runs: repos.runRepo,
@@ -205,7 +212,14 @@ export function buildContainer(config: ServerConfig): Container {
     },
     modelRegistry,
     toolExecutorResolver,
-  });
+  };
+  const engine = new AgentEngine(engineDeps);
+
+  // The unified execution service (WS-23) owns the session lock + active-run
+  // registry shared by REST and the gateway, so a REST-triggered run blocks a
+  // concurrent WebSocket run on the same session and vice versa. Execution is
+  // process-bound; in-flight runs are abandoned on restart (Phase 2 recovery).
+  const runExecutionService = createRunExecutionService(engineDeps);
 
   // 6. API services
   const tokenService = createTokenService({
@@ -220,6 +234,7 @@ export function buildContainer(config: ServerConfig): Container {
     runRepo: repos.runRepo,
     toolCallRepo: repos.toolCallRepo,
     agentService,
+    runExecutionService,
   });
 
   return {
@@ -228,6 +243,7 @@ export function buildContainer(config: ServerConfig): Container {
     modelRegistry,
     tracer,
     engine,
+    runExecutionService,
     tokenService,
     agentService,
     sessionService,

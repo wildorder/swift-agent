@@ -62,6 +62,13 @@ export function createTraceRepo(db: Db) {
       return row ? toTraceRecord(row) : null;
     },
 
+    // Resolve a trace by its own id so a `traceId` can be mapped back to its
+    // owning `runId` for a workspace-ownership check (WS-23).
+    async getTraceById(traceId: string): Promise<TraceRecordRow | null> {
+      const [row] = await db.select().from(traces).where(eq(traces.traceId, traceId));
+      return row ? toTraceRecord(row) : null;
+    },
+
     async listSpansByTraceId(traceId: string): Promise<SpanRecordRow[]> {
       const rows = await db
         .select()

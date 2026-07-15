@@ -18,6 +18,7 @@ import type {
   ListMessagesResult,
   SessionRecord,
   RunRecord,
+  AcceptedRun,
 } from './types.js';
 
 const DEFAULT_PORT = 8787;
@@ -68,10 +69,14 @@ export interface AgentApp {
   };
 
   /**
-   * Run management helpers delegating to the control plane API.
+   * Run management helpers delegating to the control plane API. `create`
+   * returns an accepted run (202) — execution is process-bound; poll `get` for
+   * terminal status. `cancel` is idempotent.
    */
   runs: {
-    create(opts: CreateRunOptions): Promise<RunRecord>;
+    create(opts: CreateRunOptions): Promise<AcceptedRun>;
+    get(runId: string): Promise<RunRecord>;
+    cancel(runId: string): Promise<AcceptedRun>;
   };
 
   /**
@@ -135,8 +140,16 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
     },
 
     runs: {
-      create(opts: CreateRunOptions): Promise<RunRecord> {
+      create(opts: CreateRunOptions): Promise<AcceptedRun> {
         return client.createRun(opts.sessionId, { content: opts.content });
+      },
+
+      get(runId: string): Promise<RunRecord> {
+        return client.getRun(runId);
+      },
+
+      cancel(runId: string): Promise<AcceptedRun> {
+        return client.cancelRun(runId);
       },
     },
 

@@ -12,11 +12,22 @@ import type { ToolCall } from './tool-executor.js';
 import type { AgentEngineDeps, RunContext, AgentEngineOptions } from './types.js';
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_LAST_N } from './types.js';
 
+/**
+ * Signals that the run row and user message have already been persisted by an
+ * upstream owner (the RunExecutionService). When present, the loop skips
+ * creating the run + user message (avoiding the historical dual-path
+ * duplication) and reuses `userMessageId` for the `message_started` event.
+ */
+export interface PreparedRunPersistence {
+  userMessageId: string;
+}
+
 export async function* runAgentLoop(
   ctx: RunContext,
   deps: AgentEngineDeps,
   userContent: string,
   options?: AgentEngineOptions,
+  prepared?: PreparedRunPersistence,
 ): AsyncGenerator<ChatEvent> {
   const maxToolIterations = options?.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
   const memoryStrategyName = options?.memoryStrategy ?? ctx.agentConfig.memoryConfig?.strategy ?? 'last_n';
@@ -24,17 +35,23 @@ export async function* runAgentLoop(
 
   const memoryStrategy = createMemoryStrategy(memoryStrategyName, { lastN });
   const contextBuilder = new ContextBuilder(ctx.agentConfig, memoryStrategy);
-  const messageId = generateMessageId();
+  // When the run was prepared upstream, reuse the persisted user-message id so
+  // message_started correlates with the row the service already wrote.
+  const messageId = prepared?.userMessageId ?? generateMessageId();
 
   try {
-    // Step 1: Persist user message
-    await deps.db.messages.create({
-      messageId,
-      sessionId: ctx.sessionId,
-      runId: ctx.runId,
-      role: 'user',
-      content: userContent,
-    });
+    // Step 1: Persist user message + Run record — UNLESS an upstream owner (the
+    // RunExecutionService) already created them. This is the single guard that
+    // prevents the REST and gateway paths from double-persisting a logical run.
+    if (!prepared) {
+      await deps.db.messages.create({
+        messageId,
+        sessionId: ctx.sessionId,
+        runId: ctx.runId,
+        role: 'user',
+        content: userContent,
+      });
+    }
 
     // Step 2: Yield message_started
     yield {
@@ -45,11 +62,13 @@ export async function* runAgentLoop(
     };
 
     // Step 3: Create Run record
-    await deps.db.runs.create({
-      runId: ctx.runId,
-      sessionId: ctx.sessionId,
-      model: ctx.agentConfig.modelConfig.model,
-    });
+    if (!prepared) {
+      await deps.db.runs.create({
+        runId: ctx.runId,
+        sessionId: ctx.sessionId,
+        model: ctx.agentConfig.modelConfig.model,
+      });
+    }
 
     // Step 4: Iteration loop
     let assistantText = '';

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { TraceRepo } from '@swiftagent/db';
+import type { AuthenticatedRequest } from '../types.js';
 import type { SessionService } from '../services/session-service.js';
 
 export function registerTraceRoutes(
@@ -12,10 +13,13 @@ export function registerTraceRoutes(
   app.get<{ Params: { runId: string } }>(
     '/runs/:runId/trace',
     async (req, reply) => {
+      const { workspaceId } = req as AuthenticatedRequest;
       const { runId } = req.params;
 
-      // Auth middleware verifies API key → workspace; getRun throws NOT_FOUND if missing
-      await sessionService.getRun(runId);
+      // Ownership: getRun throws NOT_FOUND if the run is missing OR owned by
+      // another workspace (run → session → agent → workspace), so a
+      // cross-workspace trace read returns 404 without leaking existence.
+      await sessionService.getRun(workspaceId, runId);
 
       const trace = await traceRepo.getTraceByRunId(runId);
       if (!trace) {
@@ -30,11 +34,26 @@ export function registerTraceRoutes(
     },
   );
 
-  // GET /traces/:traceId/spans — returns span list
+  // GET /traces/:traceId/spans — returns span list. Resolve the trace to its
+  // owning run and assert workspace ownership before returning spans, closing
+  // the direct cross-tenant leak.
   app.get<{ Params: { traceId: string } }>(
     '/traces/:traceId/spans',
     async (req, reply) => {
-      const spans = await traceRepo.listSpansByTraceId(req.params.traceId);
+      const { workspaceId } = req as AuthenticatedRequest;
+      const { traceId } = req.params;
+
+      const trace = await traceRepo.getTraceById(traceId);
+      if (!trace) {
+        return reply.status(404).send({
+          error: { code: 'NOT_FOUND', message: `Trace ${traceId} not found` },
+        });
+      }
+
+      // Throws NOT_FOUND (→ 404) if the owning run is in another workspace.
+      await sessionService.getRun(workspaceId, trace.runId);
+
+      const spans = await traceRepo.listSpansByTraceId(traceId);
       return reply.send({ data: spans });
     },
   );

@@ -13,6 +13,7 @@ import {
   createMockUserRepo,
   createMockUserWorkspaceRepo,
   createMockWorkspaceRepo,
+  createMockRunExecutionService,
   TEST_JWT_SECRET,
 } from './helpers.js';
 import { buildApp, type AppContext } from '../server.js';
@@ -69,6 +70,7 @@ describe('Trace routes', () => {
       await mockTraceRepo.saveSpans(SEED_SPANS);
 
       ctx = await buildApp({
+        runExecutionService: createMockRunExecutionService(),
         repos: {
           apiKeyRepo: createMockApiKeyRepo(),
           agentRepo: createMockAgentRepo(),
@@ -114,6 +116,7 @@ describe('Trace routes', () => {
       const traceRepo = createMockTraceRepo();
 
       const innerCtx = await buildApp({
+        runExecutionService: createMockRunExecutionService(),
         repos: {
           apiKeyRepo: createMockApiKeyRepo(),
           agentRepo: createMockAgentRepo(),
@@ -153,15 +156,16 @@ describe('Trace routes', () => {
       expect(body.data[0].spanId).toBe('sp_rootspan12345678901');
     });
 
-    it('GET /v1/traces/:traceId/spans returns empty for unknown trace', async () => {
+    it('GET /v1/traces/:traceId/spans returns 404 for unknown trace', async () => {
+      // Ownership now resolves the trace first; an unknown traceId is a 404
+      // (no span listing for a trace that cannot be ownership-checked).
       const res = await app.inject({
         method: 'GET',
         url: '/v1/traces/tr_nonexistent000000000/spans',
         headers,
       });
 
-      expect(res.statusCode).toBe(200);
-      expect(res.json().data).toHaveLength(0);
+      expect(res.statusCode).toBe(404);
     });
   });
 });

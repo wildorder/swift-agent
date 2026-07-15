@@ -30,6 +30,7 @@ export type {
   ListMessagesOptions,
   ListMessagesResult,
   CreateRunOptions,
+  AcceptedRun,
   AgentRecord,
   SessionRecord,
   MessageRecord,

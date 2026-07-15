@@ -1,6 +1,7 @@
 import type { SessionRepo, MessageRepo, RunRepo } from '@swiftagent/db';
+import type { RunExecutionService } from '@swiftagent/runtime';
 import type { SessionRecord, MessageRecord, RunRecord, SessionStatus } from '@swiftagent/shared';
-import { generateSessionId, generateRunId, generateMessageId, SwiftAgentError } from '@swiftagent/shared';
+import { generateSessionId, SwiftAgentError } from '@swiftagent/shared';
 import type { AgentService } from './agent-service.js';
 
 export interface SessionService {
@@ -13,13 +14,19 @@ export interface SessionService {
   getSession(workspaceId: string, sessionId: string): Promise<SessionRecord>;
   updateSession(workspaceId: string, sessionId: string, updates: { status?: SessionStatus }): Promise<SessionRecord>;
   listMessages(sessionId: string, opts: { limit: number; cursor?: string }): Promise<MessageRecord[]>;
+  /**
+   * Create + start a run via the unified execution service. Returns the runId
+   * once the run row exists; execution proceeds process-bound (SC-11/SC-12).
+   */
   createRun(params: {
     workspaceId: string;
     sessionId: string;
     content: string;
-  }): Promise<{ run: RunRecord; message: MessageRecord }>;
-  getRun(runId: string): Promise<RunRecord>;
-  getRunToolCalls(runId: string): Promise<unknown[]>;
+  }): Promise<{ runId: string }>;
+  getRun(workspaceId: string, runId: string): Promise<RunRecord>;
+  getRunToolCalls(workspaceId: string, runId: string): Promise<unknown[]>;
+  /** Idempotent cancellation request for an owned run. */
+  requestCancel(workspaceId: string, runId: string): Promise<{ requested: boolean }>;
 }
 
 export function createSessionService(deps: {
@@ -28,8 +35,35 @@ export function createSessionService(deps: {
   runRepo: RunRepo;
   toolCallRepo: { listByRun(runId: string): Promise<unknown[]> };
   agentService: AgentService;
+  runExecutionService: RunExecutionService;
 }): SessionService {
-  const { sessionRepo, messageRepo, runRepo, toolCallRepo, agentService } = deps;
+  const { sessionRepo, messageRepo, runRepo, toolCallRepo, agentService, runExecutionService } = deps;
+
+  /**
+   * Resolve a run and assert it belongs to `workspaceId` via
+   * run → session → agent → workspace. Throws `NOT_FOUND` if the run is missing
+   * OR owned by another workspace — the two are never distinguished, so run
+   * existence is not leaked across tenants.
+   */
+  async function assertRunOwnership(
+    workspaceId: string,
+    runId: string,
+  ): Promise<RunRecord> {
+    const run = await runRepo.getById(runId);
+    if (!run) {
+      throw new SwiftAgentError('NOT_FOUND', `Run ${runId} not found`);
+    }
+    const session = await sessionRepo.getById(run.sessionId);
+    if (!session) {
+      throw new SwiftAgentError('NOT_FOUND', `Run ${runId} not found`);
+    }
+    try {
+      await agentService.getById(workspaceId, session.agentId);
+    } catch {
+      throw new SwiftAgentError('NOT_FOUND', `Run ${runId} not found`);
+    }
+    return run;
+  }
 
   return {
     async createSession({ workspaceId, agentName, userId, metadata }) {
@@ -92,40 +126,24 @@ export function createSessionService(deps: {
     },
 
     async createRun({ workspaceId, sessionId, content }) {
-      const session = await this.getSession(workspaceId, sessionId);
-
-      // Resolve the agent to get the model
-      const agent = await agentService.getById(workspaceId, session.agentId);
-
-      const run = await runRepo.create({
-        runId: generateRunId(),
-        sessionId,
-        model: agent.modelConfig.model,
-      });
-
-      const message = await messageRepo.create({
-        messageId: generateMessageId(),
-        sessionId,
-        runId: run.runId,
-        role: 'user',
-        content,
-      });
-
-      return { run, message };
+      // Verify session ownership before touching the runtime. The execution
+      // service owns run-id + user-message persistence and starts execution.
+      await this.getSession(workspaceId, sessionId);
+      return runExecutionService.start({ sessionId, content });
     },
 
-    async getRun(runId) {
-      const run = await runRepo.getById(runId);
-      if (!run) {
-        throw new SwiftAgentError('NOT_FOUND', `Run ${runId} not found`);
-      }
-      return run;
+    async getRun(workspaceId, runId) {
+      return assertRunOwnership(workspaceId, runId);
     },
 
-    async getRunToolCalls(runId) {
-      // Ensure run exists
-      await this.getRun(runId);
+    async getRunToolCalls(workspaceId, runId) {
+      await assertRunOwnership(workspaceId, runId);
       return toolCallRepo.listByRun(runId);
+    },
+
+    async requestCancel(workspaceId, runId) {
+      await assertRunOwnership(workspaceId, runId);
+      return runExecutionService.requestCancel(runId);
     },
   };
 }

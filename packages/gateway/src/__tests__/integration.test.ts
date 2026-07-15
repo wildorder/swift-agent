@@ -114,11 +114,15 @@ describe('Gateway Integration', () => {
   ];
 
   const mockRuntime: RuntimeDelegate = {
-    run: (async function* (_sessionId: string, _userMessage: string) {
+    start: (async (
+      _input: { sessionId: string; content: string },
+      opts?: { onEvent?: (event: ChatEvent) => void },
+    ) => {
       for (const event of mockEvents) {
-        yield event;
+        opts?.onEvent?.(event);
       }
-    }) as unknown as RuntimeDelegate['run'],
+      return { runId: 'run_i1' };
+    }) as unknown as RuntimeDelegate['start'],
   };
 
   beforeAll(async () => {

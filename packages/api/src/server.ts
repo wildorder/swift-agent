@@ -26,8 +26,12 @@ import { registerSessionRoutes } from './routes/sessions.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTraceRoutes } from './routes/traces.js';
+import type { RunExecutionService } from '@swiftagent/runtime';
 
 export interface BuildAppOptions {
+  /** Unified run execution service (WS-23) — shared with the gateway so REST
+   *  and WebSocket runs contend on one session lock + active-run registry. */
+  runExecutionService: RunExecutionService;
   repos: {
     apiKeyRepo: ApiKeyRepo;
     agentRepo: AgentRepo;
@@ -86,6 +90,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
     runRepo: opts.repos.runRepo,
     toolCallRepo: opts.repos.toolCallRepo,
     agentService,
+    runExecutionService: opts.runExecutionService,
   });
 
   // Routes — prefix /v1

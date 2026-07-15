@@ -1,7 +1,19 @@
 import { createHash } from 'node:crypto';
 import type { AgentRecord, ApiKeyRecord, SessionRecord, RunRecord, MessageRecord, ToolCallRecord, UserRecord, UserWorkspaceRecord, WorkspaceRecord } from '@swiftagent/shared';
 import type { AgentRepo, ApiKeyRepo, SessionRepo, MessageRepo, RunRepo, ToolCallRepo, TraceRepo, TraceRecordRow, SpanRecordRow, UserRepo, UserWorkspaceRepo, WorkspaceRepo } from '@swiftagent/db';
+import type { RunExecutionService } from '@swiftagent/runtime';
 import { buildApp, type AppContext } from '../server.js';
+
+/** Minimal no-op execution service for route tests that don't execute runs. */
+export function createMockRunExecutionService(
+  overrides: Partial<RunExecutionService> = {},
+): RunExecutionService {
+  return {
+    start: async () => ({ runId: 'run_mockexec123456789' }),
+    requestCancel: async () => ({ requested: true }),
+    ...overrides,
+  };
+}
 
 // ── Test API key ───────────────────────────────────────────────────
 export const TEST_API_KEY = 'sk_test_1234567890abcdef';
@@ -292,6 +304,7 @@ export function createMockTraceRepo(): TraceRepo {
       }
       return null;
     },
+    getTraceById: async (traceId) => tracesMap.get(traceId) ?? null,
     listSpansByTraceId: async (traceId) => {
       const spans = spansMap.get(traceId) ?? [];
       return spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
@@ -363,8 +376,11 @@ export function createMockWorkspaceRepo(): WorkspaceRepo {
 }
 
 // ── Build test app ─────────────────────────────────────────────────
-export async function buildTestApp(): Promise<AppContext> {
+export async function buildTestApp(
+  runExecutionService: RunExecutionService = createMockRunExecutionService(),
+): Promise<AppContext> {
   return buildApp({
+    runExecutionService,
     repos: {
       apiKeyRepo: createMockApiKeyRepo(),
       agentRepo: createMockAgentRepo(),
