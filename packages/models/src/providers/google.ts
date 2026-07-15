@@ -94,7 +94,10 @@ function toGoogleMessages(messages: ModelMessage[]): MappedMessages {
           parts: [
             {
               functionResponse: {
-                name: msg.toolCallId ?? '',
+                // Google correlates a tool result to its request by function
+                // *name*, not by an id. Prefer the persisted toolName; fall back
+                // to toolCallId only for legacy messages that lack it.
+                name: msg.toolName ?? msg.toolCallId ?? '',
                 response: parsed as object,
               },
             },

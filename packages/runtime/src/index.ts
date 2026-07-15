@@ -41,6 +41,12 @@ export { SummaryMemoryStrategy } from './memory/summary.js';
 export { ContextBuilder } from './context-builder.js';
 export type { ToolMessageContent } from './context-builder.js';
 
+// Tool mapping + validation (WS-20)
+export { toModelToolSchemas, buildToolIndex } from './tool-mapping.js';
+export type { ToolIndexEntry } from './tool-mapping.js';
+export { validateToolCall } from './tool-validation.js';
+export type { ToolValidationResult } from './tool-validation.js';
+
 // Session lock
 export { SessionLock, RUN_IN_PROGRESS } from './session-lock.js';
 

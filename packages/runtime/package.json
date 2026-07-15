@@ -21,7 +21,9 @@
   "dependencies": {
     "@swiftagent/db": "workspace:*",
     "@swiftagent/models": "workspace:*",
-    "@swiftagent/shared": "workspace:*"
+    "@swiftagent/shared": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

@@ -1,10 +1,13 @@
 import {
   generateMessageId,
+  generateToolCallId,
   type ChatEvent,
 } from '@swiftagent/shared';
 // ModelStreamChunk used implicitly via provider.generate() return type
 import { ContextBuilder, type ToolMessageContent } from './context-builder.js';
 import { createMemoryStrategy } from './memory/strategy.js';
+import { toModelToolSchemas, buildToolIndex } from './tool-mapping.js';
+import { validateToolCall } from './tool-validation.js';
 import type { ToolCall } from './tool-executor.js';
 import type { AgentEngineDeps, RunContext, AgentEngineOptions } from './types.js';
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_LAST_N } from './types.js';
@@ -54,6 +57,12 @@ export async function* runAgentLoop(
     const assistantMessageId = generateMessageId();
     let hitMaxIterations = false;
 
+    // Source persisted agent tools once per run: map to the provider-neutral
+    // ToolSchema[] the model layer understands, and build an O(1) index for
+    // allowlist + JSON-schema argument validation at tool-call time.
+    const toolSchemas = toModelToolSchemas(ctx.agentConfig.tools);
+    const toolIndex = buildToolIndex(ctx.agentConfig.tools);
+
     while (ctx.iterationCount < maxToolIterations) {
       // Check abort
       if (ctx.abortSignal.aborted) {
@@ -75,7 +84,9 @@ export async function* runAgentLoop(
       const stream = provider.generate({
         model: modelId,
         messages: context,
-        tools: undefined, // Tool schemas would come from agent config — passed externally
+        // Pass registered tools on every model turn for tool-bearing agents;
+        // tool-less agents keep sending `undefined` (SC-03).
+        tools: toolSchemas.length > 0 ? toolSchemas : undefined,
         temperature: ctx.agentConfig.modelConfig.temperature,
         maxTokens: ctx.agentConfig.modelConfig.maxTokens,
         signal: ctx.abortSignal,
@@ -115,7 +126,20 @@ export async function* runAgentLoop(
 
       // Process tool calls after stream completes
       if (hadToolCalls) {
-        // Persist assistant message with tool calls before executing tools
+        // Assign a stable Swift Agent id (`tc_…`) to EVERY assembled call —
+        // accepted or rejected — so both have an observable identity. The
+        // provider-native id (`chunk.callId`) is retained separately as
+        // `providerCallId` and never used as our own id (SC-05).
+        const preparedCalls = toolCallChunks.map((tc) => ({
+          swiftCallId: generateToolCallId(),
+          providerCallId: tc.callId,
+          toolName: tc.toolName,
+          arguments: tc.arguments,
+        }));
+
+        // Persist assistant message with tool calls before executing tools.
+        // Store all three identifiers so ContextBuilder can round-trip
+        // provider-facing correlation on the next turn.
         await deps.db.messages.create({
           messageId: generateMessageId(),
           sessionId: ctx.sessionId,
@@ -123,67 +147,89 @@ export async function* runAgentLoop(
           role: 'assistant',
           content: JSON.stringify({
             text: assistantText,
-            toolCalls: toolCallChunks.map((tc) => ({
-              callId: tc.callId,
-              toolName: tc.toolName,
-              arguments: tc.arguments,
+            toolCalls: preparedCalls.map((p) => ({
+              swiftCallId: p.swiftCallId,
+              providerCallId: p.providerCallId,
+              toolName: p.toolName,
+              arguments: p.arguments,
             })),
           }),
         });
         assistantText = '';
 
-        for (const tc of toolCallChunks) {
-          // Yield tool_call_started
+        for (const p of preparedCalls) {
+          // Gate: emit tool_call_started only for a fully-assembled, actionable
+          // call (validated OR recorded as rejected) — never per stream delta.
           yield {
             type: 'tool_call_started',
-            callId: tc.callId,
+            callId: p.swiftCallId,
             runId: ctx.runId,
             sessionId: ctx.sessionId,
-            toolName: tc.toolName,
+            toolName: p.toolName,
           };
 
-          // Create ToolCall record
+          // Create the ToolCall record under our own `tc_` id.
           await deps.db.toolCalls.create({
-            callId: tc.callId,
+            callId: p.swiftCallId,
             runId: ctx.runId,
-            toolName: tc.toolName,
-            input: tc.arguments,
+            toolName: p.toolName,
+            input: p.arguments,
           });
 
-          // Execute tool
-          const call: ToolCall = {
-            toolName: tc.toolName,
-            callId: tc.callId,
-            arguments: tc.arguments,
-          };
+          // Enforce the registered-tool allowlist + persisted-schema argument
+          // validation BEFORE any execution (SC-04).
+          const validation = validateToolCall(toolIndex, p.toolName, p.arguments);
 
-          const result = await deps.toolExecutor.execute(
-            call,
-            { sessionId: ctx.sessionId, runId: ctx.runId },
-            ctx.abortSignal,
-          );
+          let status: 'completed' | 'failed';
+          let resultText: string;
 
-          // Update ToolCall record
-          if (result.ok) {
-            await deps.db.toolCalls.updateResult(tc.callId, result.output, 'completed');
+          if (!validation.ok) {
+            // Reject: record the failure and surface it to the model so it can
+            // recover, but never invoke the executor.
+            resultText = `Tool call rejected (${validation.code}): ${validation.message}`;
+            status = 'failed';
+            await deps.db.toolCalls.updateResult(p.swiftCallId, resultText, 'failed');
           } else {
-            await deps.db.toolCalls.updateResult(tc.callId, result.error, 'failed');
+            const call: ToolCall = {
+              toolName: p.toolName,
+              callId: p.swiftCallId,
+              arguments: p.arguments,
+            };
+
+            const result = await deps.toolExecutor.execute(
+              call,
+              { sessionId: ctx.sessionId, runId: ctx.runId },
+              ctx.abortSignal,
+            );
+
+            if (result.ok) {
+              status = 'completed';
+              resultText = JSON.stringify(result.output);
+              await deps.db.toolCalls.updateResult(p.swiftCallId, result.output, 'completed');
+            } else {
+              status = 'failed';
+              resultText = result.error;
+              await deps.db.toolCalls.updateResult(p.swiftCallId, result.error, 'failed');
+            }
           }
 
-          // Yield tool_call_completed
+          // Yield tool_call_completed using our `tc_` id.
           yield {
             type: 'tool_call_completed',
-            callId: tc.callId,
+            callId: p.swiftCallId,
             runId: ctx.runId,
             sessionId: ctx.sessionId,
-            toolName: tc.toolName,
-            status: result.ok ? 'completed' : 'failed',
+            toolName: p.toolName,
+            status,
           };
 
-          // Persist tool result as a MessageRecord
+          // Persist tool result as a MessageRecord, carrying the provider-native
+          // id AND the tool name so the next turn correlates for any provider.
           const toolContent: ToolMessageContent = {
-            toolCallId: tc.callId,
-            result: result.ok ? JSON.stringify(result.output) : result.error,
+            swiftCallId: p.swiftCallId,
+            providerCallId: p.providerCallId,
+            toolName: p.toolName,
+            result: resultText,
           };
           await deps.db.messages.create({
             messageId: generateMessageId(),
@@ -192,9 +238,12 @@ export async function* runAgentLoop(
             role: 'tool',
             content: JSON.stringify(toolContent),
           });
-
-          ctx.iterationCount++;
         }
+
+        // Iteration accounting: count MODEL ROUNDS, not individual tool
+        // executions. One outer-loop pass that produced tool calls == one
+        // increment, regardless of how many tools ran in that turn.
+        ctx.iterationCount++;
 
         // Continue outer loop — re-call model with updated context
         continue;

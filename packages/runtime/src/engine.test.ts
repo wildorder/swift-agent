@@ -25,10 +25,20 @@ function makeAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
     systemPrompt: 'You are a helpful assistant.',
     memoryConfig: { strategy: 'last_n', maxMessages: 50 },
     toolRunnerUrl: null,
+    tools: [],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
   };
+}
+
+/** Builds permissive `{type:'object'}`-schema tool definitions by name. */
+function makeTools(...names: string[]): AgentRecord['tools'] {
+  return names.map((name) => ({
+    name,
+    description: `The ${name} tool`,
+    inputSchema: { type: 'object' },
+  }));
 }
 
 function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
@@ -441,7 +451,7 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('lookup') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
     };
@@ -455,12 +465,15 @@ describe('runAgentLoop', () => {
     expect(types).toContain('token');
     expect(types).toContain('message_completed');
 
+    // The persisted ToolCall uses a Swift Agent `tc_` id, NOT the provider id.
     expect(deps.db.toolCalls.create).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: 'lookup', callId: 'tc_001xxxxxxxxxxxxxxxxxxxx' }),
+      expect.objectContaining({ toolName: 'lookup', callId: expect.stringMatching(/^tc_/) as unknown as string }),
     );
+    const createdCallId = (deps.db.toolCalls.create as ReturnType<typeof vi.fn>).mock.calls[0][0].callId as string;
+    expect(createdCallId).not.toBe('tc_001xxxxxxxxxxxxxxxxxxxx');
     expect(toolExecutor.execute).toHaveBeenCalled();
     expect(deps.db.toolCalls.updateResult).toHaveBeenCalledWith(
-      'tc_001xxxxxxxxxxxxxxxxxxxx',
+      createdCallId,
       { value: 42 },
       'completed',
     );
@@ -486,7 +499,7 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('step1', 'step2') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
     };
@@ -522,7 +535,7 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('bad_tool') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
     };
@@ -533,8 +546,11 @@ describe('runAgentLoop', () => {
     expect(toolCompleted).toBeDefined();
     expect(toolCompleted).toHaveProperty('status', 'failed');
 
+    // Executor was invoked (tool is registered + args valid) and its failure
+    // is recorded under the Swift Agent `tc_` id.
+    expect(toolExecutor.execute).toHaveBeenCalled();
     expect(deps.db.toolCalls.updateResult).toHaveBeenCalledWith(
-      'tc_failxxxxxxxxxxxxxxxxxx',
+      expect.stringMatching(/^tc_/),
       'Not found',
       'failed',
     );
@@ -555,7 +571,7 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('infinite') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
     };

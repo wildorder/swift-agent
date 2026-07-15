@@ -30,6 +30,7 @@ function makeAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
     systemPrompt: 'You are a test agent.',
     memoryConfig: { strategy: 'last_n', maxMessages: 50 },
     toolRunnerUrl: null,
+    tools: [],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
