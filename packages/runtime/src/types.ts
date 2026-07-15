@@ -2,6 +2,7 @@ import type { MessageRepo, RunRepo, ToolCallRepo, SessionRepo, AgentRepo } from 
 import type { ProviderRegistry } from '@swiftagent/models';
 import type { AgentRecord } from '@swiftagent/shared';
 import type { ToolExecutor } from './tool-executor.js';
+import type { ToolExecutorResolver } from './tool-executor-resolver.js';
 
 export type Logger = {
   info(msg: string, data?: Record<string, unknown>): void;
@@ -23,7 +24,10 @@ export type AgentEngineDeps = {
     agents: AgentRepo;
   };
   modelRegistry: ProviderRegistry;
-  toolExecutor: ToolExecutor;
+  // Resolves the run-scoped executor from the active run's agent (WS-21).
+  // The executor itself lives on RunContext, never here — this keeps one
+  // agent's runner from being reachable by another (SC-07).
+  toolExecutorResolver: ToolExecutorResolver;
   tracer?: Tracer;
   logger?: Logger;
 };
@@ -45,4 +49,8 @@ export type RunContext = {
   agentConfig: AgentRecord;
   abortSignal: AbortSignal;
   iterationCount: number;
+  // Executor resolved once per run from `agentConfig`, bound to this run only.
+  // The loop reads it here (not from deps) so cross-routing between concurrent
+  // agents is structurally impossible (WS-21, SC-07).
+  toolExecutor: ToolExecutor;
 };

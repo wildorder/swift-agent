@@ -43,13 +43,24 @@ vi.mock('@swiftagent/observability', () => ({
   })),
 }));
 
+// Hoisted so the vi.mock factory (itself hoisted above imports) can reference
+// these spies, while the test body can still assert on them.
+const { resolverInstance, createToolExecutorResolverMock, localToolExecutorMock } = vi.hoisted(() => {
+  const resolverInstance = { resolve: vi.fn() };
+  return {
+    resolverInstance,
+    createToolExecutorResolverMock: vi.fn(() => resolverInstance),
+    localToolExecutorMock: vi.fn(() => ({ execute: vi.fn() })),
+  };
+});
+
 vi.mock('@swiftagent/runtime', () => ({
   AgentEngine: vi.fn(() => ({
     run: vi.fn(),
   })),
-  LocalToolExecutor: vi.fn(() => ({
-    execute: vi.fn(),
-  })),
+  createToolExecutorResolver: createToolExecutorResolverMock,
+  // Exported for completeness, but composition must NOT construct one.
+  LocalToolExecutor: localToolExecutorMock,
 }));
 
 vi.mock('@swiftagent/api', () => ({
@@ -70,6 +81,7 @@ vi.mock('@swiftagent/api', () => ({
 
 // Import after mocks
 import { buildContainer } from '../container.js';
+import { AgentEngine } from '@swiftagent/runtime';
 
 describe('buildContainer', () => {
   const baseConfig: ServerConfig = {
@@ -135,5 +147,20 @@ describe('buildContainer', () => {
     };
     const container = buildContainer(config);
     expect(container.registeredProviders).toEqual([]);
+  });
+
+  // WS-21 / SC-07: composition wires a per-agent resolver, not a fixed
+  // server-wide LocalToolExecutor singleton.
+  it('composes the engine with a ToolExecutorResolver, not a LocalToolExecutor', () => {
+    buildContainer(baseConfig);
+
+    // A resolver was built and no LocalToolExecutor singleton was constructed.
+    expect(createToolExecutorResolverMock).toHaveBeenCalledTimes(1);
+    expect(localToolExecutorMock).not.toHaveBeenCalled();
+
+    // The engine received the resolver (and NOT a `toolExecutor`).
+    const engineArgs = (AgentEngine as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(engineArgs.toolExecutorResolver).toBe(resolverInstance);
+    expect(engineArgs.toolExecutor).toBeUndefined();
   });
 });

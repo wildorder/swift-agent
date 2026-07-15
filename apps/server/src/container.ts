@@ -30,7 +30,7 @@ import {
   createGoogleProvider,
 } from '@swiftagent/models';
 import { Tracer, type TraceSink } from '@swiftagent/observability';
-import { AgentEngine, LocalToolExecutor } from '@swiftagent/runtime';
+import { AgentEngine, createToolExecutorResolver } from '@swiftagent/runtime';
 import {
   createTokenService,
   type TokenService,
@@ -138,8 +138,25 @@ export function buildContainer(config: ServerConfig): Container {
   // 4. Tracer — TraceRepo implements TraceSink interface
   const tracer = new Tracer(repos.traceRepo as unknown as TraceSink);
 
-  // 5. AgentEngine — the core runtime, implements RuntimeDelegate
-  const toolExecutor = new LocalToolExecutor();
+  // 5. AgentEngine — the core runtime, implements RuntimeDelegate.
+  // Executors are resolved per-agent at run time (WS-21): agents with a
+  // toolRunnerUrl get a RemoteToolExecutor for that URL; agents with no
+  // execution config fail fast. No server-wide LocalToolExecutor singleton.
+  const internalRunnerToken = config[ENV_KEYS.INTERNAL_RUNNER_TOKEN];
+  const toolExecutorResolver = createToolExecutorResolver({
+    // TODO(WS-22): interim server-configured token. Raw workspace API keys are
+    // unrecoverable (ApiKeyRepo stores SHA-256 hashes only), so we do NOT read
+    // apiKeyRepo here. WS-22 replaces this with short-lived per-call scoped
+    // credentials minted per tool invocation.
+    resolveAuthToken: () => {
+      if (!internalRunnerToken) {
+        throw new Error(
+          `Remote tool execution requires ${ENV_KEYS.INTERNAL_RUNNER_TOKEN} to be configured`,
+        );
+      }
+      return internalRunnerToken;
+    },
+  });
   const engine = new AgentEngine({
     db: {
       messages: repos.messageRepo,
@@ -149,7 +166,7 @@ export function buildContainer(config: ServerConfig): Container {
       agents: repos.agentRepo,
     },
     modelRegistry,
-    toolExecutor,
+    toolExecutorResolver,
   });
 
   // 6. API services

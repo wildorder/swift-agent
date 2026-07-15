@@ -12,6 +12,9 @@ export const ENV_KEYS = {
   GOOGLE_API_KEY: 'GOOGLE_API_KEY',
   PUBLIC_WEBSOCKET_URL: 'PUBLIC_WEBSOCKET_URL',
   TOOL_RUNNER_PUBLIC_URL: 'TOOL_RUNNER_PUBLIC_URL',
+  // Interim runner auth token (WS-21). TODO(WS-22): superseded by short-lived,
+  // per-call scoped credentials minted per tool invocation.
+  INTERNAL_RUNNER_TOKEN: 'INTERNAL_RUNNER_TOKEN',
   API_PORT: 'API_PORT',
   GATEWAY_PORT: 'GATEWAY_PORT',
   COGNITO_USER_POOL_ID: 'COGNITO_USER_POOL_ID',
@@ -33,6 +36,7 @@ const ConfigSchema = z.object({
   [ENV_KEYS.GOOGLE_API_KEY]: z.string().optional(),
   [ENV_KEYS.PUBLIC_WEBSOCKET_URL]: z.string().url().optional(),
   [ENV_KEYS.TOOL_RUNNER_PUBLIC_URL]: z.string().url().optional(),
+  [ENV_KEYS.INTERNAL_RUNNER_TOKEN]: z.string().optional(),
   [ENV_KEYS.API_PORT]: z.coerce.number().int().positive().default(3000),
   [ENV_KEYS.GATEWAY_PORT]: z.coerce.number().int().positive().default(3001),
   [ENV_KEYS.COGNITO_USER_POOL_ID]: z.string().optional(),

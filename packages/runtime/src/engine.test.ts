@@ -184,8 +184,13 @@ function createMockDeps(overrides?: {
       },
     },
     modelRegistry: registry,
-    toolExecutor: overrides?.toolExecutor ?? {
-      execute: vi.fn(async () => ({ ok: true, output: 'done' }) as ToolCallResult),
+    // WS-21: the engine resolves the executor per-run from the agent record.
+    // Direct runAgentLoop tests instead put the executor on ctx (see below).
+    toolExecutorResolver: {
+      resolve: () =>
+        overrides?.toolExecutor ?? {
+          execute: vi.fn(async () => ({ ok: true, output: 'done' }) as ToolCallResult),
+        },
     },
   };
 }
@@ -411,6 +416,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent(),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Hello'));
@@ -454,6 +460,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent({ tools: makeTools('lookup') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor,
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'What is the answer?'));
@@ -502,6 +509,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent({ tools: makeTools('step1', 'step2') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Do both steps'));
@@ -538,6 +546,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent({ tools: makeTools('bad_tool') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor,
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Try the bad tool'));
@@ -574,6 +583,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent({ tools: makeTools('infinite') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(
@@ -606,6 +616,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent(),
       abortSignal: controller.signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Cancel me'));

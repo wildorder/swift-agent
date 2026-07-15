@@ -196,7 +196,10 @@ export async function* runAgentLoop(
               arguments: p.arguments,
             };
 
-            const result = await deps.toolExecutor.execute(
+            // Use the run-scoped executor from ctx (resolved per-agent in the
+            // engine) — never a deps-wide one — so concurrent agents cannot
+            // cross-route tool calls to each other's runners (WS-21, SC-07).
+            const result = await ctx.toolExecutor.execute(
               call,
               { sessionId: ctx.sessionId, runId: ctx.runId },
               ctx.abortSignal,

@@ -54,6 +54,12 @@ export class AgentEngine {
         );
       }
 
+      // Resolve the executor for THIS run's agent. Bound to this run only —
+      // two agents with different runner configs resolve independent
+      // executors, so calls can never cross-route (WS-21, SC-07).
+      const toolExecutor =
+        await this.deps.toolExecutorResolver.resolve(agentConfig);
+
       // Merge abort signals: external signal + lock controller signal
       const mergedSignal = signal
         ? AbortSignal.any([signal, lockController.signal])
@@ -66,6 +72,7 @@ export class AgentEngine {
         agentConfig,
         abortSignal: mergedSignal,
         iterationCount: 0,
+        toolExecutor,
       };
 
       // Delegate to runAgentLoop

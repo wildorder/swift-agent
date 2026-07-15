@@ -5,7 +5,7 @@ import { ProviderRegistry } from '@swiftagent/models';
 import { runAgentLoop } from '../loop.js';
 import { toModelToolSchemas, buildToolIndex } from '../tool-mapping.js';
 import { validateToolCall } from '../tool-validation.js';
-import type { AgentEngineDeps } from '../types.js';
+import type { AgentEngineDeps, RunContext } from '../types.js';
 import type { ToolExecutor } from '../tool-executor.js';
 import type { ChatEvent } from '@swiftagent/shared';
 
@@ -123,20 +123,28 @@ function createMockDeps(provider: ModelProvider, toolExecutor?: ToolExecutor): M
       },
     } as unknown as AgentEngineDeps['db'],
     modelRegistry: registry,
-    toolExecutor: toolExecutor ?? {
-      execute: vi.fn(async () => ({ ok: true as const, output: { value: 42 } })),
+    // WS-21: the loop reads the executor from ctx (see makeCtx), not from deps.
+    // This resolver only satisfies the deps type; runAgentLoop never calls it.
+    toolExecutorResolver: {
+      resolve: () =>
+        toolExecutor ?? {
+          execute: vi.fn(async () => ({ ok: true as const, output: { value: 42 } })),
+        },
     },
   };
   return deps;
 }
 
-function makeCtx(agentConfig: AgentRecord) {
+function makeCtx(agentConfig: AgentRecord, toolExecutor?: ToolExecutor): RunContext {
   return {
     sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
     runId: 'run_testxxxxxxxxxxxxxxxxx',
     agentConfig,
     abortSignal: new AbortController().signal,
     iterationCount: 0,
+    toolExecutor: toolExecutor ?? {
+      execute: vi.fn(async () => ({ ok: true as const, output: { value: 42 } })),
+    },
   };
 }
 
@@ -287,7 +295,7 @@ describe('runAgentLoop — validation (SC-04)', () => {
 
     // Agent registers a DIFFERENT tool, so `ghost` is not on the allowlist.
     const agent = makeAgent({ tools: [{ name: 'real', description: 'R', inputSchema: { type: 'object' } }] });
-    const events = await collectEvents(runAgentLoop(makeCtx(agent), deps, 'go'));
+    const events = await collectEvents(runAgentLoop(makeCtx(agent, { execute }), deps, 'go'));
 
     expect(execute).not.toHaveBeenCalled();
     const completed = events.find((e) => e.type === 'tool_call_completed');
@@ -318,7 +326,7 @@ describe('runAgentLoop — validation (SC-04)', () => {
         },
       ],
     });
-    const events = await collectEvents(runAgentLoop(makeCtx(agent), deps, 'go'));
+    const events = await collectEvents(runAgentLoop(makeCtx(agent, { execute }), deps, 'go'));
 
     expect(execute).not.toHaveBeenCalled();
     const completed = events.find((e) => e.type === 'tool_call_completed');
@@ -347,7 +355,7 @@ describe('runAgentLoop — validation (SC-04)', () => {
         },
       ],
     });
-    await collectEvents(runAgentLoop(makeCtx(agent), deps, 'go'));
+    await collectEvents(runAgentLoop(makeCtx(agent, { execute }), deps, 'go'));
 
     expect(execute).toHaveBeenCalledTimes(1);
     const created = (deps.db.toolCalls.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
