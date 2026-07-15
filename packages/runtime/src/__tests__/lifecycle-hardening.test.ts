@@ -360,8 +360,8 @@ describe('run lifecycle hardening (WS-24)', () => {
     const trace = traces[0];
     expect(trace?.finished?.status).toBe('error');
     const anyErrorSpan =
-      trace!.modelCalls.some((m) => m.span.ended?.status === 'error') ||
-      trace!.toolCalls.some((t) => t.span.ended?.status === 'error');
+      (trace?.modelCalls ?? []).some((m) => m.span.ended?.status === 'error') ||
+      (trace?.toolCalls ?? []).some((t) => t.span.ended?.status === 'error');
     expect(anyErrorSpan).toBe(true);
 
     const terminal = events.at(-1);
@@ -425,8 +425,8 @@ describe('run lifecycle hardening (WS-24)', () => {
     expect(stores.runs[0]?.status).toBe('completed');
     const trace = traces[0];
     expect(trace).toBeDefined();
-    expect(trace!.modelCalls.length).toBeGreaterThanOrEqual(1);
-    expect(trace!.modelCalls[0]?.span.ended?.status).toBe('ok');
-    expect(trace!.finished?.status).toBe('ok');
+    expect(trace?.modelCalls.length).toBeGreaterThanOrEqual(1);
+    expect(trace?.modelCalls[0]?.span.ended?.status).toBe('ok');
+    expect(trace?.finished?.status).toBe('ok');
   });
 });

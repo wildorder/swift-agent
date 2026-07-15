@@ -8,6 +8,12 @@ build-logs/
 .env.*
 !.env.example
 *.log
+
+# Ad-hoc captured lint/test terminal output
+lint.out.txt
+lint.force.txt
+unit.all.txt
+
 .DS_Store
 
 # Terraform

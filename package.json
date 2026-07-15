@@ -18,8 +18,14 @@
     "@eslint/js": "^9.0.0",
     "@swiftagent/api": "workspace:^",
     "@swiftagent/db": "workspace:^",
+    "@swiftagent/gateway": "workspace:^",
+    "@swiftagent/models": "workspace:^",
+    "@swiftagent/observability": "workspace:^",
+    "@swiftagent/runtime": "workspace:^",
+    "@swiftagent/sdk": "workspace:^",
     "@swiftagent/shared": "workspace:^",
     "@testcontainers/postgresql": "^10.0.0",
+    "@types/ws": "^8.18.1",
     "drizzle-orm": "^0.36",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
@@ -31,6 +37,8 @@
     "turbo": "^2.0.0",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "ws": "^8.20.0",
+    "zod": "^3.24"
   }
 }

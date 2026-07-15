@@ -9,7 +9,7 @@ import { ContextBuilder, type ToolMessageContent } from './context-builder.js';
 import { createMemoryStrategy } from './memory/strategy.js';
 import { toModelToolSchemas, buildToolIndex } from './tool-mapping.js';
 import { validateToolCall } from './tool-validation.js';
-import { deriveCallDeadline, timeoutReason, RunTimeoutError } from './deadlines.js';
+import { deriveCallDeadline, timeoutReason, type RunTimeoutError } from './deadlines.js';
 import type { ToolCall, ToolCallResult } from './tool-executor.js';
 import type { AgentEngineDeps, RunContext, AgentEngineOptions } from './types.js';
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_LAST_N } from './types.js';

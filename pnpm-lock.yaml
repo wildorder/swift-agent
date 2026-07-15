@@ -17,12 +17,30 @@ importers:
       '@swiftagent/db':
         specifier: workspace:^
         version: link:packages/db
+      '@swiftagent/gateway':
+        specifier: workspace:^
+        version: link:packages/gateway
+      '@swiftagent/models':
+        specifier: workspace:^
+        version: link:packages/models
+      '@swiftagent/observability':
+        specifier: workspace:^
+        version: link:packages/observability
+      '@swiftagent/runtime':
+        specifier: workspace:^
+        version: link:packages/runtime
+      '@swiftagent/sdk':
+        specifier: workspace:^
+        version: link:packages/sdk
       '@swiftagent/shared':
         specifier: workspace:^
         version: link:packages/shared
       '@testcontainers/postgresql':
         specifier: ^10.0.0
         version: 10.28.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       drizzle-orm:
         specifier: ^0.36
         version: 0.36.4(postgres@3.4.8)
@@ -59,6 +77,12 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(happy-dom@20.8.9)
+      ws:
+        specifier: ^8.20.0
+        version: 8.20.0
+      zod:
+        specifier: ^3.24
+        version: 3.25.76
 
   apps/server:
     dependencies:
@@ -218,7 +242,7 @@ importers:
         version: 5.1.7
       openai:
         specifier: ^4
-        version: 4.104.0(zod@3.25.76)
+        version: 4.104.0(ws@8.20.0)(zod@3.25.76)
       zod:
         specifier: ^3.24
         version: 3.25.76
@@ -3515,7 +3539,7 @@ packages:
     dependencies:
       wrappy: 1.0.2
 
-  /openai@4.104.0(zod@3.25.76):
+  /openai@4.104.0(ws@8.20.0)(zod@3.25.76):
     resolution: {integrity: sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==}
     hasBin: true
     peerDependencies:
@@ -3534,6 +3558,7 @@ packages:
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
+      ws: 8.20.0
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
@@ -4649,4 +4674,3 @@ packages:
 
   /zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-    dev: false
