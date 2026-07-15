@@ -96,20 +96,6 @@ jobs:
     needs: [build-lint, unit-tests]
 
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: swiftagent
-          POSTGRES_PASSWORD: swiftagent_ci
-          POSTGRES_DB: swiftagent_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U swiftagent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
       redis:
         image: redis:7-alpine
         ports:
@@ -144,13 +130,9 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-      - name: Run database migrations
-        run: pnpm --filter @swiftagent/db migrate
-        env:
-          DATABASE_URL: postgresql://swiftagent:swiftagent_ci@localhost:5432/swiftagent_test
-
       - name: Run integration tests
         run: pnpm test:integration
         env:
-          DATABASE_URL: postgresql://swiftagent:swiftagent_ci@localhost:5432/swiftagent_test
+          # DATABASE_URL is provisioned per-suite by test/setup-db.ts (Testcontainers),
+          # which starts its own PostgreSQL and applies the Drizzle migrations.
           REDIS_URL: redis://localhost:6379

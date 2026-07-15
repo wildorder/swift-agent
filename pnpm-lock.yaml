@@ -23,6 +23,9 @@ importers:
       '@testcontainers/postgresql':
         specifier: ^10.0.0
         version: 10.28.0
+      drizzle-orm:
+        specifier: ^0.36
+        version: 0.36.4(postgres@3.4.8)
       eslint:
         specifier: ^9.0.0
         version: 9.39.4
@@ -2535,7 +2538,6 @@ packages:
         optional: true
     dependencies:
       postgres: 3.4.8
-    dev: false
 
   /dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}

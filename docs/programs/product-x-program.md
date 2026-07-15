@@ -2,6 +2,8 @@
 
 ## Program Overview
 
+**Status:** Completed on 2026-07-15.
+
 **Product:** Swift Agent — a hosted real-time agent runtime that lets developers embed streaming, tool-calling, multi-model AI agents into any application.
 
 **One-liner:** Ship a production-ready AI agent in minutes — not weeks.

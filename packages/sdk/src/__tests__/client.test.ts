@@ -53,6 +53,44 @@ describe('ControlPlaneClient', () => {
       expect(opts.headers.Authorization).toBe('Bearer test-api-key');
       expect(JSON.parse(opts.body as string).name).toBe('test-agent');
     });
+
+    it('sends normalized tool definitions (inputSchema, no execute)', async () => {
+      const agentRecord = {
+        agentId: 'agt_abc123',
+        workspaceId: 'ws_abc123',
+        name: 'tools-agent',
+        modelConfig: { model: 'openai/gpt-4' },
+        systemPrompt: 'hello',
+        memoryConfig: { strategy: 'last_n' },
+        tools: [
+          { name: 'lookupOrder', description: 'x', inputSchema: { type: 'object' } },
+        ],
+        toolRunnerUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      mockFetch.mockResolvedValueOnce(jsonResponse(agentRecord, 201));
+
+      const result = await client.registerAgent({
+        name: 'tools-agent',
+        modelConfig: { model: 'openai/gpt-4' },
+        systemPrompt: 'hello',
+        tools: [
+          { name: 'lookupOrder', description: 'x', inputSchema: { type: 'object' } },
+        ],
+      });
+
+      expect(result.tools).toEqual([
+        { name: 'lookupOrder', description: 'x', inputSchema: { type: 'object' } },
+      ]);
+
+      const [, opts] = mockFetch.mock.calls[0];
+      const sentBody = JSON.parse(opts.body as string);
+      expect(sentBody.tools).toHaveLength(1);
+      expect(sentBody.tools[0]).toHaveProperty('inputSchema');
+      expect(sentBody.tools[0]).not.toHaveProperty('parameters');
+      expect(sentBody.tools[0]).not.toHaveProperty('execute');
+    });
   });
 
   describe('createSession', () => {

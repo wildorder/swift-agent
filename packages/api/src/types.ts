@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ModelConfigSchema,
   MemoryConfigSchema,
+  ToolDefinitionSchema,
 } from '@swiftagent/shared';
 
 // ── Authenticated request ──────────────────────────────────────────
@@ -34,6 +35,7 @@ export const CreateAgentBodySchema = z.object({
   systemPrompt: z.string(),
   memoryConfig: MemoryConfigSchema.optional(),
   toolRunnerUrl: z.string().url().nullable().optional(),
+  tools: z.array(ToolDefinitionSchema).optional(),
 }).strict();
 export type CreateAgentBody = z.infer<typeof CreateAgentBodySchema>;
 

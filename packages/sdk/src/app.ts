@@ -132,6 +132,11 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
           modelConfig: { ...agent.modelConfig },
           systemPrompt: agent.systemPrompt,
           memoryConfig: agent.memoryConfig ? { ...agent.memoryConfig } : undefined,
+          tools: agent.toolSchemas.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.parameters,
+          })),
           toolRunnerUrl: publicUrl,
         });
       }

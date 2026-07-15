@@ -52,6 +52,7 @@ export {
   MemoryStrategySchema,
   MemoryConfigSchema,
   ModelConfigSchema,
+  ToolDefinitionSchema,
   AgentConfigSchema,
   AgentRecordSchema,
 } from './types/agent.js';
@@ -59,6 +60,7 @@ export type {
   MemoryStrategy,
   MemoryConfig,
   ModelConfig,
+  ToolDefinition,
   AgentConfig,
   AgentRecord,
 } from './types/agent.js';

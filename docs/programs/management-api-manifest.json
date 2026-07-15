@@ -3,8 +3,9 @@
     "id": "management-api",
     "name": "Swift Agent — Management API",
     "description": "Cognito User Pool infrastructure, user identity layer, JWT auth middleware, and /v1/management/* routes for workspace and API key lifecycle.",
-    "status": "planning",
-    "created": "2026-04-03"
+    "status": "completed",
+    "created": "2026-04-03",
+    "completed": "2026-07-15"
   },
   "technology": {
     "identity_provider": "AWS Cognito User Pool (OIDC)",
@@ -42,7 +43,7 @@
       "id": "WS-14",
       "name": "Cognito User Pool Infrastructure",
       "taskFile": "tasks/management-api/ws-14-cognito-infra.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": ["product-x:WS-13a"],
       "packages": ["infra/modules/cognito", "infra/envs/dev"]
@@ -51,7 +52,7 @@
       "id": "WS-15",
       "name": "Management Data Layer",
       "taskFile": "tasks/management-api/ws-15-management-data-layer.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": ["product-x:WS-02", "product-x:WS-03"],
       "packages": ["packages/db"]
@@ -60,7 +61,7 @@
       "id": "WS-16",
       "name": "Cognito JWT Auth Plugin",
       "taskFile": "tasks/management-api/ws-16-cognito-auth-plugin.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": ["product-x:WS-02", "product-x:WS-07"],
       "packages": ["packages/api", "packages/shared"]
@@ -69,7 +70,7 @@
       "id": "WS-17",
       "name": "Management API Routes",
       "taskFile": "tasks/management-api/ws-17-management-routes.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": ["WS-15", "WS-16"],
       "packages": ["packages/api"]
@@ -78,7 +79,7 @@
       "id": "WS-18",
       "name": "Management Integration & E2E Tests",
       "taskFile": "tasks/management-api/ws-18-management-integration.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": ["WS-14", "WS-17", "product-x:WS-11"],
       "packages": ["apps/server"]

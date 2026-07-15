@@ -98,6 +98,13 @@ describe('AgentApp', () => {
     expect(body.modelConfig.model).toBe('openai/gpt-4');
     expect(body.systemPrompt).toBe('You are helpful.');
     expect(body.toolRunnerUrl).toBeDefined();
+
+    // Normalized tool definitions are sent with inputSchema (not parameters/execute)
+    expect(body.tools).toHaveLength(1);
+    expect(body.tools[0].name).toBe('weather');
+    expect(body.tools[0]).toHaveProperty('inputSchema');
+    expect(body.tools[0]).not.toHaveProperty('parameters');
+    expect(body.tools[0]).not.toHaveProperty('execute');
   });
 
   describe('sessions', () => {

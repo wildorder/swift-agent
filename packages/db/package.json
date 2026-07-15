@@ -16,7 +16,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo",
+    "db:generate": "tsc && drizzle-kit generate",
+    "migrate": "node dist/migrate.js"
   },
   "dependencies": {
     "@swiftagent/shared": "workspace:*",

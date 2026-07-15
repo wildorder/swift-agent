@@ -29,6 +29,11 @@ interface RegisterAgentBody {
     strategy: 'last_n' | 'summary';
     maxMessages?: number;
   };
+  tools?: Array<{
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
   toolRunnerUrl?: string | null;
 }
 

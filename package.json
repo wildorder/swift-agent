@@ -20,6 +20,7 @@
     "@swiftagent/db": "workspace:^",
     "@swiftagent/shared": "workspace:^",
     "@testcontainers/postgresql": "^10.0.0",
+    "drizzle-orm": "^0.36",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
     "fastify": "^5",

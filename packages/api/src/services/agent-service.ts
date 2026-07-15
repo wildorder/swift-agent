@@ -28,6 +28,7 @@ export function createAgentService(agentRepo: AgentRepo): AgentService {
           modelConfig: parsed.modelConfig,
           systemPrompt: parsed.systemPrompt,
           memoryConfig: parsed.memoryConfig ?? existing.memoryConfig,
+          tools: parsed.tools ?? existing.tools,
           toolRunnerUrl: parsed.toolRunnerUrl ?? existing.toolRunnerUrl,
         });
         if (!updated) {
@@ -43,6 +44,7 @@ export function createAgentService(agentRepo: AgentRepo): AgentService {
         modelConfig: parsed.modelConfig,
         systemPrompt: parsed.systemPrompt,
         memoryConfig: parsed.memoryConfig ?? DEFAULT_MEMORY_CONFIG,
+        tools: parsed.tools ?? [],
         toolRunnerUrl: parsed.toolRunnerUrl ?? null,
       });
     },

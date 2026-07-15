@@ -1,0 +1,309 @@
+{
+  "program": {
+    "id": "core-runtime-completion",
+    "name": "Swift Agent — Core Runtime Completion",
+    "description": "Complete and harden the SDK registration-to-model-to-remote-tool-to-response execution path across REST and WebSocket entry points.",
+    "status": "planning",
+    "created": "2026-07-15"
+  },
+  "technology": {},
+  "successCriteria": [
+    {
+      "id": "SC-01",
+      "description": "SDK registration persists the normalized name, description, and input schema for every declared tool without persisting execution handlers."
+    },
+    {
+      "id": "SC-02",
+      "description": "Existing agents without persisted tools remain readable and behave as agents with an empty tool list."
+    },
+    {
+      "id": "SC-03",
+      "description": "OpenAI, Anthropic, and Google provider requests receive the registered tool definitions on every applicable model turn."
+    },
+    {
+      "id": "SC-04",
+      "description": "A model-emitted tool call is rejected before execution when its name is not registered or its input does not satisfy the persisted schema."
+    },
+    {
+      "id": "SC-05",
+      "description": "Provider-native call identifiers round-trip correctly while every persisted tool call uses a Swift Agent tc_ identifier."
+    },
+    {
+      "id": "SC-06",
+      "description": "A registered tool call is persisted, executed by the active agent's remote SDK runner, returned to the model, and followed by a final assistant response."
+    },
+    {
+      "id": "SC-07",
+      "description": "Two agents with different runner configurations use their respective executors without cross-routing."
+    },
+    {
+      "id": "SC-08",
+      "description": "Runner requests use short-lived scoped authentication and reject unauthorized, expired, or scope-mismatched calls."
+    },
+    {
+      "id": "SC-09",
+      "description": "Deployed remote execution rejects disallowed outbound targets and enforces request, response, and deadline limits."
+    },
+    {
+      "id": "SC-10",
+      "description": "A retried remote invocation cannot execute the same logical tool call more than once when transport replay protection is enabled."
+    },
+    {
+      "id": "SC-11",
+      "description": "REST run creation returns 202, executes without a WebSocket client, and remains observable through run, message, tool-call, and trace endpoints."
+    },
+    {
+      "id": "SC-12",
+      "description": "REST and WebSocket entry points create one run and exhibit the same persistence and terminal-state behavior."
+    },
+    {
+      "id": "SC-13",
+      "description": "Repeated cancellation requests are safe, and a cancelled run cannot later transition to completed, failed, or timed out."
+    },
+    {
+      "id": "SC-14",
+      "description": "Model, tool, and total-run deadlines abort supported work and persist timed_out state."
+    },
+    {
+      "id": "SC-15",
+      "description": "Provider, validation, transport, and tool-handler failures finalize run, tool-call, and trace records consistently."
+    },
+    {
+      "id": "SC-16",
+      "description": "Integration tests cover successful no-tool runs, successful remote-tool runs, multiple tool turns, cancellation, timeout, replay, SSRF rejection, and each defined failure boundary."
+    },
+    {
+      "id": "SC-17",
+      "description": "Monorepo type-checking, linting, unit tests, and runtime integration tests pass."
+    }
+  ],
+  "packages": [
+    {
+      "name": "@swiftagent/shared",
+      "path": "packages/shared",
+      "description": "Normalized tool contracts, runner protocol, run statuses, and cancellation protocol"
+    },
+    {
+      "name": "@swiftagent/db",
+      "path": "packages/db",
+      "description": "Agent tool persistence and run terminal-state enum added via generated incremental migrations on the greenfield baseline (db-migration-baseline WS-01), plus conditional terminal-state repositories"
+    },
+    {
+      "name": "@swiftagent/models",
+      "path": "packages/models",
+      "description": "Provider tool-definition translation and provider-native call identifier handling"
+    },
+    {
+      "name": "@swiftagent/runtime",
+      "path": "packages/runtime",
+      "description": "Tool allowlisting, executor resolution, remote invocation, unified execution, and lifecycle control"
+    },
+    {
+      "name": "@swiftagent/gateway",
+      "path": "packages/gateway",
+      "description": "Shared execution-service delegation and explicit WebSocket cancellation"
+    },
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "Tool-aware agent registration and asynchronous REST run semantics"
+    },
+    {
+      "name": "@swiftagent/observability",
+      "path": "packages/observability",
+      "description": "Model/tool spans and terminal trace finalization"
+    },
+    {
+      "name": "@swiftagent/sdk",
+      "path": "packages/sdk",
+      "description": "Tool schema registration and secure, idempotent remote runner protocol"
+    },
+    {
+      "name": "apps/server",
+      "path": "apps/server",
+      "description": "Production executor and execution-service composition"
+    }
+  ],
+  "workstreams": [
+    {
+      "id": "WS-19",
+      "name": "Persisted Tool Definition Contract",
+      "taskFile": "tasks/core-runtime-completion/ws-19-persisted-tool-contract.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "db-migration-baseline:WS-01",
+        "product-x:WS-02",
+        "product-x:WS-03",
+        "product-x:WS-07",
+        "product-x:WS-08"
+      ],
+      "packages": [
+        "packages/shared",
+        "packages/db",
+        "packages/api",
+        "packages/sdk"
+      ]
+    },
+    {
+      "id": "WS-20",
+      "name": "Provider Tool-Calling Completion",
+      "taskFile": "tasks/core-runtime-completion/ws-20-provider-tool-calling.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "WS-19",
+        "product-x:WS-04b",
+        "product-x:WS-05b"
+      ],
+      "packages": [
+        "packages/models",
+        "packages/runtime"
+      ]
+    },
+    {
+      "id": "WS-21",
+      "name": "Per-Agent Executor Resolution",
+      "taskFile": "tasks/core-runtime-completion/ws-21-executor-resolution.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": [
+        "WS-19",
+        "product-x:WS-05a",
+        "product-x:WS-11"
+      ],
+      "packages": [
+        "packages/runtime",
+        "packages/shared",
+        "apps/server"
+      ]
+    },
+    {
+      "id": "WS-22",
+      "name": "Secure Remote SDK Runner Integration",
+      "taskFile": "tasks/core-runtime-completion/ws-22-remote-runner-integration.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "WS-20",
+        "WS-21",
+        "product-x:WS-08"
+      ],
+      "packages": [
+        "packages/shared",
+        "packages/runtime",
+        "packages/sdk",
+        "apps/server"
+      ]
+    },
+    {
+      "id": "WS-23",
+      "name": "Unified Run Execution and REST Semantics",
+      "taskFile": "tasks/core-runtime-completion/ws-23-unified-run-execution.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "WS-20",
+        "WS-22",
+        "product-x:WS-06",
+        "product-x:WS-07"
+      ],
+      "packages": [
+        "packages/api",
+        "packages/runtime",
+        "packages/gateway",
+        "packages/sdk",
+        "packages/db",
+        "apps/server"
+      ]
+    },
+    {
+      "id": "WS-24",
+      "name": "Cancellation, Timeout, and Failure Hardening",
+      "taskFile": "tasks/core-runtime-completion/ws-24-run-lifecycle-hardening.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "WS-23",
+        "db-migration-baseline:WS-01",
+        "product-x:WS-10"
+      ],
+      "packages": [
+        "packages/shared",
+        "packages/db",
+        "packages/runtime",
+        "packages/gateway",
+        "packages/observability"
+      ]
+    },
+    {
+      "id": "WS-25",
+      "name": "Full Runtime Integration Tests",
+      "taskFile": "tasks/core-runtime-completion/ws-25-runtime-integration-tests.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "WS-24"
+      ],
+      "packages": [
+        "packages/runtime",
+        "packages/api",
+        "packages/sdk",
+        "packages/gateway",
+        "apps/server"
+      ]
+    }
+  ],
+  "dataModel": {
+    "extendedEntities": [
+      {
+        "name": "Agent",
+        "fieldsAdded": [
+          "tools"
+        ],
+        "notes": "Persisted normalized tool definitions; existing rows default to an empty list."
+      },
+      {
+        "name": "Run",
+        "fieldsChanged": [
+          "status"
+        ],
+        "notes": "Status adds cancelled and timed_out terminal states with conditional transitions."
+      },
+      {
+        "name": "ToolCall",
+        "notes": "Persists Swift Agent tc_ identity separately from provider-native call identity required for model round-tripping."
+      }
+    ]
+  },
+  "runtimeEndpoints": [
+    {
+      "method": "POST",
+      "path": "/v1/sessions/:sessionId/runs",
+      "purpose": "Persist the user message, create and start an asynchronous process-bound run, and return 202"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/runs/:runId",
+      "purpose": "Retrieve current or terminal run status"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/runs/:runId/cancel",
+      "purpose": "Request idempotent run cancellation"
+    }
+  ],
+  "outOfScope": [
+    "MCP client or server implementation",
+    "Durable execution across process restarts",
+    "Queued or scheduled workflows",
+    "Automatic model fallback",
+    "General tool retry policies beyond replay-safe transport handling",
+    "Parallel tool-call execution",
+    "Hosted customer secrets management",
+    "Usage metering or billing",
+    "Summary-memory implementation",
+    "New model providers",
+    "Public gateway load-balancer routing"
+  ]
+}
