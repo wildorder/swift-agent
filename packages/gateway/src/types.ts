@@ -15,13 +15,23 @@ export const PingMessageSchema = z.object({
   type: z.literal('ping'),
 });
 
+/**
+ * Explicit client-initiated cancellation of the session's active run (WS-24).
+ * Distinct from a socket disconnect, which does NOT cancel a server-owned run.
+ */
+export const CancelMessageSchema = z.object({
+  type: z.literal('cancel'),
+}).strict();
+
 export const InboundMessageSchema = z.discriminatedUnion('type', [
   SendMessageSchema,
   PingMessageSchema,
+  CancelMessageSchema,
 ]);
 
 export type SendMessage = z.infer<typeof SendMessageSchema>;
 export type PingMessage = z.infer<typeof PingMessageSchema>;
+export type CancelMessage = z.infer<typeof CancelMessageSchema>;
 export type InboundMessage = z.infer<typeof InboundMessageSchema>;
 
 // ── Outbound error payload ─────────────────────────────────────────────
@@ -72,6 +82,12 @@ export interface RuntimeDelegate {
     input: { sessionId: string; content: string },
     opts?: { onEvent?: (event: ChatEvent) => void; signal?: AbortSignal },
   ): Promise<{ runId: string }>;
+  /**
+   * Idempotent cancellation of an in-flight run (WS-24). Invoked when a client
+   * sends an explicit `cancel` message. Safe to call for an unknown or
+   * already-terminal run.
+   */
+  requestCancel(runId: string): Promise<{ requested: boolean }>;
 }
 
 // ── WebSocket with metadata ────────────────────────────────────────────

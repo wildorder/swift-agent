@@ -221,8 +221,9 @@ describe('Async run execution (WS-23)', () => {
     expect(c1.json()).toMatchObject({ runId, status: 'cancelling' });
 
     release();
-    // The aborted run settles to a terminal state (failed until WS-24 adds cancelled).
-    await pollRunStatus(app, runId, 'failed');
+    // WS-24: a cancelled run settles to the terminal `cancelled` state (SC-13),
+    // no longer `failed`.
+    await pollRunStatus(app, runId, 'cancelled');
 
     const c3 = await app.inject({ method: 'POST', url: `/v1/runs/${runId}/cancel`, headers });
     expect(c3.statusCode).toBe(202);

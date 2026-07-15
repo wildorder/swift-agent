@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, jsonb, index, varchar, pgEnum } from 'drizzle-orm/pg-core';
 import { sessions } from './sessions.js';
 
-export const runStatusEnum = pgEnum('run_status', ['running', 'completed', 'failed']);
+export const runStatusEnum = pgEnum('run_status', ['running', 'completed', 'failed', 'cancelled', 'timed_out']);
 
 export const runs = pgTable('runs', {
   runId: text('run_id').primaryKey(),

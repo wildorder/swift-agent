@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const RunStatusSchema = z.enum(['running', 'completed', 'failed']);
+export const RunStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled', 'timed_out']);
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
 export const TokenUsageSchema = z.object({

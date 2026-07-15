@@ -38,6 +38,7 @@ function createAsyncMockRuntime(events: ChatEvent[]): RuntimeDelegate {
       }
       return { runId: 'run_1' };
     }) as unknown as RuntimeDelegate['start'],
+    requestCancel: vi.fn(async () => ({ requested: true })) as RuntimeDelegate['requestCancel'],
   };
 }
 
@@ -47,6 +48,7 @@ function createThrowingRuntime(error: Error): RuntimeDelegate {
     start: vi.fn(async () => {
       throw error;
     }) as unknown as RuntimeDelegate['start'],
+    requestCancel: vi.fn(async () => ({ requested: true })) as RuntimeDelegate['requestCancel'],
   };
 }
 
@@ -191,6 +193,7 @@ describe('SessionBridge', () => {
           opts?.onEvent?.(makeCompletedEvent());
           return { runId: 'run_1' };
         }) as unknown as RuntimeDelegate['start'],
+        requestCancel: vi.fn(async () => ({ requested: true })) as RuntimeDelegate['requestCancel'],
       };
 
       const bridge = createSessionBridge({ connectionManager: cm, runtime });
@@ -246,6 +249,7 @@ describe('SessionBridge', () => {
           await new Promise<void>((resolve) => { resolveGenerator = resolve; });
           return { runId: 'run_1' };
         }) as unknown as RuntimeDelegate['start'],
+        requestCancel: vi.fn(async () => ({ requested: true })) as RuntimeDelegate['requestCancel'],
       };
 
       const bridge = createSessionBridge({ connectionManager: cm, runtime });

@@ -57,6 +57,9 @@ export function createRunExecutionService(
   const engine = new AgentEngine(deps, options);
   const sessionLock = new SessionLock();
   const activeRuns = new Map<string, AbortController>();
+  // Runs for which a user cancellation was requested. Used to finalize the
+  // terminal status race-safely after the loop drains (WS-24, SC-13).
+  const cancelledRuns = new Set<string>();
 
   async function drive(
     runId: string,
@@ -80,6 +83,21 @@ export function createRunExecutionService(
         opts?.onEvent?.(event);
       }
     } finally {
+      // Race-safe terminal finalize (WS-24, SC-13): if cancellation was
+      // requested, ensure the run lands `cancelled`. The loop already performs
+      // this conditional transition on abort; this is a belt-and-suspenders
+      // write for the case where the generator is torn down before the loop's
+      // own classification runs. Because `runs.cancel` is `WHERE
+      // status='running'`, it is a no-op if the run already reached any terminal
+      // state — a completed/failed/timed-out run is never flipped to cancelled.
+      if (cancelledRuns.has(runId)) {
+        try {
+          await deps.db.runs.cancel(runId);
+        } catch {
+          /* best-effort — terminal state is observed via GET /runs/:runId */
+        }
+        cancelledRuns.delete(runId);
+      }
       // Always release the lock + registry slot, on every exit path, so a
       // failed/cancelled run never wedges the session.
       activeRuns.delete(runId);
@@ -138,13 +156,18 @@ export function createRunExecutionService(
     },
 
     async requestCancel(runId) {
+      // Mark the run as user-cancelled so `drive` finalizes it `cancelled` once
+      // the loop drains, then abort the run's cancellation controller. Aborting
+      // WITHOUT a RunTimeoutError reason is exactly how the loop distinguishes a
+      // cancel from a deadline timeout (WS-24).
       const abort = activeRuns.get(runId);
       if (abort) {
+        cancelledRuns.add(runId);
+        // `abort()` is a no-op if already aborted, so repeated calls are safe.
         abort.abort();
       }
       // Idempotent: an unknown or already-terminal run (not in this process's
-      // registry) still reports the request as accepted. Terminal `cancelled`
-      // status is finalized in WS-24.
+      // registry) still reports the request as accepted (SC-13).
       return { requested: true };
     },
   };

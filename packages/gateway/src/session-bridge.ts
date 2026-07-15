@@ -176,6 +176,20 @@ export class SessionBridge {
   }
 
   /**
+   * Handle an explicit inbound `cancel` from a client (WS-24). Resolves the
+   * session's active run (tracked in the replay buffer) and forwards an
+   * idempotent cancellation to the execution service. A no-op when the session
+   * has no active run. Cancellation is process-owned: the resulting terminal
+   * `run_failed` (code `CANCELLED`) event is broadcast through the normal
+   * `handleSendMessage` stream, not from here.
+   */
+  async handleCancel(sessionId: string): Promise<void> {
+    const runId = this.replayBuffers.get(sessionId)?.runId;
+    if (!runId) return;
+    await this.runtime.requestCancel(runId);
+  }
+
+  /**
    * Replay buffered events for a session on reconnection.
    * Returns the number of events replayed, or 0 if no active run.
    */

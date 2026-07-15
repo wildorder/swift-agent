@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import type { RunRecord, TokenUsage, RunStatus } from '@swiftagent/shared';
 import type { Db } from '../client.js';
 import { runs } from '../schema/index.js';
@@ -37,11 +37,18 @@ export function createRunRepo(db: Db) {
       return row ? toRecord(row) : null;
     },
 
+    // ── Terminal transitions (WS-24, SC-13) ────────────────────────────
+    // Every terminal write is guarded by `status = 'running'` so once a run
+    // reaches ANY terminal state, later writes are no-ops (return `null`). A
+    // late provider/runner response can therefore never overwrite `cancelled`
+    // with `completed`/`failed`/`timed_out` (or vice versa) — whichever cause
+    // fires first wins.
+
     async complete(runId: string, tokenUsage: TokenUsage): Promise<RunRecord | null> {
       const [row] = await db
         .update(runs)
         .set({ status: 'completed', tokenUsage, updatedAt: new Date() })
-        .where(eq(runs.runId, runId))
+        .where(and(eq(runs.runId, runId), eq(runs.status, 'running')))
         .returning();
       return row ? toRecord(row) : null;
     },
@@ -50,7 +57,25 @@ export function createRunRepo(db: Db) {
       const [row] = await db
         .update(runs)
         .set({ status: 'failed', updatedAt: new Date() })
-        .where(eq(runs.runId, runId))
+        .where(and(eq(runs.runId, runId), eq(runs.status, 'running')))
+        .returning();
+      return row ? toRecord(row) : null;
+    },
+
+    async cancel(runId: string): Promise<RunRecord | null> {
+      const [row] = await db
+        .update(runs)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(and(eq(runs.runId, runId), eq(runs.status, 'running')))
+        .returning();
+      return row ? toRecord(row) : null;
+    },
+
+    async timeout(runId: string): Promise<RunRecord | null> {
+      const [row] = await db
+        .update(runs)
+        .set({ status: 'timed_out', updatedAt: new Date() })
+        .where(and(eq(runs.runId, runId), eq(runs.status, 'running')))
         .returning();
       return row ? toRecord(row) : null;
     },

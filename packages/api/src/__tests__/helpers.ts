@@ -241,6 +241,20 @@ export function createMockRunRepo(): RunRepo {
       runsMap.set(id, updated);
       return updated;
     },
+    cancel: async (id) => {
+      const r = runsMap.get(id);
+      if (!r) return null;
+      const updated = { ...r, status: 'cancelled' as const, updatedAt: new Date() };
+      runsMap.set(id, updated);
+      return updated;
+    },
+    timeout: async (id) => {
+      const r = runsMap.get(id);
+      if (!r) return null;
+      const updated = { ...r, status: 'timed_out' as const, updatedAt: new Date() };
+      runsMap.set(id, updated);
+      return updated;
+    },
     listBySession: async (sessionId) =>
       [...runsMap.values()].filter((r) => r.sessionId === sessionId),
   };

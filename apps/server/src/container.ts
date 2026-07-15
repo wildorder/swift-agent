@@ -212,6 +212,11 @@ export function buildContainer(config: ServerConfig): Container {
     },
     modelRegistry,
     toolExecutorResolver,
+    // WS-24: wire the observability tracer into the runtime loop so trace +
+    // span records are populated on every run (previously the tracer was
+    // instantiated but never passed in). This is what makes
+    // `GET /v1/runs/:runId/trace` return real spans (SC-15).
+    tracer,
   };
   const engine = new AgentEngine(engineDeps);
 

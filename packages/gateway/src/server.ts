@@ -111,6 +111,15 @@ export async function createGatewayServer(
               if (msg.type === 'send_message') {
                 // Fire-and-forget — errors are broadcast as events
                 void sessionBridge.handleSendMessage(sessionId, msg.content, socket);
+                return;
+              }
+
+              if (msg.type === 'cancel') {
+                // Explicit cancellation of the session's active run (WS-24).
+                // Fire-and-forget: the terminal event is streamed through the
+                // active run, not returned here. Idempotent + safe when idle.
+                void sessionBridge.handleCancel(sessionId);
+                return;
               }
             } catch (err) {
               if (err instanceof ParseError) {
@@ -123,7 +132,13 @@ export async function createGatewayServer(
             }
           });
 
-          // Handle close
+          // Handle close.
+          //
+          // DISCONNECT POLICY (WS-24): a socket close removes the connection but
+          // MUST NOT cancel the run. Runs are server-owned and process-bound;
+          // they survive client disconnects, and a reconnecting client replays
+          // buffered events (see `replayEvents`). Only an explicit `cancel`
+          // message (or the REST cancel endpoint) cancels a run.
           socket.on('close', () => {
             connectionManager.remove(sessionId, socket);
             heartbeat.detach(socket);

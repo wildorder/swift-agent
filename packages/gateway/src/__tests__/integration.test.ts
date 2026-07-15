@@ -123,6 +123,7 @@ describe('Gateway Integration', () => {
       }
       return { runId: 'run_i1' };
     }) as unknown as RuntimeDelegate['start'],
+    requestCancel: (async () => ({ requested: true })) as RuntimeDelegate['requestCancel'],
   };
 
   beforeAll(async () => {

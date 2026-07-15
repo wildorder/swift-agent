@@ -95,13 +95,27 @@ function createServiceDeps(
         updateStatus: vi.fn(async () => null),
         complete: vi.fn(async (runId: string) => {
           const run = stores.runs.find((r) => r.runId === runId);
-          if (run) run.status = 'completed';
-          return run ?? null;
+          if (!run || run.status !== 'running') return null;
+          run.status = 'completed';
+          return run;
         }),
         fail: vi.fn(async (runId: string) => {
           const run = stores.runs.find((r) => r.runId === runId);
-          if (run) run.status = 'failed';
-          return run ?? null;
+          if (!run || run.status !== 'running') return null;
+          run.status = 'failed';
+          return run;
+        }),
+        cancel: vi.fn(async (runId: string) => {
+          const run = stores.runs.find((r) => r.runId === runId);
+          if (!run || run.status !== 'running') return null;
+          run.status = 'cancelled';
+          return run;
+        }),
+        timeout: vi.fn(async (runId: string) => {
+          const run = stores.runs.find((r) => r.runId === runId);
+          if (!run || run.status !== 'running') return null;
+          run.status = 'timed_out';
+          return run;
         }),
         listBySession: vi.fn(async () => []),
       } as unknown as AgentEngineDeps['db']['runs'],
@@ -247,11 +261,14 @@ describe('RunExecutionService', () => {
     await expect(service.requestCancel(runId)).resolves.toEqual({ requested: true });
     await expect(service.requestCancel(runId)).resolves.toEqual({ requested: true });
 
+    // Let the hung provider unwind so the loop observes the abort and classifies
+    // the terminal cause. A user cancel finalizes as `cancelled` (WS-24, SC-13).
+    release();
+
     // The aborted run reaches a terminal state and frees the session.
     await vi.waitFor(() => {
-      expect(stores.runs[0]?.status).toBe('failed');
+      expect(stores.runs[0]?.status).toBe('cancelled');
     });
-    release();
 
     // A cancel after terminal state is still idempotent.
     await expect(service.requestCancel(runId)).resolves.toEqual({ requested: true });

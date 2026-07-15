@@ -7,6 +7,7 @@ import {
 } from '@swiftagent/shared';
 import { SessionLock } from './session-lock.js';
 import { runAgentLoop } from './loop.js';
+import { createDeadlineController } from './deadlines.js';
 import type { ToolExecutor } from './tool-executor.js';
 import type { AgentEngineDeps, AgentEngineOptions } from './types.js';
 
@@ -125,18 +126,32 @@ export class AgentEngine {
       sessionId,
     );
 
+    // Compose the total-run deadline here (WS-24) — lock-free, per WS-23 the
+    // RunExecutionService is the sole SessionLock owner and passes the run's
+    // cancellation signal in. Merge ONLY the supplied signal (already carrying
+    // cancellation + any session-lock signal) with the total-run deadline; a
+    // firing deadline aborts every supported operation with a RunTimeoutError so
+    // the loop classifies it as `timed_out` rather than a user cancellation.
+    const totalDeadline = createDeadlineController(this.options.totalRunMs);
+    const abortSignal = AbortSignal.any([signal, totalDeadline.controller.signal]);
+
     const ctx = {
       sessionId,
       runId,
       agentConfig,
-      abortSignal: signal,
+      abortSignal,
       iterationCount: 0,
       toolExecutor,
     };
 
-    // The run row + user message already exist — the loop skips their creation.
-    yield* runAgentLoop(ctx, this.deps, userMessage, this.options, {
-      userMessageId,
-    });
+    try {
+      // The run row + user message already exist — the loop skips their creation.
+      yield* runAgentLoop(ctx, this.deps, userMessage, this.options, {
+        userMessageId,
+      });
+    } finally {
+      // Always clear the deadline timer, on every exit path.
+      totalDeadline.dispose();
+    }
   }
 }

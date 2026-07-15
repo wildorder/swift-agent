@@ -154,6 +154,24 @@ function createMockDeps(overrides?: {
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
+        cancel: vi.fn(async (runId: string) => ({
+          runId,
+          sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
+          status: 'cancelled' as const,
+          model: 'openai/gpt-4o',
+          tokenUsage: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+        timeout: vi.fn(async (runId: string) => ({
+          runId,
+          sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
+          status: 'timed_out' as const,
+          model: 'openai/gpt-4o',
+          tokenUsage: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
         listBySession: vi.fn(async () => []),
       },
       toolCalls: {
@@ -624,7 +642,10 @@ describe('runAgentLoop', () => {
     const lastEvent = events.at(-1);
     expect(lastEvent).toHaveProperty('type', 'run_failed');
     expect(lastEvent).toHaveProperty('code', 'CANCELLED');
-    expect(deps.db.runs.fail).toHaveBeenCalled();
+    // WS-24: a user cancellation finalizes via the conditional `cancel`
+    // transition (terminal `cancelled`), NOT `fail` (SC-13).
+    expect(deps.db.runs.cancel).toHaveBeenCalled();
+    expect(deps.db.runs.fail).not.toHaveBeenCalled();
   });
 });
 
