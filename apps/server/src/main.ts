@@ -1,5 +1,5 @@
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ENV_KEYS } from '@swiftagent/shared';
 import { buildApp, type AppContext } from '@swiftagent/api';
 import { createGatewayServer, type GatewayContext } from '@swiftagent/gateway';
@@ -135,9 +135,17 @@ export async function startServer(): Promise<ServerContext> {
   return { config, container, api, gateway };
 }
 
-// ── Entry point (invoked when run directly via `node dist/main.js`) ──
+// ── Entry point ──
+// Only bootstrap when this module is the process entry (`node dist/main.js`).
+// Guarding this prevents a plain `import` (e.g. `index.ts` re-exporting
+// `startServer` for programmatic use, or tests) from booting the whole server
+// and attempting real DB/Redis connections.
+const isDirectRun =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-startServer().catch((err) => {
-  console.error('Fatal: failed to start server', err);
-  process.exit(1);
-});
+if (isDirectRun) {
+  startServer().catch((err) => {
+    console.error('Fatal: failed to start server', err);
+    process.exit(1);
+  });
+}

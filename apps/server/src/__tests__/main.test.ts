@@ -27,8 +27,26 @@ vi.mock('../config.js', () => ({
   })),
 }));
 
-const mockClose = vi.fn(async () => {});
-const mockListen = vi.fn(async () => {});
+// Hoisted so the (hoisted-above-imports) vi.mock factories below can reference
+// these spies without hitting a temporal-dead-zone error, while the test body
+// can still assert on them.
+const { mockClose, mockListen, mockApiApp, mockGatewayApp } = vi.hoisted(() => {
+  const listen = vi.fn(async () => {});
+  return {
+    mockClose: vi.fn(async () => {}),
+    mockListen: listen,
+    mockApiApp: {
+      listen,
+      close: vi.fn(async () => {}),
+      get: vi.fn(),
+      inject: vi.fn(),
+    },
+    mockGatewayApp: {
+      listen,
+      close: vi.fn(async () => {}),
+    },
+  };
+});
 
 vi.mock('../container.js', () => ({
   buildContainer: vi.fn(() => ({
@@ -55,13 +73,6 @@ vi.mock('../container.js', () => ({
   })),
 }));
 
-const mockApiApp = {
-  listen: mockListen,
-  close: vi.fn(async () => {}),
-  get: vi.fn(),
-  inject: vi.fn(),
-};
-
 vi.mock('@swiftagent/api', () => ({
   buildApp: vi.fn(async () => ({
     app: mockApiApp,
@@ -70,11 +81,6 @@ vi.mock('@swiftagent/api', () => ({
     sessionService: {},
   })),
 }));
-
-const mockGatewayApp = {
-  listen: mockListen,
-  close: vi.fn(async () => {}),
-};
 
 vi.mock('@swiftagent/gateway', () => ({
   createGatewayServer: vi.fn(async () => ({

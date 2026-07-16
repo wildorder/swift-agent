@@ -58,7 +58,17 @@ vi.mock('@swiftagent/runtime', () => ({
   AgentEngine: vi.fn(() => ({
     run: vi.fn(),
   })),
+  // WS-23: the container composes a unified RunExecutionService from the same
+  // engine deps. Must be mocked or buildContainer throws on the missing export.
+  createRunExecutionService: vi.fn(() => ({
+    start: vi.fn(),
+    cancel: vi.fn(),
+  })),
   createToolExecutorResolver: createToolExecutorResolverMock,
+  // WS-22: imported for per-invocation scoped-token minting. Only invoked inside
+  // the resolver's mintToken closure at run time, never during composition.
+  mintRunnerToken: vi.fn(),
+  importRunnerPrivateKey: vi.fn(),
   // Exported for completeness, but composition must NOT construct one.
   LocalToolExecutor: localToolExecutorMock,
 }));
@@ -118,6 +128,7 @@ describe('buildContainer', () => {
     expect(container.modelRegistry).toBeDefined();
     expect(container.tracer).toBeDefined();
     expect(container.engine).toBeDefined();
+    expect(container.runExecutionService).toBeDefined();
     expect(container.tokenService).toBeDefined();
     expect(container.agentService).toBeDefined();
     expect(container.sessionService).toBeDefined();
