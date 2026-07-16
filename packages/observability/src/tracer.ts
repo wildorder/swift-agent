@@ -56,8 +56,15 @@ export class Tracer {
           totalDurationMs: rootRecord.durationMs,
         };
 
-        await this.sink.saveTrace(trace);
-        await this.sink.saveSpans(spans.map((s) => s.toRecord()));
+        const spanRecords = spans.map((s) => s.toRecord());
+        if (this.sink.saveTraceWithSpans) {
+          // Atomic path: trace + spans commit together, so a concurrent reader
+          // never sees the trace without its spans.
+          await this.sink.saveTraceWithSpans(trace, spanRecords);
+        } else {
+          await this.sink.saveTrace(trace);
+          await this.sink.saveSpans(spanRecords);
+        }
       },
     };
   }

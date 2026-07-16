@@ -41,4 +41,11 @@ export interface TraceRecord {
 export interface TraceSink {
   saveTrace(trace: TraceRecord): Promise<void>;
   saveSpans(spans: SpanRecord[]): Promise<void>;
+  /**
+   * Atomically persist a trace together with its spans. When implemented, the
+   * `Tracer` prefers this over the separate `saveTrace` + `saveSpans` calls so a
+   * reader can never observe a trace row before its spans are committed. Optional
+   * so in-memory test sinks can omit it and fall back to the two-call path.
+   */
+  saveTraceWithSpans?(trace: TraceRecord, spans: SpanRecord[]): Promise<void>;
 }

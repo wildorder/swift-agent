@@ -40,21 +40,26 @@ export function createTraceRepo(db: Db) {
 
     async saveSpans(spans: SpanRecordRow[]): Promise<void> {
       if (spans.length === 0) return;
-      await db.insert(traceSpans).values(
-        spans.map((s) => ({
-          spanId: s.spanId,
-          traceId: s.traceId,
-          parentSpanId: s.parentSpanId,
-          type: s.type as 'run_span' | 'model_call_span' | 'tool_call_span',
-          name: s.name,
-          startedAt: s.startedAt,
-          completedAt: s.completedAt,
-          durationMs: s.durationMs,
-          metadata: s.metadata,
-          status: s.status as 'ok' | 'error',
-          error: s.error ?? null,
-        })),
-      );
+      await db.insert(traceSpans).values(spans.map(toSpanInsert));
+    },
+
+    // Atomic trace finalization: the trace row and all of its spans commit in a
+    // single transaction, so a concurrent reader (e.g. a run's trace poll) can
+    // never observe the trace without its spans.
+    async saveTraceWithSpans(trace: TraceRecordRow, spans: SpanRecordRow[]): Promise<void> {
+      await db.transaction(async (tx) => {
+        await tx.insert(traces).values({
+          traceId: trace.traceId,
+          runId: trace.runId,
+          rootSpanId: trace.rootSpanId,
+          startedAt: trace.startedAt,
+          completedAt: trace.completedAt,
+          totalDurationMs: trace.totalDurationMs,
+        });
+        if (spans.length > 0) {
+          await tx.insert(traceSpans).values(spans.map(toSpanInsert));
+        }
+      });
     },
 
     async getTraceByRunId(runId: string): Promise<TraceRecordRow | null> {
@@ -77,6 +82,22 @@ export function createTraceRepo(db: Db) {
         .orderBy(asc(traceSpans.startedAt));
       return rows.map(toSpanRecord);
     },
+  };
+}
+
+function toSpanInsert(s: SpanRecordRow): typeof traceSpans.$inferInsert {
+  return {
+    spanId: s.spanId,
+    traceId: s.traceId,
+    parentSpanId: s.parentSpanId,
+    type: s.type as 'run_span' | 'model_call_span' | 'tool_call_span',
+    name: s.name,
+    startedAt: s.startedAt,
+    completedAt: s.completedAt,
+    durationMs: s.durationMs,
+    metadata: s.metadata,
+    status: s.status as 'ok' | 'error',
+    error: s.error ?? null,
   };
 }
 

@@ -3,20 +3,12 @@ import type { UserRepo, UserWorkspaceRepo, WorkspaceRepo } from '@swiftagent/db'
 import { generateWorkspaceId, SwiftAgentError } from '@swiftagent/shared';
 import type { ManagementAuthenticatedRequest } from '../../types.js';
 import { CreateWorkspaceBodySchema } from '../../types.js';
+import { resolveOrCreateUser } from './provision-user.js';
 
 export interface WorkspaceRouteDeps {
   userRepo: UserRepo;
   userWorkspaceRepo: UserWorkspaceRepo;
   workspaceRepo: WorkspaceRepo;
-}
-
-/** Resolve the current user (must already exist from GET /me JIT). */
-async function resolveUser(userRepo: UserRepo, cognitoSub: string) {
-  const user = await userRepo.getByCognitoSub(cognitoSub);
-  if (!user) {
-    throw new SwiftAgentError('UNAUTHORIZED', 'User not provisioned');
-  }
-  return user;
 }
 
 export function registerWorkspaceRoutes(
@@ -27,9 +19,9 @@ export function registerWorkspaceRoutes(
 
   // POST /workspaces — create workspace + owner membership
   app.post('/workspaces', async (req, reply) => {
-    const { cognitoSub } = req as ManagementAuthenticatedRequest;
+    const { cognitoSub, email } = req as ManagementAuthenticatedRequest;
     const body = CreateWorkspaceBodySchema.parse(req.body);
-    const user = await resolveUser(userRepo, cognitoSub);
+    const user = await resolveOrCreateUser(userRepo, cognitoSub, email);
 
     const workspaceId = generateWorkspaceId();
     const workspace = await workspaceRepo.create({ workspaceId, name: body.name });
@@ -40,21 +32,21 @@ export function registerWorkspaceRoutes(
 
   // GET /workspaces — list current user's workspaces
   app.get('/workspaces', async (req, reply) => {
-    const { cognitoSub } = req as ManagementAuthenticatedRequest;
-    const user = await resolveUser(userRepo, cognitoSub);
+    const { cognitoSub, email } = req as ManagementAuthenticatedRequest;
+    const user = await resolveOrCreateUser(userRepo, cognitoSub, email);
 
     const memberships = await userWorkspaceRepo.listByUserId(user.userId);
     const workspaces = await Promise.all(
       memberships.map((m) => workspaceRepo.getById(m.workspaceId)),
     );
 
-    return reply.send({ workspaces: workspaces.filter(Boolean) });
+    return reply.send(workspaces.filter(Boolean));
   });
 
   // GET /workspaces/:id — workspace detail (member only)
   app.get<{ Params: { id: string } }>('/workspaces/:id', async (req, reply) => {
-    const { cognitoSub } = req as ManagementAuthenticatedRequest;
-    const user = await resolveUser(userRepo, cognitoSub);
+    const { cognitoSub, email } = req as ManagementAuthenticatedRequest;
+    const user = await resolveOrCreateUser(userRepo, cognitoSub, email);
     const { id } = req.params;
 
     const isMember = await userWorkspaceRepo.isMember(user.userId, id);

@@ -312,6 +312,13 @@ export function createMockTraceRepo(): TraceRepo {
       const existing = spansMap.get(traceId) ?? [];
       spansMap.set(traceId, [...existing, ...spans]);
     },
+    saveTraceWithSpans: async (trace, spans) => {
+      tracesMap.set(trace.traceId, trace);
+      if (spans.length > 0) {
+        const existing = spansMap.get(trace.traceId) ?? [];
+        spansMap.set(trace.traceId, [...existing, ...spans]);
+      }
+    },
     getTraceByRunId: async (runId) => {
       for (const trace of tracesMap.values()) {
         if (trace.runId === runId) return trace;

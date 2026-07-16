@@ -93,6 +93,10 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
     runExecutionService: opts.runExecutionService,
   });
 
+  // Root-level health check (unprefixed) for load balancers / probes. Auth is
+  // skipped for `/health` via SKIP_AUTH_PATHS; `/v1/health` is also served below.
+  registerHealthRoutes(app);
+
   // Routes — prefix /v1
   await app.register(
     async (v1) => {

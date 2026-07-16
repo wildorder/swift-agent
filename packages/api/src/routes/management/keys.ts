@@ -5,20 +5,12 @@ import type { UserRepo, UserWorkspaceRepo, ApiKeyRepo } from '@swiftagent/db';
 import { generateApiKeyId, SwiftAgentError } from '@swiftagent/shared';
 import type { ManagementAuthenticatedRequest } from '../../types.js';
 import { CreateApiKeyBodySchema } from '../../types.js';
+import { resolveOrCreateUser } from './provision-user.js';
 
 export interface KeyRouteDeps {
   userRepo: UserRepo;
   userWorkspaceRepo: UserWorkspaceRepo;
   apiKeyRepo: ApiKeyRepo;
-}
-
-/** Resolve the current user (must already exist from GET /me JIT). */
-async function resolveUser(userRepo: UserRepo, cognitoSub: string) {
-  const user = await userRepo.getByCognitoSub(cognitoSub);
-  if (!user) {
-    throw new SwiftAgentError('UNAUTHORIZED', 'User not provisioned');
-  }
-  return user;
 }
 
 /** Check membership, throw 403 if not a member. */
@@ -41,9 +33,9 @@ export function registerKeyRoutes(
 
   // POST /workspaces/:id/keys — create API key; return raw key once
   app.post<{ Params: { id: string } }>('/workspaces/:id/keys', async (req, reply) => {
-    const { cognitoSub } = req as ManagementAuthenticatedRequest;
+    const { cognitoSub, email } = req as ManagementAuthenticatedRequest;
     const body = CreateApiKeyBodySchema.parse(req.body);
-    const user = await resolveUser(userRepo, cognitoSub);
+    const user = await resolveOrCreateUser(userRepo, cognitoSub, email);
     const { id: workspaceId } = req.params;
 
     await ensureMember(userWorkspaceRepo, user.userId, workspaceId);
@@ -70,8 +62,8 @@ export function registerKeyRoutes(
 
   // GET /workspaces/:id/keys — list keys (metadata only)
   app.get<{ Params: { id: string } }>('/workspaces/:id/keys', async (req, reply) => {
-    const { cognitoSub } = req as ManagementAuthenticatedRequest;
-    const user = await resolveUser(userRepo, cognitoSub);
+    const { cognitoSub, email } = req as ManagementAuthenticatedRequest;
+    const user = await resolveOrCreateUser(userRepo, cognitoSub, email);
     const { id: workspaceId } = req.params;
 
     await ensureMember(userWorkspaceRepo, user.userId, workspaceId);
@@ -92,8 +84,8 @@ export function registerKeyRoutes(
   app.delete<{ Params: { id: string; keyId: string } }>(
     '/workspaces/:id/keys/:keyId',
     async (req, reply) => {
-      const { cognitoSub } = req as ManagementAuthenticatedRequest;
-      const user = await resolveUser(userRepo, cognitoSub);
+      const { cognitoSub, email } = req as ManagementAuthenticatedRequest;
+      const user = await resolveOrCreateUser(userRepo, cognitoSub, email);
       const { id: workspaceId, keyId } = req.params;
 
       await ensureMember(userWorkspaceRepo, user.userId, workspaceId);
