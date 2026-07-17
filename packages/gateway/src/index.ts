@@ -47,5 +47,9 @@ export {
 } from './session-bridge.js';
 export type { RedisPubSubStub, RedisMessageHandler, SessionBridgeDeps } from './session-bridge.js';
 
+// Channel registry (ref-counted per-session fanout subscriptions)
+export { ChannelRegistry, createChannelRegistry } from './channel-registry.js';
+export type { ChannelRegistryDeps } from './channel-registry.js';
+
 // Heartbeat
 export { HeartbeatManager } from './heartbeat.js';

@@ -5,6 +5,7 @@ import { validateClientToken, AuthError } from './auth.js';
 import { ConnectionManager } from './connection-manager.js';
 import { SessionBridge, createNoopRedisPubSub, createRedisPubSub } from './session-bridge.js';
 import type { RedisPubSubStub } from './session-bridge.js';
+import { ChannelRegistry } from './channel-registry.js';
 import { HeartbeatManager } from './heartbeat.js';
 import { parseInboundMessage, toErrorEvent, ParseError } from './events.js';
 import type { GatewayPluginConfig, GatewayComponents, RuntimeDelegate } from './types.js';
@@ -23,7 +24,8 @@ export interface StreamRouteDeps {
   connectionManager: ConnectionManager;
   heartbeat: HeartbeatManager;
   sessionBridge: SessionBridge;
-  redis: RedisPubSubStub;
+  /** Ref-counted per-session subscription manager (acquire on connect / release on close). */
+  channels: ChannelRegistry;
   /** Whether Redis pub/sub is live (enabled AND a URL was supplied). */
   redisActive: boolean;
 }
@@ -62,24 +64,28 @@ export async function buildGatewayComponents(
     redis = createNoopRedisPubSub();
   }
 
+  // Single fanout point + ref-counted per-session subscription registry, shared
+  // by the SessionBridge (publish) and the stream route (acquire/release).
+  const channels = new ChannelRegistry({ redis, connectionManager });
+
   const sessionBridge = new SessionBridge({
     connectionManager,
     runtime,
     redis,
+    channels,
     maxReplayBufferSize: config.maxReplayBufferSize,
   });
 
-  // Best-effort Redis liveness for the health check. Returns true when Redis is
-  // disabled (no-op). WS-33 replaces this body with a real PING; the field shape
-  // on GatewayComponents is frozen so WS-33 does not change this contract.
-  const redisPing = async (): Promise<boolean> => {
-    if (!redisActive) return true;
-    return true;
-  };
+  // Real Redis liveness for the health check: delegates to the pub/sub `ping`
+  // (a PING on the existing `pub` connection, `false` on error/timeout). The
+  // no-op returns `true` when Redis is disabled — but `/health` only consults
+  // this when `redisEnabled`, so the no-op is never a misleading "ok". The
+  // `GatewayComponents.redisPing` field shape (WS-30) is unchanged.
+  const redisPing = (): Promise<boolean> => redis.ping();
 
   return {
     components: { connectionManager, sessionBridge, heartbeat, redisPing },
-    deps: { jwtSecret, connectionManager, heartbeat, sessionBridge, redis, redisActive },
+    deps: { jwtSecret, connectionManager, heartbeat, sessionBridge, channels, redisActive },
   };
 }
 
@@ -95,7 +101,7 @@ export async function registerStreamRoute(
   app: FastifyInstance,
   deps: StreamRouteDeps,
 ): Promise<void> {
-  const { jwtSecret, connectionManager, heartbeat, sessionBridge, redis, redisActive } = deps;
+  const { jwtSecret, connectionManager, heartbeat, sessionBridge, channels, redisActive } = deps;
 
   await app.register(websocket);
 
@@ -127,11 +133,15 @@ export async function registerStreamRoute(
             // Replay buffered events from active run (reconnection support)
             sessionBridge.replayEvents(sessionId, socket);
 
-            // Subscribe to Redis channel for horizontal scaling
+            // Acquire the session's Redis subscription for horizontal scaling.
+            // Ref-counted per session: the FIRST socket for the session
+            // subscribes once; later sockets only bump the refcount. The
+            // subscription forwards only PEER-instance events to local sockets
+            // (Phase 2) — this instance's own publishes are already delivered by
+            // the authoritative local broadcast, so they are never re-delivered
+            // here (no double-delivery). See ChannelRegistry.
             if (redisActive) {
-              await redis.subscribe(`session:${sessionId}`, (_channel, message) => {
-                connectionManager.sendTo(sessionId, socket, message);
-              });
+              await channels.acquire(sessionId);
             }
 
             // Handle inbound messages
@@ -180,8 +190,12 @@ export async function registerStreamRoute(
             socket.on('close', () => {
               connectionManager.remove(sessionId, socket);
               heartbeat.detach(socket);
+              // Release this socket's hold on the session subscription. The
+              // channel is unsubscribed only when the LAST socket for the
+              // session closes (ref-counted) — a mid-session disconnect never
+              // tears the channel down for still-connected siblings.
               if (redisActive) {
-                void redis.unsubscribe(`session:${sessionId}`);
+                void channels.release(sessionId);
               }
             });
 
