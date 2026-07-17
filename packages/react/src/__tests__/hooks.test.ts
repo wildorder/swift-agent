@@ -4,6 +4,10 @@ import { useAgentChat } from '../hooks/use-agent-chat.js';
 import type { ChatEvent } from '@swiftagent/shared';
 import type { ChatMessage, ToolCallInfo } from '../types.js';
 
+// Canonical API-provided URL (already tokenized). Required now that
+// createChatSession has no hardcoded default and throws without one.
+const CANONICAL_URL = 'wss://test.example.com/v1/stream?token=tok_abc';
+
 // ── Mock WebSocket (same pattern as client tests) ───────────────────
 
 class MockWebSocket {
@@ -74,6 +78,7 @@ describe('useAgentChat', () => {
       useAgentChat({
         sessionId: 'ses_1',
         token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
         createWebSocket: factory,
       }),
     );
@@ -87,6 +92,7 @@ describe('useAgentChat', () => {
       useAgentChat({
         sessionId: 'ses_1',
         token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
         createWebSocket: factory,
       }),
     );
@@ -153,6 +159,7 @@ describe('useAgentChat', () => {
       useAgentChat({
         sessionId: 'ses_1',
         token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
         createWebSocket: factory,
       }),
     );
@@ -173,6 +180,7 @@ describe('useAgentChat', () => {
       useAgentChat({
         sessionId: 'ses_1',
         token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
         createWebSocket: factory,
       }),
     );
@@ -193,6 +201,7 @@ describe('useAgentChat', () => {
       useAgentChat({
         sessionId: 'ses_1',
         token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
         createWebSocket: factory,
       }),
     );

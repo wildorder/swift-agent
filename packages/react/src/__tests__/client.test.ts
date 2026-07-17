@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createChatSession } from '../client.js';
 import type { ConnectionStatus } from '../types.js';
 
+// Canonical API-provided URL: already tokenized `wss://<host>/v1/stream?token=`.
+const CANONICAL_URL = 'wss://test.example.com/v1/stream?token=tok_abc';
+
 // ── Mock WebSocket ──────────────────────────────────────────────────
 
 class MockWebSocket {
@@ -57,7 +60,120 @@ class MockWebSocket {
   }
 }
 
-// ── Tests ───────────────────────────────────────────────────────────
+// ── URL construction ────────────────────────────────────────────────
+
+describe('createChatSession URL construction', () => {
+  let instances: MockWebSocket[];
+  let factory: (url: string) => WebSocket;
+
+  beforeEach(() => {
+    instances = [];
+    factory = (url: string) => {
+      const ws = new MockWebSocket(url);
+      instances.push(ws);
+      return ws as unknown as WebSocket;
+    };
+  });
+
+  it('uses the API-provided websocketUrl verbatim (no sessionId, no second token)', () => {
+    createChatSession({
+      sessionId: 'ses_123',
+      token: 'tok_ignored',
+      websocketUrl: CANONICAL_URL,
+      createWebSocket: factory,
+    });
+
+    expect(instances).toHaveLength(1);
+    const ws0 = instances[0] as MockWebSocket;
+    // Exactly the URL the API returned — untouched.
+    expect(ws0.url).toBe(CANONICAL_URL);
+
+    const parsed = new URL(ws0.url);
+    expect(parsed.searchParams.getAll('token')).toEqual(['tok_abc']);
+    expect(parsed.searchParams.has('sessionId')).toBe(false);
+    // Single '?' — no double-'?' regression.
+    expect(ws0.url.split('?')).toHaveLength(2);
+  });
+
+  it('safely appends token when the base URL has no query', () => {
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'abc',
+      websocketUrl: 'wss://host/v1/stream',
+      createWebSocket: factory,
+    });
+
+    const ws0 = instances[0] as MockWebSocket;
+    const parsed = new URL(ws0.url);
+    expect(ws0.url.split('?')).toHaveLength(2); // exactly one '?'
+    expect(parsed.searchParams.get('token')).toBe('abc');
+    expect(parsed.searchParams.has('sessionId')).toBe(false);
+  });
+
+  it('safely appends token when the base URL already has an unrelated query param', () => {
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'abc',
+      websocketUrl: 'wss://host/v1/stream?region=us',
+      createWebSocket: factory,
+    });
+
+    const ws0 = instances[0] as MockWebSocket;
+    const parsed = new URL(ws0.url);
+    // Params joined by '&' under a single '?', proving no double-'?'.
+    expect(ws0.url.split('?')).toHaveLength(2);
+    expect(ws0.url).toContain('&');
+    expect(parsed.searchParams.get('region')).toBe('us');
+    expect(parsed.searchParams.get('token')).toBe('abc');
+    expect(parsed.searchParams.has('sessionId')).toBe(false);
+  });
+
+  it('never emits a sessionId query parameter across construction paths', () => {
+    const cases = [
+      CANONICAL_URL,
+      'wss://host/v1/stream',
+      'wss://host/v1/stream?region=us',
+    ];
+    for (const websocketUrl of cases) {
+      instances = [];
+      createChatSession({
+        sessionId: 'ses_should_not_appear',
+        token: 'abc',
+        websocketUrl,
+        createWebSocket: factory,
+      });
+      const ws0 = instances[0] as MockWebSocket;
+      expect(new URL(ws0.url).searchParams.has('sessionId')).toBe(false);
+      expect(ws0.url).not.toContain('sessionId');
+    }
+  });
+
+  it('throws (no hardcoded /ws default) when websocketUrl is missing', () => {
+    expect(() =>
+      createChatSession({
+        sessionId: 'ses_1',
+        token: 'tok_1',
+        createWebSocket: factory,
+      }),
+    ).toThrow(/requires a websocketUrl/);
+    // No stray connection was opened.
+    expect(instances).toHaveLength(0);
+  });
+
+  it('throws on an unparseable websocketUrl instead of passing garbage to the socket', () => {
+    expect(() =>
+      createChatSession({
+        sessionId: 'ses_1',
+        token: 'tok_1',
+        websocketUrl: 'not a url',
+        createWebSocket: factory,
+      }),
+    ).toThrow(/invalid websocketUrl/);
+    expect(instances).toHaveLength(0);
+  });
+});
+
+// ── Lifecycle & messaging ───────────────────────────────────────────
 
 describe('createChatSession', () => {
   let instances: MockWebSocket[];
@@ -77,19 +193,17 @@ describe('createChatSession', () => {
     vi.useRealTimers();
   });
 
-  it('connects with the correct URL including sessionId and token', () => {
+  it('connects to the canonical URL verbatim', () => {
     createChatSession({
       sessionId: 'ses_123',
       token: 'tok_abc',
-      websocketUrl: 'wss://test.example.com/ws',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
     });
 
     expect(instances).toHaveLength(1);
     const ws0 = instances[0] as MockWebSocket;
-    expect(ws0.url).toBe(
-      'wss://test.example.com/ws?sessionId=ses_123&token=tok_abc',
-    );
+    expect(ws0.url).toBe(CANONICAL_URL);
   });
 
   it('transitions connecting → connected on open', () => {
@@ -97,6 +211,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
     }) as ReturnType<typeof createChatSession> & {
       onStatusChange: (h: (s: ConnectionStatus) => void) => () => void;
@@ -115,6 +230,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
     });
 
@@ -142,6 +258,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
       onError: (err) => errors.push(err),
     });
@@ -158,6 +275,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
     });
 
@@ -176,6 +294,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
       reconnect: { maxRetries: 3, baseDelayMs: 100 },
     });
@@ -199,6 +318,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
     });
 
@@ -230,6 +350,7 @@ describe('createChatSession', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
     });
 
@@ -265,6 +386,7 @@ describe('reconnection', () => {
     createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
       reconnect: { maxRetries: 3, baseDelayMs: 100 },
     });
@@ -293,10 +415,31 @@ describe('reconnection', () => {
     expect(instances).toHaveLength(4); // no more
   });
 
+  it('reconnects to the same correctly-constructed URL', () => {
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
+      createWebSocket: factory,
+      reconnect: { maxRetries: 3, baseDelayMs: 100 },
+    });
+
+    (instances[0] as MockWebSocket).simulateOpen();
+    (instances[0] as MockWebSocket).simulateClose();
+    vi.advanceTimersByTime(100);
+
+    expect(instances).toHaveLength(2);
+    const ws1 = instances[1] as MockWebSocket;
+    // Reconnect reuses the exact same URL — no re-appended token/sessionId.
+    expect(ws1.url).toBe(CANONICAL_URL);
+    expect(ws1.url).toBe((instances[0] as MockWebSocket).url);
+  });
+
   it('flushes queued messages after reconnect', () => {
     const client = createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
       reconnect: { maxRetries: 3, baseDelayMs: 100 },
     });
@@ -325,6 +468,7 @@ describe('reconnection', () => {
     createChatSession({
       sessionId: 'ses_1',
       token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
       createWebSocket: factory,
       reconnect: { maxRetries: 2, baseDelayMs: 100 },
     });

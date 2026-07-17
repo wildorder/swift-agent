@@ -30,8 +30,26 @@ export interface ReconnectOptions {
 
 /** Options for creating a vanilla JS chat session */
 export interface CreateChatSessionOptions {
+  /**
+   * Session identifier used for message-id correlation only. It is NOT used for
+   * URL construction — the gateway derives `sessionId` from the JWT claims, so
+   * do not restore it as a query parameter.
+   */
   sessionId: string;
+  /**
+   * Fallback client JWT. Only appended when `websocketUrl` is a bare base URL
+   * without a `token` query param. When `websocketUrl` is the canonical
+   * API-provided URL (which already embeds the token), this is ignored for URL
+   * construction.
+   */
   token: string;
+  /**
+   * The canonical WebSocket URL and source of truth for the connection: the
+   * `wss://<host>/v1/stream?token=<jwt>` value returned by `POST /v1/sessions`.
+   * Used verbatim when it already carries a `token` param. Optional at the type
+   * level for backward compatibility, but effectively required: a missing/empty
+   * value throws at runtime (there is no hardcoded default).
+   */
   websocketUrl?: string;
   reconnect?: ReconnectOptions;
   /** Injectable WebSocket factory for testing */

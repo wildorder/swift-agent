@@ -189,13 +189,19 @@ const session = await agentClient.sessions.create({
 
 ### Frontend: React Hook
 
+Pass the `websocketUrl` returned by `POST /v1/sessions` directly into the
+client — it is the canonical, ready-to-connect `wss://<host>/v1/stream?token=<jwt>`
+URL. The gateway reads only the `token` query param and derives the session
+from its JWT claims, so no other connection wiring is required.
+
 ```typescript
 import { useAgentChat } from "@swiftagent/react";
 
-function ChatPanel({ sessionId, token }) {
+function ChatPanel({ sessionId, token, websocketUrl }) {
   const { messages, send, isStreaming, connectionStatus } = useAgentChat({
     sessionId,
     token,
+    websocketUrl,
   });
 
   return (
@@ -228,8 +234,8 @@ function ChatPanel({ sessionId, token }) {
 
 | Function                                  | Purpose                                                                                   |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `useAgentChat({ sessionId, token })`      | React hook. Returns `messages`, `send()`, `isStreaming`, `connectionStatus`, `lastError`. |
-| `createChatSession({ sessionId, token })` | Vanilla JS client. Returns `sendMessage()`, `onEvent()`, `disconnect()`.                  |
+| `useAgentChat({ sessionId, token, websocketUrl })`      | React hook. `websocketUrl` is the canonical URL from `POST /v1/sessions`. Returns `messages`, `send()`, `isStreaming`, `connectionStatus`, `lastError`. |
+| `createChatSession({ sessionId, token, websocketUrl })` | Vanilla JS client. Connects to the API-provided `websocketUrl` verbatim. Returns `sendMessage()`, `onEvent()`, `disconnect()`.                  |
 
 ### Key Types
 

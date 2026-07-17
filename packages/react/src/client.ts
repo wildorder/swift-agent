@@ -6,25 +6,72 @@ import type {
   CreateChatSessionOptions,
 } from './types.js';
 
-const DEFAULT_WS_URL = 'wss://api.swiftagent.dev/ws';
 const DEFAULT_MAX_RETRIES = 5;
 const DEFAULT_BASE_DELAY_MS = 1000;
+
+/**
+ * Resolve the canonical WebSocket URL the socket factory should connect to.
+ *
+ * The source of truth is the `websocketUrl` returned by `POST /v1/sessions`,
+ * which is already the fully-tokenized canonical form
+ * `wss://<host>/v1/stream?token=<jwt>`. When present, it is used verbatim.
+ *
+ * The gateway reads ONLY `?token=` from the query and derives `sessionId` from
+ * the JWT claims — so we never append `sessionId` (it would be dead weight and
+ * leak the id into logs/proxies). When a bare base URL is supplied without a
+ * token, the `token` option is appended via the `URL`/`URLSearchParams` API,
+ * which handles encoding and the `?`-vs-`&` separator correctly (no double-`?`).
+ *
+ * There is deliberately no hardcoded default: a wrong production-looking default
+ * (the old `wss://api.swiftagent.dev/ws`) silently masks misconfiguration. A
+ * missing/empty `websocketUrl` fails loudly instead — the real flow always
+ * supplies it from session creation.
+ */
+function resolveConnectionUrl(
+  websocketUrl: string | undefined,
+  token: string,
+): string {
+  if (!websocketUrl) {
+    throw new Error(
+      'createChatSession requires a websocketUrl (the value returned by POST /v1/sessions)',
+    );
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(websocketUrl);
+  } catch {
+    throw new Error(
+      `createChatSession received an invalid websocketUrl: ${websocketUrl}`,
+    );
+  }
+
+  // API-provided happy path: already tokenized → connect to it unchanged.
+  if (parsed.searchParams.has('token')) {
+    return websocketUrl;
+  }
+
+  // Fallback: bare base URL + separate token option → append safely.
+  if (token) {
+    parsed.searchParams.set('token', token);
+  }
+  return parsed.toString();
+}
 
 export function createChatSession(
   opts: CreateChatSessionOptions,
 ): ChatSessionClient {
-  const {
-    sessionId,
-    token,
-    websocketUrl = DEFAULT_WS_URL,
-    reconnect,
-    onError,
-  } = opts;
+  const { token, websocketUrl, reconnect, onError } = opts;
+
+  // Resolve the connection URL up front so misconfiguration (missing/invalid
+  // URL) fails loudly at construction time, before any socket is opened. The
+  // URL is constant across reconnects, so we compute it once here.
+  const url = resolveConnectionUrl(websocketUrl, token);
 
   const maxRetries = reconnect?.maxRetries ?? DEFAULT_MAX_RETRIES;
   const baseDelayMs = reconnect?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
   const factory =
-    opts.createWebSocket ?? ((url: string) => new WebSocket(url));
+    opts.createWebSocket ?? ((wsUrl: string) => new WebSocket(wsUrl));
 
   let ws: WebSocket | null = null;
   let status: ConnectionStatus = 'disconnected';
@@ -45,7 +92,6 @@ export function createChatSession(
     if (intentionalClose) return;
 
     setStatus('connecting');
-    const url = `${websocketUrl}?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}`;
     ws = factory(url);
 
     ws.onopen = (): void => {
