@@ -26,6 +26,10 @@ export interface RunSpan {
  * trace + all spans via the `TraceSink`.
  */
 export interface RunTrace {
+  /** Trace id, surfaced for structured finalize logging (WS-28, SC-09). The
+   *  concrete `RunTraceContext` always provides it; optional here so in-memory
+   *  test spies need not. */
+  readonly traceId?: string;
   startModelCall(modelName: string): RunSpan;
   startToolCall(toolName: string, callId: string): RunSpan;
   finish(status: 'ok' | 'error', error?: Error): Promise<void>;

@@ -26,6 +26,7 @@ import { registerSessionRoutes } from './routes/sessions.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTraceRoutes } from './routes/traces.js';
+import { registerMetricsRoutes } from './routes/metrics.js';
 import type { RunExecutionService } from '@swiftagent/runtime';
 
 export interface BuildAppOptions {
@@ -110,6 +111,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
       registerMessageRoutes(v1, sessionService);
       registerRunRoutes(v1, sessionService);
       registerTraceRoutes(v1, { traceRepo: opts.repos.traceRepo, sessionService });
+      registerMetricsRoutes(v1, { traceRepo: opts.repos.traceRepo, sessionService });
     },
     { prefix: '/v1' },
   );

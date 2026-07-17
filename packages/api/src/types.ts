@@ -74,6 +74,22 @@ export const AcceptedRunResponseSchema = z.object({
 }).strict();
 export type AcceptedRunResponse = z.infer<typeof AcceptedRunResponseSchema>;
 
+// ── Run metrics response ───────────────────────────────────────────
+// Derived-on-read roll-up of a run's persisted spans (WS-28). `runId` +
+// `traceId` are added beyond the raw `RunMetrics` fields for client correlation.
+export const RunMetricsResponseSchema = z.object({
+  runId: z.string(),
+  traceId: z.string(),
+  totalRunDurationMs: z.number().nullable(),
+  timeToFirstTokenMs: z.number().nullable(),
+  modelCallCount: z.number().int().nonnegative(),
+  toolCallCount: z.number().int().nonnegative(),
+  totalModelLatencyMs: z.number().nonnegative(),
+  totalToolLatencyMs: z.number().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+}).strict();
+export type RunMetricsResponse = z.infer<typeof RunMetricsResponseSchema>;
+
 // ── Session creation response ──────────────────────────────────────
 export const CreateSessionResponseSchema = z.object({
   sessionId: z.string(),

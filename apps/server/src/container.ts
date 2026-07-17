@@ -40,6 +40,7 @@ import {
   type RunExecutionService,
   type RunnerSigningKey,
   type OutboundUrlPolicy,
+  type Logger,
 } from '@swiftagent/runtime';
 import {
   createTokenService,
@@ -202,6 +203,14 @@ export function buildContainer(config: ServerConfig): Container {
       });
     },
   });
+  // WS-28: a thin console-backed logger so the loop's finalize logging is live
+  // in production. Structured `data` is passed through as a second argument.
+  const engineLogger: Logger = {
+    info: (msg, data) => console.info(msg, data ?? {}),
+    warn: (msg, data) => console.warn(msg, data ?? {}),
+    error: (msg, data) => console.error(msg, data ?? {}),
+  };
+
   const engineDeps: AgentEngineDeps = {
     db: {
       messages: repos.messageRepo,
@@ -217,6 +226,9 @@ export function buildContainer(config: ServerConfig): Container {
     // instantiated but never passed in). This is what makes
     // `GET /v1/runs/:runId/trace` return real spans (SC-15).
     tracer,
+    // WS-28: surface trace-write failures through the runtime logger instead of
+    // swallowing them (SC-09).
+    logger: engineLogger,
   };
   const engine = new AgentEngine(engineDeps);
 

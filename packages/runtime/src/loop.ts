@@ -182,6 +182,13 @@ export async function* runAgentLoop(
               break;
           }
         }
+        // Record token usage on the model span so `deriveRunMetrics` sums real
+        // tokens (WS-28, SC-08). The `runs.complete(...)` write below remains the
+        // authoritative persisted total; this is the span-derived source.
+        modelSpan?.addMetadata({
+          promptTokens: lastUsage.inputTokens ?? 0,
+          completionTokens: lastUsage.outputTokens ?? 0,
+        });
         modelSpan?.end('ok');
       } catch (err) {
         modelSpan?.end('error', asError(err));
@@ -457,6 +464,24 @@ export async function* runAgentLoop(
     for (const callId of openToolCalls) {
       await safe(() => deps.db.toolCalls.fail(callId));
     }
-    await safe(() => trace?.finish(traceStatus, traceError));
+    // Trace persistence is best-effort but NOT silent (WS-28, SC-09): a failed
+    // write is logged with structured context via `deps.logger` (falling back to
+    // `console.warn`) instead of being swallowed. It must still never throw — a
+    // thrown finalize would mask the real terminal cause.
+    try {
+      await trace?.finish(traceStatus, traceError);
+    } catch (finishErr) {
+      const fields = {
+        runId: ctx.runId,
+        traceId: trace?.traceId,
+        err: asError(finishErr).message,
+      };
+      if (deps.logger) {
+        deps.logger.warn('trace persistence failed', fields);
+      } else {
+        // Last-resort diagnostic when no logger is wired.
+        console.warn('trace persistence failed', fields);
+      }
+    }
   }
 }
