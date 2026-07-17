@@ -4,6 +4,9 @@ export const PACKAGE_NAME = 'gateway' as const;
 export { createGatewayServer, startGateway } from './server.js';
 export type { GatewayContext } from './server.js';
 
+// Plugin (unified realtime server — mounts onto a host Fastify app)
+export { registerGatewayPlugin } from './plugin.js';
+
 // Types
 export type {
   ChatEvent,
@@ -12,6 +15,8 @@ export type {
   PingMessage,
   ErrorEvent,
   GatewayConfig,
+  GatewayPluginConfig,
+  GatewayComponents,
   RuntimeDelegate,
   AuthenticatedSocket,
 } from './types.js';

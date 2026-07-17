@@ -52,6 +52,17 @@ export interface BuildAppOptions {
   /** Optional override for JWT key resolution — use `createLocalJWKSet` in tests. */
   cognitoGetKey?: JWTVerifyGetKey;
   logger?: boolean | object;
+  /**
+   * Whether to register the unprefixed root `/health` route. Default: true.
+   *
+   * The unified server (WS-30) mounts a richer *composed* health check at root
+   * — one that also reports DB, Redis, and live gateway connection counts (see
+   * `apps/server/src/health.ts`). Fastify rejects two routes on the same path
+   * (`FST_ERR_DUPLICATED_ROUTE`), so the host opts out of this plain root
+   * `/health` (`registerRootHealth: false`) and owns the composed one instead.
+   * `/v1/health` is always registered regardless.
+   */
+  registerRootHealth?: boolean;
 }
 
 export interface AppContext {
@@ -96,7 +107,10 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
 
   // Root-level health check (unprefixed) for load balancers / probes. Auth is
   // skipped for `/health` via SKIP_AUTH_PATHS; `/v1/health` is also served below.
-  registerHealthRoutes(app);
+  // Opt-out for hosts that mount their own composed root `/health` (WS-30).
+  if (opts.registerRootHealth ?? true) {
+    registerHealthRoutes(app);
+  }
 
   // Routes — prefix /v1
   await app.register(

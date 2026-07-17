@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ENV_KEYS } from '@swiftagent/shared';
 import { buildApp, type AppContext } from '@swiftagent/api';
-import { createGatewayServer, type GatewayContext } from '@swiftagent/gateway';
+import { registerGatewayPlugin, type GatewayComponents } from '@swiftagent/gateway';
 import { loadServerConfig, redactConfig, type ServerConfig } from './config.js';
 import { buildContainer, type Container } from './container.js';
 import { registerHealthCheck } from './health.js';
@@ -15,7 +15,7 @@ export interface ServerContext {
   config: ServerConfig;
   container: Container;
   api: AppContext;
-  gateway: GatewayContext;
+  gateway: GatewayComponents;
 }
 
 // ── Start server ──────────────────────────────────────────────────────
@@ -63,19 +63,26 @@ export async function startServer(): Promise<ServerContext> {
     cognitoIssuerUrl: config[ENV_KEYS.COGNITO_ISSUER_URL],
     cognitoClientId: config[ENV_KEYS.COGNITO_CLIENT_ID],
     logger: { level: 'info' },
+    // The server owns the root `/health` via the composed health check below
+    // (reports DB + Redis + live gateway connections). Opt out of buildApp's
+    // plain root `/health` so the two don't collide (FST_ERR_DUPLICATED_ROUTE).
+    registerRootHealth: false,
   });
 
-  // 5. Build WebSocket gateway — wired to the SAME run execution service as the
-  // REST API, so both entry points share one session lock + active-run registry.
+  // 5. Mount the WebSocket gateway ONTO the API app (unified realtime server,
+  // WS-30 / AD-01). REST and WS are served from one Fastify instance on one
+  // public port, so `/v1/stream` is reachable through the same ALB target as
+  // REST. The gateway is wired to the SAME run execution service as the REST
+  // API, so both entry points share one session lock + active-run registry.
   const redisUrl = config[ENV_KEYS.REDIS_URL];
   const redisEnabled = !!redisUrl;
-  const gateway = await createGatewayServer(
+  const gateway = await registerGatewayPlugin(
+    api.app,
     {
       jwtSecret: config[ENV_KEYS.CLIENT_JWT_SECRET],
-      port: config[ENV_KEYS.GATEWAY_PORT],
       redisUrl: redisEnabled ? redisUrl : undefined,
       redisEnabled,
-      logger: { level: 'info' },
+      // no port / no logger — the API app owns both
     },
     container.runExecutionService, // RunExecutionService satisfies RuntimeDelegate
   );
@@ -85,39 +92,42 @@ export async function startServer(): Promise<ServerContext> {
     dbClient: container.dbClient,
     connectionManager: gateway.connectionManager,
     redisEnabled,
+    redisPing: gateway.redisPing,
   });
 
-  // 7. Start listening
+  // 7. Start listening — a SINGLE public listener serving REST + WS (SC-01).
   await api.app.listen({ port: apiPort, host: '0.0.0.0' });
-  const gatewayPort = config[ENV_KEYS.GATEWAY_PORT];
-  await gateway.app.listen({ port: gatewayPort, host: '0.0.0.0' });
 
-  // 8. Startup banner
+  // 8. Startup banner. GATEWAY_PORT is intentionally not shown as a listening
+  // port — the unified server binds only API_PORT. GATEWAY_PORT remains valid
+  // for the standalone gateway (local dev / tests) but is inert here.
   const summary = redactConfig(config);
   console.log('\n──────────────────────────────────────');
   console.log('  Swift Agent Server');
   console.log('──────────────────────────────────────');
-  console.log(`  API Port:       ${apiPort}`);
-  console.log(`  Gateway Port:   ${gatewayPort}`);
+  console.log(`  Port:           ${apiPort} (REST + WebSocket)`);
   console.log(`  Providers:      ${container.registeredProviders.join(', ') || '(none)'}`);
   console.log(`  Redis:          ${redisEnabled ? 'enabled' : 'disabled'}`);
   console.log(`  Auto Migrate:   ${config.AUTO_MIGRATE}`);
   console.log(`  Config:         ${JSON.stringify(summary)}`);
   console.log('──────────────────────────────────────\n');
 
-  // 9. Graceful shutdown handlers
+  // 9. Graceful shutdown — a SINGLE consolidated path (SC-05). The gateway
+  // plugin registers no signal handlers, so there is no duplicate handler set.
   const shutdown = async (signal: string) => {
     console.log(`\nReceived ${signal}. Shutting down gracefully...`);
 
-    // a. Stop accepting new connections
-    await gateway.app.close();
-    await api.app.close();
-
-    // b. Drain active WebSocket connections
+    // a. Drain active WebSocket connections with a graceful 1001 FIRST. This
+    // must precede `api.app.close()`: closing the HTTP server tears sockets down
+    // at the transport level, so clients would otherwise observe a codeless 1005
+    // instead of the intended 1001 "going away".
     gateway.connectionManager.closeAll(1001, 'Server shutting down');
 
-    // c. Clear heartbeat timers
+    // b. Clear heartbeat timers
     gateway.heartbeat.clear();
+
+    // c. Stop accepting new connections
+    await api.app.close();
 
     // d. Shutdown session bridge (Redis cleanup)
     await gateway.sessionBridge.shutdown();

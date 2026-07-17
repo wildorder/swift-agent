@@ -83,7 +83,10 @@ export function redactConfig(config: ServerConfig): Record<string, string> {
     GOOGLE_API_KEY: redact(config[ENV_KEYS.GOOGLE_API_KEY]),
     PUBLIC_WEBSOCKET_URL: config[ENV_KEYS.PUBLIC_WEBSOCKET_URL] ?? '(not set)',
     API_PORT: String(config[ENV_KEYS.API_PORT]),
-    GATEWAY_PORT: String(config[ENV_KEYS.GATEWAY_PORT]),
+    // GATEWAY_PORT is retained in ENV_KEYS for the standalone gateway (local
+    // dev / tests), but the unified server (WS-30) binds only API_PORT — it is
+    // not a second listening port, so the banner marks it local-only.
+    GATEWAY_PORT: '(local-only)',
     AUTO_MIGRATE: String(config.AUTO_MIGRATE),
   };
 }

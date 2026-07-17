@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import type { ChatEvent } from '@swiftagent/shared';
+import type { ConnectionManager } from './connection-manager.js';
+import type { SessionBridge } from './session-bridge.js';
+import type { HeartbeatManager } from './heartbeat.js';
 
 // Re-export ChatEvent for gateway consumers
 export type { ChatEvent } from '@swiftagent/shared';
@@ -65,6 +68,49 @@ export interface GatewayConfig {
 
   /** Max buffered events per run for reconnection replay. Default: 200 */
   maxReplayBufferSize?: number;
+}
+
+// ── Gateway plugin configuration ───────────────────────────────────────
+
+/**
+ * Config for the plugin form (`registerGatewayPlugin`): the host (API) app owns
+ * the port and the logger, so neither appears here. Used when the gateway
+ * mounts onto an existing Fastify instance rather than creating its own.
+ */
+export interface GatewayPluginConfig {
+  /** JWT secret for client token validation */
+  jwtSecret: string;
+
+  /** Redis URL for pub/sub. Optional — when absent, pub/sub is a no-op */
+  redisUrl?: string;
+
+  /** Whether Redis pub/sub is enabled. Default: false */
+  redisEnabled?: boolean;
+
+  /** Heartbeat timeout in ms. Default: 30000 */
+  heartbeatTimeoutMs?: number;
+
+  /** Max buffered events per run for reconnection replay. Default: 200 */
+  maxReplayBufferSize?: number;
+}
+
+// ── Gateway components (plugin return value) ────────────────────────────
+
+/**
+ * Components returned by `registerGatewayPlugin`. The host app drives their
+ * lifecycle (shutdown, health). Unlike `GatewayContext`, this omits `app` (the
+ * host owns the server) and adds `redisPing`.
+ */
+export interface GatewayComponents {
+  connectionManager: ConnectionManager;
+  sessionBridge: SessionBridge;
+  heartbeat: HeartbeatManager;
+  /**
+   * Best-effort Redis liveness for the health check. Returns true when Redis
+   * is disabled. WS-33 replaces the body with a real PING; the field shape is
+   * frozen here so WS-33 does not change this contract.
+   */
+  redisPing: () => Promise<boolean>;
 }
 
 // ── Runtime delegate ───────────────────────────────────────────────────

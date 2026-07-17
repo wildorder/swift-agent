@@ -92,7 +92,9 @@ describe('redactConfig', () => {
     expect(summary.CLIENT_JWT_SECRET).toBe('***');
     expect(summary.OPENAI_API_KEY).toBe('***');
     expect(summary.API_PORT).toBe('3000');
-    expect(summary.GATEWAY_PORT).toBe('3001');
+    // Unified server (WS-30) binds only API_PORT; GATEWAY_PORT is marked
+    // local-only in the banner rather than shown as a second listening port.
+    expect(summary.GATEWAY_PORT).toBe('(local-only)');
     expect(summary.REDIS_URL).toBe('(disabled)');
   });
 });

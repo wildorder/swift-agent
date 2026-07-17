@@ -30,7 +30,7 @@ vi.mock('../config.js', () => ({
 // Hoisted so the (hoisted-above-imports) vi.mock factories below can reference
 // these spies without hitting a temporal-dead-zone error, while the test body
 // can still assert on them.
-const { mockClose, mockListen, mockApiApp, mockGatewayApp } = vi.hoisted(() => {
+const { mockClose, mockListen, mockApiApp } = vi.hoisted(() => {
   const listen = vi.fn(async () => {});
   return {
     mockClose: vi.fn(async () => {}),
@@ -40,10 +40,6 @@ const { mockClose, mockListen, mockApiApp, mockGatewayApp } = vi.hoisted(() => {
       close: vi.fn(async () => {}),
       get: vi.fn(),
       inject: vi.fn(),
-    },
-    mockGatewayApp: {
-      listen,
-      close: vi.fn(async () => {}),
     },
   };
 });
@@ -83,11 +79,13 @@ vi.mock('@swiftagent/api', () => ({
 }));
 
 vi.mock('@swiftagent/gateway', () => ({
-  createGatewayServer: vi.fn(async () => ({
-    app: mockGatewayApp,
+  // WS-30: main.ts mounts the gateway onto the API app via registerGatewayPlugin
+  // (no second Fastify app, no second listen). Returns a GatewayComponents shape.
+  registerGatewayPlugin: vi.fn(async () => ({
     connectionManager: { closeAll: vi.fn(), connectionCount: vi.fn(() => 0) },
     sessionBridge: { shutdown: vi.fn(async () => {}) },
     heartbeat: { clear: vi.fn() },
+    redisPing: vi.fn(async () => true),
   })),
   ConnectionManager: vi.fn(),
 }));
@@ -111,9 +109,10 @@ describe('startServer', () => {
     expect(ctx.gateway).toBeDefined();
   });
 
-  it('calls listen on both API and gateway servers', async () => {
+  it('calls listen exactly once (unified REST + WS server)', async () => {
     await startServer();
-    // listen is called twice: once for API, once for gateway
-    expect(mockListen).toHaveBeenCalledTimes(2);
+    // WS-30: a single Fastify instance serves REST + WebSocket on one port, so
+    // listen is called exactly once (no separate gateway listener).
+    expect(mockListen).toHaveBeenCalledTimes(1);
   });
 });

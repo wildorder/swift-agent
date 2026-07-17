@@ -4,7 +4,10 @@ import type { ApiKeyRepo } from '@swiftagent/db';
 import { SwiftAgentError } from '@swiftagent/shared';
 import type { AuthenticatedRequest } from '../types.js';
 
-const SKIP_AUTH_PATHS = new Set(['/health', '/v1/health']);
+// `/v1/stream` is the unified WebSocket gateway route (WS-30). It authenticates
+// via a short-lived client JWT in the `?token=` query param inside the WS
+// handler — NOT via an API-key Bearer header — so it must bypass this hook.
+const SKIP_AUTH_PATHS = new Set(['/health', '/v1/health', '/v1/stream']);
 const SKIP_AUTH_PREFIXES = ['/v1/management'];
 
 function hashApiKey(key: string): string {
