@@ -61,6 +61,20 @@ variable "ssm_parameter_arns" {
   type        = map(string)
 }
 
+variable "migrate_skip_drift_check" {
+  description = <<-EOT
+    Escape hatch for the operator-driven migration reconciliation path ONLY.
+    When set to "1", the migrate CLI bypasses its drift preflight (see WS-26).
+    Leave "" in normal operation. Injected as the MIGRATE_SKIP_DRIFT_CHECK
+    container env only when non-empty; the running server never migrates, so
+    it is inert for normal traffic. Prefer flipping it per-invocation via a
+    RunTask containerOverrides.environment entry over setting it here — see
+    docs/runbooks/migrations.md. NEVER leave it enabled.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "log_group_name" {
   description = "CloudWatch log group name for container logs"
   type        = string

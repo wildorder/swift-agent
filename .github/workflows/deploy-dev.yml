@@ -108,6 +108,12 @@ jobs:
             --cluster $ECS_CLUSTER \
             --services $ECS_SERVICE
 
+      # Runs the identical migrator as local + CI (packages/db/dist/migrate.js,
+      # resolved from the image WORKDIR /app). Drift refusal is enforced by the
+      # migrator's own preflight (WS-26) — a diverged schema makes it exit
+      # non-zero, which the exitCode check below turns into a failed deploy. The
+      # only way to bypass the preflight is MIGRATE_SKIP_DRIFT_CHECK, reserved
+      # for the operator-driven reconciliation path — see docs/runbooks/migrations.md.
       - name: Run database migration
         run: |
           TASK_DEF=$(aws ecs describe-services \

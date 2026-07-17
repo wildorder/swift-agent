@@ -49,7 +49,16 @@ const SnapshotColumnSchema = z
     typeSchema: z.string().optional(),
     primaryKey: z.boolean().optional().default(false),
     notNull: z.boolean().optional().default(false),
-    default: z.string().optional(),
+    // drizzle-kit serializes a column's default in its native JSON type: a
+    // string for text/quoted SQL, but a raw boolean for `boolean(...).default(false)`
+    // and a number for numeric defaults. Accept all three scalar shapes and
+    // coerce to string so the downstream lenient-default comparison (which is
+    // string-based) stays correct. A string-only schema here crashes db:check
+    // and the migrate preflight (exit 2) on any boolean/numeric default.
+    default: z
+      .union([z.string(), z.number(), z.boolean()])
+      .transform((v) => String(v))
+      .optional(),
   })
   .passthrough();
 

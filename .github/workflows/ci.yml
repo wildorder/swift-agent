@@ -105,6 +105,23 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      # Dedicated, shell-reachable Postgres for the schema drift guard below.
+      # The integration TESTS get their own DB from Testcontainers INSIDE the
+      # test process (test/setup-db.ts), which is not reachable from a plain
+      # workflow step — so the guard needs this separate, deterministic DB it
+      # can point DATABASE_URL at and apply exactly the committed migrations to.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: swiftagent_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - name: Checkout
@@ -129,6 +146,23 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      # Runs BEFORE the integration tests to fail fast: applies exactly the
+      # committed migrations to a clean DB, then runs db:check against it.
+      # A freshly-migrated DB always matches the journal-implied schema, so a
+      # non-zero db:check here can ONLY mean a schema change was not captured as
+      # a generated migration (the author edited packages/db/src/schema/*.ts but
+      # forgot `pnpm db:generate`, or committed the schema edit but not the
+      # resulting 000N_*.sql + snapshot). There is no benign failure mode — do
+      # NOT silence a red build here; run `pnpm --filter @swiftagent/db db:generate`
+      # and commit the emitted migration + snapshot instead. See
+      # docs/runbooks/migrations.md.
+      - name: Schema drift guard
+        run: |
+          pnpm --filter @swiftagent/db migrate
+          pnpm --filter @swiftagent/db db:check
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/swiftagent_ci
 
       - name: Run integration tests
         run: pnpm test:integration
