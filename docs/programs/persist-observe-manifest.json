@@ -1,0 +1,174 @@
+{
+  "program": {
+    "id": "persist-observe",
+    "name": "Swift Agent — Persistence & Observability Reliability",
+    "description": "Make database evolution and run/trace observability production-safe: migration status/drift detection with a CI guard, a rollback + reconciliation runbook, a run-history/metrics API over persisted spans, trace-persistence hardening, and migration + observability integration tests.",
+    "status": "planning",
+    "created": "2026-07-16"
+  },
+  "technology": {},
+  "successCriteria": [
+    {
+      "id": "SC-01",
+      "description": "migrate status accurately reports applied and pending migrations by comparing the journal against the database's migration bookkeeping."
+    },
+    {
+      "id": "SC-02",
+      "description": "The drift check exits non-zero for a database whose live schema diverges from the journal baseline and zero for a clean match."
+    },
+    {
+      "id": "SC-03",
+      "description": "migrate refuses to apply when drift is detected, leaving the database unmodified."
+    },
+    {
+      "id": "SC-04",
+      "description": "CI fails the build when schema drift is present."
+    },
+    {
+      "id": "SC-05",
+      "description": "The deployed ECS migration task runs the same migrator and status gate as local and CI."
+    },
+    {
+      "id": "SC-06",
+      "description": "A documented runbook covers forward-fix rollback, snapshot/restore, and deployed-drift reconciliation, validated against a worked forward-fix example."
+    },
+    {
+      "id": "SC-07",
+      "description": "GET /v1/runs/:runId/metrics returns token usage, latency, and model/tool span counts derived from the run's persisted trace and spans, under workspace-ownership enforcement."
+    },
+    {
+      "id": "SC-08",
+      "description": "A run's model, tool, and error spans are persisted and reflected in both the trace-retrieval and metrics responses."
+    },
+    {
+      "id": "SC-09",
+      "description": "Trace-write failures are surfaced through structured logging with run/trace identifiers, and span metadata/error payloads are bounded before persistence."
+    },
+    {
+      "id": "SC-10",
+      "description": "Migration integration tests cover baseline application from empty, ordered incremental application, idempotent re-run, and drift detection against an injected divergence."
+    },
+    {
+      "id": "SC-11",
+      "description": "Observability integration tests cover model/tool/error span persistence, metrics-endpoint roll-ups, and failure-path trace finalization."
+    },
+    {
+      "id": "SC-12",
+      "description": "Monorepo type-checking, linting, unit tests, and runtime integration tests pass."
+    }
+  ],
+  "packages": [
+    {
+      "name": "@swiftagent/db",
+      "path": "packages/db",
+      "description": "Migration status reporter, schema drift detection, and migrate preflight guard layered on the existing greenfield baseline + migrator."
+    },
+    {
+      "name": "@swiftagent/observability",
+      "path": "packages/observability",
+      "description": "deriveRunMetrics surfaced for the metrics API; bounded span metadata/error payloads."
+    },
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "GET /v1/runs/:runId/metrics route + metrics assembly over persisted trace/spans and run token usage."
+    },
+    {
+      "name": "@swiftagent/runtime",
+      "path": "packages/runtime",
+      "description": "Structured logging of best-effort trace-write failures; token metadata on model spans so metrics roll-ups are populated."
+    },
+    {
+      "name": "apps/server",
+      "path": "apps/server",
+      "description": "Wire the metrics route/service and a structured logger into the container and route registration."
+    }
+  ],
+  "successCriteriaNotes": "core-runtime-completion already delivered the greenfield migration baseline, tracer wiring into the loop, atomic span persistence, and trace-retrieval APIs; this program hardens the operational edges only.",
+  "workstreams": [
+    {
+      "id": "WS-26",
+      "name": "Migration Status & Drift-Detection Command",
+      "taskFile": "tasks/persist-observe/ws-26-migration-status-drift.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "db-migration-baseline:WS-01",
+        "core-runtime-completion:WS-19",
+        "core-runtime-completion:WS-24"
+      ],
+      "packages": [
+        "packages/db"
+      ]
+    },
+    {
+      "id": "WS-27",
+      "name": "CI Drift Guard, Deploy Alignment & Rollback Runbook",
+      "taskFile": "tasks/persist-observe/ws-27-ci-guard-deploy-runbook.md",
+      "status": "not_started",
+      "size": "S",
+      "dependencies": [
+        "WS-26"
+      ],
+      "packages": [
+        "packages/db",
+        ".github/workflows",
+        "infra",
+        "docs/runbooks"
+      ]
+    },
+    {
+      "id": "WS-28",
+      "name": "Run History & Metrics API + Trace-Persistence Hardening",
+      "taskFile": "tasks/persist-observe/ws-28-run-metrics-api.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "core-runtime-completion:WS-23",
+        "core-runtime-completion:WS-24",
+        "product-x:WS-10"
+      ],
+      "packages": [
+        "packages/observability",
+        "packages/api",
+        "packages/runtime",
+        "packages/db",
+        "apps/server"
+      ]
+    },
+    {
+      "id": "WS-29",
+      "name": "Migration & Observability Integration Tests",
+      "taskFile": "tasks/persist-observe/ws-29-persist-observe-integration-tests.md",
+      "status": "not_started",
+      "size": "M",
+      "dependencies": [
+        "WS-26",
+        "WS-28"
+      ],
+      "packages": [
+        "test",
+        "test/support"
+      ]
+    }
+  ],
+  "runtimeEndpoints": [
+    {
+      "method": "GET",
+      "path": "/v1/runs/:runId/metrics",
+      "purpose": "Return token usage, latency, and model/tool span-count roll-ups derived from the run's persisted trace + spans, under workspace-ownership enforcement"
+    }
+  ],
+  "outOfScope": [
+    "Down/reverse migration commands (rollback is forward-fix + restore)",
+    "Automated reconciliation of a drifted deployed schema",
+    "At-least-once / retry / dead-letter trace persistence",
+    "New trace or span schema fields",
+    "Streaming or push delivery of metrics",
+    "Cost/pricing computation beyond token counts",
+    "Changes to the runtime loop control flow, providers, or executor resolution",
+    "Durable execution / run recovery across restarts",
+    "Public gateway load-balancer routing",
+    "Summary-memory implementation"
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "prevId": "00000000-0000-0000-0000-000000000001",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.runs": {
+      "name": "runs",
+      "schema": "",
+      "columns": {
+        "run_id": { "name": "run_id", "type": "text", "primaryKey": true, "notNull": true },
+        "session_id": { "name": "session_id", "type": "text", "primaryKey": false, "notNull": true },
+        "status": {
+          "name": "status", "type": "run_status", "typeSchema": "public",
+          "primaryKey": false, "notNull": true, "default": "'running'"
+        },
+        "model": { "name": "model", "type": "varchar(255)", "primaryKey": false, "notNull": true },
+        "token_usage": { "name": "token_usage", "type": "jsonb", "primaryKey": false, "notNull": false },
+        "created_at": {
+          "name": "created_at", "type": "timestamp with time zone",
+          "primaryKey": false, "notNull": true, "default": "now()"
+        }
+      },
+      "indexes": {
+        "runs_session_id_idx": {
+          "name": "runs_session_id_idx",
+          "columns": [{ "expression": "session_id", "isExpression": false, "asc": true, "nulls": "last" }],
+          "isUnique": false, "concurrently": false, "method": "btree", "with": {}
+        }
+      },
+      "foreignKeys": {
+        "runs_session_id_sessions_session_id_fk": {
+          "name": "runs_session_id_sessions_session_id_fk",
+          "tableFrom": "runs", "tableTo": "sessions",
+          "columnsFrom": ["session_id"], "columnsTo": ["session_id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {}, "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    },
+    "public.traces": {
+      "name": "traces",
+      "schema": "",
+      "columns": {
+        "trace_id": { "name": "trace_id", "type": "text", "primaryKey": true, "notNull": true },
+        "run_id": { "name": "run_id", "type": "text", "primaryKey": false, "notNull": true }
+      },
+      "indexes": {
+        "traces_run_id_idx": {
+          "name": "traces_run_id_idx",
+          "columns": [{ "expression": "run_id", "isExpression": false, "asc": true, "nulls": "last" }],
+          "isUnique": true, "concurrently": false, "method": "btree", "with": {}
+        }
+      },
+      "foreignKeys": {
+        "traces_run_id_runs_run_id_fk": {
+          "name": "traces_run_id_runs_run_id_fk",
+          "tableFrom": "traces", "tableTo": "runs",
+          "columnsFrom": ["run_id"], "columnsTo": ["run_id"],
+          "onDelete": "no action", "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {}, "uniqueConstraints": {}, "policies": {}, "checkConstraints": {}, "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.run_status": {
+      "name": "run_status", "schema": "public",
+      "values": ["running", "completed", "failed", "cancelled", "timed_out"]
+    }
+  },
+  "schemas": {}, "sequences": {}, "roles": {}, "policies": {}, "views": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}
