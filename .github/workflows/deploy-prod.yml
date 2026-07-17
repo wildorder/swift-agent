@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  ECR_REPOSITORY: swiftagent
+  ECR_REPOSITORY: swiftagent/server
   ECS_CLUSTER: prod-swiftagent
   ECS_SERVICE: prod-swiftagent
   ENVIRONMENT: prod
@@ -37,6 +37,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names $ECR_REPOSITORY 2>/dev/null || \
+            aws ecr create-repository --repository-name $ECR_REPOSITORY --image-scanning-configuration scanOnPush=true
+
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
@@ -47,7 +52,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           IMAGE_TAG: prod-${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -f apps/server/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
@@ -139,6 +144,34 @@ jobs:
             exit 1
           fi
           echo "Smoke test passed"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Realtime smoke test
+        # Proves the deployed realtime path end-to-end: POST /v1/sessions (API-key)
+        # → WS connect to the returned websocketUrl (/v1/stream?token=) → send_message
+        # → assert message_started → token(s) → message_completed. A failure here
+        # BLOCKS the deploy (and the release tag below). See WS-35 / docs quickstart (WS-34).
+        env:
+          SMOKE_BASE_URL: https://api.swiftagent.dev
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          SMOKE_AGENT_NAME: smoke-echo
+        run: pnpm smoke:realtime
 
       - name: Tag image with release version
         if: github.event_name == 'release'

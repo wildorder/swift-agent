@@ -170,6 +170,34 @@ jobs:
           fi
           echo "Smoke test passed"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Realtime smoke test
+        # Proves the deployed realtime path end-to-end: POST /v1/sessions (API-key)
+        # → WS connect to the returned websocketUrl (/v1/stream?token=) → send_message
+        # → assert message_started → token(s) → message_completed. A failure here
+        # BLOCKS the deploy. See WS-35 / docs quickstart (WS-34).
+        env:
+          SMOKE_BASE_URL: http://${{ steps.tf-outputs.outputs.alb_dns_name }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          SMOKE_AGENT_NAME: smoke-echo
+        run: pnpm smoke:realtime
+
       - name: Notify deployment
         if: always()
         run: |

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "paths": {
+      "@swiftagent/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["realtime-smoke.ts", "../support/ws-client.ts"]
+}
