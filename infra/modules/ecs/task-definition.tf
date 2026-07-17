@@ -10,7 +10,7 @@ resource "aws_ecs_task_definition" "this" {
   task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode([
-    merge({
+    {
       name        = local.name_prefix
       image       = var.image_uri
       essential   = true
@@ -22,6 +22,31 @@ resource "aws_ecs_task_definition" "this" {
           protocol      = "tcp"
         }
       ]
+
+      # Plain (non-secret) environment. DEPLOY_ENV is ALWAYS injected as the
+      # environment name — it is the cloud signal the server's startup guard
+      # reads (WS-32) to enforce a real wss:// PUBLIC_WEBSOCKET_URL. It is not a
+      # secret, so it needs no SSM param.
+      #
+      # MIGRATE_SKIP_DRIFT_CHECK is concatenated in ONLY when non-empty so it is
+      # absent from the task def in normal operation (default ""). It is a
+      # migrate-CLI escape hatch for the reconciliation path, inert for the
+      # running server — see var.migrate_skip_drift_check and
+      # docs/runbooks/migrations.md.
+      environment = concat(
+        [
+          {
+            name  = "DEPLOY_ENV"
+            value = var.environment
+          }
+        ],
+        var.migrate_skip_drift_check != "" ? [
+          {
+            name  = "MIGRATE_SKIP_DRIFT_CHECK"
+            value = var.migrate_skip_drift_check
+          }
+        ] : []
+      )
 
       secrets = [
         for key, arn in var.ssm_parameter_arns : {
@@ -46,19 +71,7 @@ resource "aws_ecs_task_definition" "this" {
         retries     = 3
         startPeriod = 60
       }
-      },
-      # MIGRATE_SKIP_DRIFT_CHECK is merged in ONLY when non-empty so it is absent
-      # from the task def in normal operation (default ""). It is a migrate-CLI
-      # escape hatch for the reconciliation path, inert for the running server —
-      # see var.migrate_skip_drift_check and docs/runbooks/migrations.md.
-      var.migrate_skip_drift_check != "" ? {
-        environment = [
-          {
-            name  = "MIGRATE_SKIP_DRIFT_CHECK"
-            value = var.migrate_skip_drift_check
-          }
-        ]
-    } : {})
+    }
   ])
 
   tags = local.tags

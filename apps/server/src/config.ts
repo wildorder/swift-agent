@@ -9,6 +9,58 @@ export interface ServerConfig extends AppConfig {
   AUTO_MIGRATE: boolean;
 }
 
+/** Hosts that are never a valid public endpoint in a cloud environment. */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
+
+/**
+ * Deploy environments that are "cloud" — the exact values used as the Terraform
+ * `environment` and injected as the `DEPLOY_ENV` container env (see WS-32).
+ */
+const CLOUD_ENVS = new Set(['dev', 'staging', 'prod']);
+
+/**
+ * Cloud-only validation for PUBLIC_WEBSOCKET_URL (SC-04).
+ *
+ * When `DEPLOY_ENV` marks a cloud environment, the URL MUST be present, use the
+ * `wss:` scheme, and NOT point at localhost — otherwise clients would be handed
+ * an unreachable/wrong-scheme WebSocket URL. In local dev (`DEPLOY_ENV` absent
+ * or not a cloud env) the check is skipped entirely, so local boot needs no
+ * ceremony and a `ws://localhost:3001` value is allowed.
+ *
+ * `DEPLOY_ENV` is read directly from `env` (mirroring AUTO_MIGRATE) rather than
+ * added to ENV_KEYS/ConfigSchema — it is a boot-time deployment marker, not app
+ * config the schema needs to type.
+ *
+ * @returns an error message when the URL violates cloud policy, else `null`.
+ */
+export function validatePublicWebsocketUrl(
+  env: Record<string, string | undefined>,
+): string | null {
+  const deployEnv = env['DEPLOY_ENV'];
+  if (!deployEnv || !CLOUD_ENVS.has(deployEnv)) return null; // local dev: no constraint
+
+  const raw = env[ENV_KEYS.PUBLIC_WEBSOCKET_URL];
+  if (!raw) {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} is required in a cloud environment (DEPLOY_ENV=${deployEnv})`;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} is not a valid URL (got '${raw}')`;
+  }
+
+  if (url.protocol !== 'wss:') {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must use the wss:// scheme in a cloud environment (got '${raw}')`;
+  }
+  if (LOCAL_HOSTS.has(url.hostname)) {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must not point at localhost in a cloud environment (got '${raw}')`;
+  }
+
+  return null;
+}
+
 /**
  * Load and validate all required environment variables at startup.
  * Fails fast with clear error messages listing ALL missing required vars.
@@ -35,6 +87,14 @@ export function loadServerConfig(
   const hasModelKey = modelKeys.some((k) => !!env[k]);
   if (!hasModelKey) {
     missing.push(`At least one of: ${modelKeys.join(', ')}`);
+  }
+
+  // Cloud-only: PUBLIC_WEBSOCKET_URL must be a real wss:// endpoint (SC-04).
+  // Folded into the same fail-fast aggregation so a bad URL is reported
+  // alongside any other missing var in one message.
+  const websocketUrlError = validatePublicWebsocketUrl(env);
+  if (websocketUrlError) {
+    missing.push(websocketUrlError);
   }
 
   if (missing.length > 0) {

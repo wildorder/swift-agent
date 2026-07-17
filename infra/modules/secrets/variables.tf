@@ -14,3 +14,8 @@ variable "redis_url" {
   type        = string
   sensitive   = true
 }
+
+variable "public_websocket_url" {
+  description = "Public wss:// base URL up to and including /v1/stream (e.g. wss://api.swiftagent.dev/v1/stream). Not a secret."
+  type        = string
+}

@@ -140,6 +140,12 @@ variable "cognito_logout_urls" {
   default     = ["http://localhost:3000"]
 }
 
+variable "public_websocket_url" {
+  type        = string
+  default     = ""
+  description = "Optional override for the public wss:// base URL (up to /v1/stream). Dev has no domain, so when empty the URL is derived from the ALB DNS name."
+}
+
 # -----------------------------------------------------------------------------
 # Modules
 # -----------------------------------------------------------------------------
@@ -176,12 +182,22 @@ module "ecr" {
   source = "../../modules/ecr"
 }
 
+# Public wss:// base URL, up to and including /v1/stream (sessions.ts appends only
+# `?token=…`). Dev has NO domain_prefix and enable_dns defaults false, so there is
+# no stable DNS name — derive from the ALB DNS name (a real, reachable,
+# non-localhost wss endpoint that satisfies the server's cloud startup guard),
+# overridable via the public_websocket_url tfvars when a custom dev domain exists.
+locals {
+  public_websocket_url = var.public_websocket_url != "" ? var.public_websocket_url : "wss://${module.loadbalancer.alb_dns_name}/v1/stream"
+}
+
 module "secrets" {
   source = "../../modules/secrets"
 
-  environment  = var.environment
-  database_url = module.database.connection_string
-  redis_url    = module.cache.connection_string
+  environment          = var.environment
+  database_url         = module.database.connection_string
+  redis_url            = module.cache.connection_string
+  public_websocket_url = local.public_websocket_url
 }
 
 module "cognito" {

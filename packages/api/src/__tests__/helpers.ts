@@ -399,6 +399,7 @@ export function createMockWorkspaceRepo(): WorkspaceRepo {
 // ── Build test app ─────────────────────────────────────────────────
 export async function buildTestApp(
   runExecutionService: RunExecutionService = createMockRunExecutionService(),
+  publicWebsocketUrl = 'ws://localhost:3001',
 ): Promise<AppContext> {
   return buildApp({
     runExecutionService,
@@ -415,7 +416,7 @@ export async function buildTestApp(
       workspaceRepo: createMockWorkspaceRepo(),
     },
     jwtSecret: TEST_JWT_SECRET,
-    publicWebsocketUrl: 'ws://localhost:3001',
+    publicWebsocketUrl,
     logger: false,
   });
 }
