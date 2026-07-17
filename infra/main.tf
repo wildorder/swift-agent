@@ -47,9 +47,9 @@ module "networking" {
 module "database" {
   source = "./modules/database"
 
-  environment       = var.environment
-  instance_class    = var.db_instance_class
-  multi_az          = var.environment == "prod"
+  environment        = var.environment
+  instance_class     = var.db_instance_class
+  multi_az           = var.environment == "prod"
   private_subnet_ids = module.networking.private_subnet_ids
   security_group_id  = module.networking.db_security_group_id
 }
@@ -61,9 +61,9 @@ module "database" {
 module "cache" {
   source = "./modules/cache"
 
-  environment       = var.environment
-  node_type         = var.cache_node_type
-  num_cache_nodes   = var.environment == "prod" ? 2 : 1
+  environment        = var.environment
+  node_type          = var.cache_node_type
+  num_cache_nodes    = var.environment == "prod" ? 2 : 1
   private_subnet_ids = module.networking.private_subnet_ids
   security_group_id  = module.networking.redis_security_group_id
 }
@@ -95,11 +95,11 @@ module "secrets" {
 module "iam" {
   source = "./modules/iam"
 
-  environment         = var.environment
-  ssm_parameter_arns  = values(module.secrets.parameter_arns)
-  ecr_repository_arn  = module.ecr.repository_arn
-  state_bucket_arn    = var.state_bucket_arn
-  lock_table_arn      = var.lock_table_arn
+  environment        = var.environment
+  ssm_parameter_arns = values(module.secrets.parameter_arns)
+  ecr_repository_arn = module.ecr.repository_arn
+  state_bucket_arn   = var.state_bucket_arn
+  lock_table_arn     = var.lock_table_arn
 }
 
 # ------------------------------------------------------------------------------

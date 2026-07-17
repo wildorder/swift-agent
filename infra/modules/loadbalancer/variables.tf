@@ -29,3 +29,13 @@ variable "health_check_path" {
   type        = string
   default     = "/health"
 }
+
+variable "deregistration_delay" {
+  description = <<-EOT
+    Seconds the ALB keeps draining in-flight connections to a task after it is
+    deregistered on deploy, so long-lived WebSockets can close gracefully.
+    Should be <= the ECS container stop_timeout (default 30 for both).
+  EOT
+  type        = number
+  default     = 30
+}

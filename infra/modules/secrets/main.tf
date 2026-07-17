@@ -103,20 +103,20 @@ resource "aws_ssm_parameter" "google_api_key" {
 
 locals {
   parameter_arns = {
-    DATABASE_URL       = aws_ssm_parameter.database_url.arn
-    REDIS_URL          = aws_ssm_parameter.redis_url.arn
-    CLIENT_JWT_SECRET  = aws_ssm_parameter.jwt_secret.arn
-    OPENAI_API_KEY     = aws_ssm_parameter.openai_api_key.arn
-    ANTHROPIC_API_KEY  = aws_ssm_parameter.anthropic_api_key.arn
-    GOOGLE_API_KEY     = aws_ssm_parameter.google_api_key.arn
+    DATABASE_URL      = aws_ssm_parameter.database_url.arn
+    REDIS_URL         = aws_ssm_parameter.redis_url.arn
+    CLIENT_JWT_SECRET = aws_ssm_parameter.jwt_secret.arn
+    OPENAI_API_KEY    = aws_ssm_parameter.openai_api_key.arn
+    ANTHROPIC_API_KEY = aws_ssm_parameter.anthropic_api_key.arn
+    GOOGLE_API_KEY    = aws_ssm_parameter.google_api_key.arn
   }
 
   parameter_names = {
-    DATABASE_URL       = aws_ssm_parameter.database_url.name
-    REDIS_URL          = aws_ssm_parameter.redis_url.name
-    CLIENT_JWT_SECRET  = aws_ssm_parameter.jwt_secret.name
-    OPENAI_API_KEY     = aws_ssm_parameter.openai_api_key.name
-    ANTHROPIC_API_KEY  = aws_ssm_parameter.anthropic_api_key.name
-    GOOGLE_API_KEY     = aws_ssm_parameter.google_api_key.name
+    DATABASE_URL      = aws_ssm_parameter.database_url.name
+    REDIS_URL         = aws_ssm_parameter.redis_url.name
+    CLIENT_JWT_SECRET = aws_ssm_parameter.jwt_secret.name
+    OPENAI_API_KEY    = aws_ssm_parameter.openai_api_key.name
+    ANTHROPIC_API_KEY = aws_ssm_parameter.anthropic_api_key.name
+    GOOGLE_API_KEY    = aws_ssm_parameter.google_api_key.name
   }
 }

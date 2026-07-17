@@ -11,9 +11,10 @@ resource "aws_ecs_task_definition" "this" {
 
   container_definitions = jsonencode([
     merge({
-      name      = local.name_prefix
-      image     = var.image_uri
-      essential = true
+      name        = local.name_prefix
+      image       = var.image_uri
+      essential   = true
+      stopTimeout = var.stop_timeout
 
       portMappings = [
         {

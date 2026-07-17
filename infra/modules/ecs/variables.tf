@@ -31,6 +31,21 @@ variable "desired_count" {
   default     = 1
 }
 
+variable "stop_timeout" {
+  description = <<-EOT
+    Seconds ECS waits after SIGTERM before SIGKILL, giving the app time to
+    close in-flight WebSockets with code 1001 (see WS-30). MUST be >= the
+    target group deregistration_delay so ECS does not kill the task while the
+    ALB is still draining it. Fargate hard max is 120s.
+  EOT
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.stop_timeout >= 1 && var.stop_timeout <= 120
+    error_message = "stop_timeout must be between 1 and 120 seconds (Fargate limit)."
+  }
+}
+
 variable "private_subnet_ids" {
   description = "List of private subnet IDs for the ECS service"
   type        = list(string)
