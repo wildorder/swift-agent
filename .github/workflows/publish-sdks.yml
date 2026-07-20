@@ -1,12 +1,18 @@
 name: Publish SDKs
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
+# GitHub Packages publish needs packages:write; commit-back of the
+# Changesets version bump needs contents:write.
 permissions:
-  contents: read
-  id-token: write # Required for npm provenance
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-sdks
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: '22'
@@ -14,64 +20,57 @@ env:
 
 jobs:
   publish:
-    name: Publish SDK Packages
+    name: Version & Publish (GitHub Packages)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout at release tag
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0 # Changesets needs full history to diff versions
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - name: Setup Node.js
+      - name: Setup Node.js (GitHub Packages)
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+          registry-url: https://npm.pkg.github.com
+          scope: '@swiftagent'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Set package versions
-        run: |
-          pnpm --filter @swiftagent/sdk exec npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
-          pnpm --filter @swiftagent/react exec npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
-
-      - name: Build SDK packages
-        run: |
-          pnpm --filter @swiftagent/sdk... build
-          pnpm --filter @swiftagent/react... build
-
-      - name: Publish @swiftagent/sdk
-        run: |
-          PUBLISHED=$(npm view @swiftagent/sdk version 2>/dev/null || echo "")
-          if [ "$PUBLISHED" != "${{ steps.version.outputs.version }}" ]; then
-            pnpm publish --filter @swiftagent/sdk --no-git-checks --provenance --access public
-          else
-            echo "⏭ @swiftagent/sdk@${{ steps.version.outputs.version }} already published, skipping."
-          fi
+      - name: Build publishable packages
+        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... build
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-      - name: Publish @swiftagent/react
-        run: |
-          PUBLISHED=$(npm view @swiftagent/react version 2>/dev/null || echo "")
-          if [ "$PUBLISHED" != "${{ steps.version.outputs.version }}" ]; then
-            pnpm publish --filter @swiftagent/react --no-git-checks --provenance --access public
-          else
-            echo "⏭ @swiftagent/react@${{ steps.version.outputs.version }} already published, skipping."
-          fi
+      # Consume accumulated changesets: bump versions + changelogs (WS-37 scripts).
+      - name: Apply Changesets version bumps
+        run: pnpm changeset version
+
+      # changeset publish is idempotent: only versions not already on the
+      # registry are published; workspace:* is rewritten to concrete versions
+      # by pnpm at publish time. Registry resolves from publishConfig/.npmrc.
+      - name: Publish to GitHub Packages
+        run: pnpm changeset publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Commit the version bumps back so git stays the source of truth.
+      - name: Commit version bumps
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(release): version packages [skip ci]"
+            git push
+          else
+            echo "No version changes to commit."
+          fi

@@ -1,8 +1,15 @@
 {
   "name": "@swiftagent/react",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
+  "description": "React hooks and components for building Swift Agent chat UIs.",
+  "license": "UNLICENSED",
+  "author": "Swift Agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wingitlabs/swift-agent.git",
+    "directory": "packages/react"
+  },
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +18,19 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts.map",
+    "!dist/**/__tests__"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "scripts": {
     "build": "tsc",

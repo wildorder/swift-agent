@@ -1,8 +1,15 @@
 {
   "name": "@swiftagent/shared",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
+  "description": "Shared types, Zod schemas, ID helpers, and Redis client for Swift Agent.",
+  "license": "UNLICENSED",
+  "author": "Swift Agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wingitlabs/swift-agent.git",
+    "directory": "packages/shared"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -14,6 +21,19 @@
       "types": "./dist/redis-client.d.ts",
       "import": "./dist/redis-client.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts.map",
+    "!dist/**/__tests__"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "scripts": {
     "build": "tsc",

@@ -170,3 +170,40 @@ jobs:
           # DATABASE_URL is provisioned per-suite by test/setup-db.ts (Testcontainers),
           # which starts its own PostgreSQL and applies the Drizzle migrations.
           REDIS_URL: redis://localhost:6379
+
+  # ── Job 4: Publish dry-run (pack gate) ───────────────────────────────
+  # Packs @swiftagent/{sdk,react,shared} and asserts each tarball ships only
+  # dist (JS + d.ts) + README.md — no src/tests/tsconfig/CJS — that workspace:*
+  # deps resolved to concrete versions, and that publish metadata is correct.
+  # Catches a broken files/metadata/workspace-resolution regression BEFORE a
+  # release. Runs the SAME command as the documented local check so CI and
+  # local never diverge: `node scripts/verify-pack.mjs`.
+  publish-dryrun:
+    name: Publish dry-run (pack)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      - name: Pack & verify tarballs
+        run: node scripts/verify-pack.mjs
