@@ -142,9 +142,18 @@ type ChatEvent =
 
 ## Developer Experience
 
+> **New here?** Follow the [Quickstart](quickstart.md), which wires an agent end
+> to end using the runnable [`examples/quickstart/`](../examples/quickstart)
+> example. The snippets below mirror it.
+
 ### Backend: Define an Agent with Tools
 
+A tool's `inputSchema` is a **Zod** schema (the SDK's `tool()` rejects anything
+without a `.safeParse` method). On registration the SDK serializes it to the
+JSON-Schema **wire** form via `toolToJsonSchema()`.
+
 ```typescript
+import { z } from 'zod';
 import { createAgentApp, defineAgent, tool } from '@swiftagent/sdk';
 
 const app = createAgentApp({
@@ -160,11 +169,7 @@ app.agent(
       tool({
         name: 'lookupOrder',
         description: 'Look up an order by ID',
-        inputSchema: {
-          type: 'object',
-          properties: { orderId: { type: 'string' } },
-          required: ['orderId'],
-        },
+        inputSchema: z.object({ orderId: z.string() }),
         execute: async ({ orderId }) => {
           return await db.orders.findById(orderId);
         },
@@ -173,14 +178,18 @@ app.agent(
   }),
 );
 
-app.listen();
+// `app.listen()` starts the tool runner and is NOT zero-config: it requires
+// runner-token verification config — `RUNNER_TOKEN_PUBLIC_KEY` (PEM or JWK) and
+// `RUNNER_WORKSPACE_ID` — via env vars or
+// `createAgentApp({ runnerPublicKey, runnerWorkspaceId })`. It throws otherwise.
+await app.listen();
 ```
 
 ### Backend: Create a Session
 
 ```typescript
-const session = await agentClient.sessions.create({
-  agent: 'support-assistant',
+const session = await app.sessions.create({
+  agentName: 'support-assistant',
   userId: 'user_123',
   metadata: { orgId: 'org_456' },
 });
@@ -227,8 +236,12 @@ function ChatPanel({ sessionId, token, websocketUrl }) {
 | `app.agent(agent)`               | Register an agent definition with the Swift Agent platform.                                                                       |
 | `app.sessions.create(opts)`      | Create a new chat session. Returns `sessionId`, `clientToken`, and `websocketUrl`.                                                |
 | `app.sessions.get(id)`           | Retrieve session metadata and status.                                                                                             |
-| `app.sessions.messages.list(id)` | Retrieve full message history for a session.                                                                                      |
-| `app.runs.create(opts)`          | Trigger a server-driven run (no browser connection required).                                                                     |
+| `app.sessions.messages.list(id, opts?)` | Retrieve message history for a session (`{ limit?, cursor? }` → `{ data, hasMore }`).                                       |
+| `app.runs.create(opts)`          | Trigger a server-driven run (no browser connection required). Returns an **accepted** run (202) — poll `app.runs.get`.            |
+| `app.runs.get(runId)`            | Retrieve a run's record; poll for terminal status.                                                                                |
+| `app.runs.cancel(runId)`         | Cancel a run. Idempotent; returns the accepted-run shape.                                                                         |
+| `app.listen(port?)`              | Start the tool runner and register agents. Requires runner-token config (see above); not zero-config.                            |
+| `app.close()`                    | Stop the tool runner server.                                                                                                      |
 
 ### Client-Side SDK (`@swiftagent/react`)
 
@@ -256,12 +269,15 @@ type AgentConfig = {
 type ToolDefinition<TInput = any, TResult = any> = {
   name: string;
   description: string;
-  inputSchema: object;
+  inputSchema: ZodType<TInput>; // Zod schema, not a raw JSON-Schema object
   execute: (input: TInput, ctx: ToolContext) => Promise<TResult>;
 };
 
 type ToolContext = {
   sessionId: string;
+  agentId: string; // resolved agent id (matches signed token claim)
+  runId: string; // invocation scope
+  callId: string; // tc_ call id — invocation identity + idempotency key
   userId?: string;
   metadata?: Record<string, unknown>;
 };
