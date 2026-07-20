@@ -2,29 +2,19 @@
 export { createAgentApp } from './app.js';
 export type { AgentApp } from './app.js';
 export { defineAgent } from './agent.js';
-export { tool, toolToJsonSchema } from './tool.js';
+export { tool } from './tool.js';
 
-// Client
-export { ControlPlaneClient } from './client.js';
-
-// Tool runner
-export { startToolRunner } from './tool-runner.js';
-
-// Types — values
-export { SdkHttpError, ToolRunnerRequestSchema, SdkAgentConfigSchema } from './types.js';
+// Advanced/low-level escape hatches (raw control-plane client, tool-runner
+// hosting, wire schemas, serialization helpers) live behind the declared,
+// unstable `@swiftagent/sdk/internal` subpath — not part of the stable surface.
 
 // Types — type-only
 export type {
   ToolContext,
   ToolDefinition,
-  ToolSchema,
   SdkAgentConfig,
   AgentDefinition,
   CreateAgentAppConfig,
-  ToolRunnerRequest,
-  ToolRunnerSuccessResponse,
-  ToolRunnerErrorResponse,
-  ToolRegistry,
   CreateSessionOptions,
   CreateSessionResult,
   ListMessagesOptions,

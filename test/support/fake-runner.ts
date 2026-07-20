@@ -2,7 +2,8 @@ import { createServer } from 'node:net';
 import { z } from 'zod';
 import type { CryptoKey, KeyObject } from 'jose';
 import { RUNNER_MAX_OUTPUT_BYTES } from '@swiftagent/shared';
-import { tool, startToolRunner, type ToolDefinition, type ToolRegistry } from '@swiftagent/sdk';
+import { tool, type ToolDefinition } from '@swiftagent/sdk';
+import { startToolRunner } from '@swiftagent/sdk/internal';
 
 /**
  * Starts a REAL SDK tool runner (`startToolRunner`) on a pre-reserved port so
@@ -127,7 +128,7 @@ export async function startFakeRunner(opts: StartFakeRunnerOptions): Promise<Fak
     }),
   ];
 
-  const registry: ToolRegistry = new Map();
+  const registry = new Map<string, ToolDefinition>();
   for (const def of defs) registry.set(def.name, def);
 
   const runner = await startToolRunner({
