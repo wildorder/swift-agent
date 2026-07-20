@@ -16,6 +16,9 @@ import {
   UserRecordSchema, UserWorkspaceRecordSchema,
   // Errors
   SwiftAgentError, SwiftAgentErrorCode, isSwiftAgentError,
+  // Protocol versioning & compatibility (WS-37)
+  PROTOCOL, API_PROTOCOL_VERSION, SDK_MIN_SERVER_PROTOCOL,
+  PROTOCOL_HEADER, assertProtocolCompatible, RUNNER_PROTOCOL_VERSION,
   // Config
   ENV_KEYS, loadConfig,
 } from './index.js';
@@ -468,6 +471,31 @@ describe('SwiftAgentError', () => {
     expect(isSwiftAgentError(new Error('normal'))).toBe(false);
     expect(isSwiftAgentError(null)).toBe(false);
     expect(isSwiftAgentError('string')).toBe(false);
+  });
+});
+
+// ─── Protocol versioning & compatibility (WS-37) ────────────────────────────
+
+describe('protocol barrel re-exports', () => {
+  it('re-exports the protocol constants and assertion from the barrel', () => {
+    expect(API_PROTOCOL_VERSION).toBeDefined();
+    expect(SDK_MIN_SERVER_PROTOCOL).toBeDefined();
+    expect(PROTOCOL_HEADER).toBeDefined();
+    expect(PROTOCOL).toBeDefined();
+    expect(typeof assertProtocolCompatible).toBe('function');
+  });
+
+  it('PROTOCOL bundle matches its constituents', () => {
+    expect(PROTOCOL.header).toBe('x-swiftagent-protocol');
+    expect(PROTOCOL.runner).toBe(RUNNER_PROTOCOL_VERSION);
+    expect(PROTOCOL.api).toBe(API_PROTOCOL_VERSION);
+    expect(PROTOCOL.sdkMinServer).toBe(SDK_MIN_SERVER_PROTOCOL);
+  });
+
+  it('exposes the new INCOMPATIBLE_VERSION error code (maps to 409)', () => {
+    expect(SwiftAgentErrorCode.INCOMPATIBLE_VERSION).toBe('INCOMPATIBLE_VERSION');
+    const err = new SwiftAgentError(SwiftAgentErrorCode.INCOMPATIBLE_VERSION, 'nope');
+    expect(err.statusCode).toBe(409);
   });
 });
 

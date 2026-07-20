@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { isSwiftAgentError } from '@swiftagent/shared';
 import { createChatSession } from '../client.js';
 import type { ConnectionStatus } from '../types.js';
 
@@ -170,6 +171,70 @@ describe('createChatSession URL construction', () => {
       }),
     ).toThrow(/invalid websocketUrl/);
     expect(instances).toHaveLength(0);
+  });
+});
+
+// ── Protocol compatibility at connect time (WS-37) ──────────────────
+
+describe('createChatSession protocol compatibility', () => {
+  let instances: MockWebSocket[];
+  let factory: (url: string) => WebSocket;
+
+  beforeEach(() => {
+    instances = [];
+    factory = (url: string) => {
+      const ws = new MockWebSocket(url);
+      instances.push(ws);
+      return ws as unknown as WebSocket;
+    };
+  });
+
+  it('throws INCOMPATIBLE_VERSION and never opens a socket on mismatch', () => {
+    // react build speaks API_PROTOCOL_VERSION '1'; server advertises '2' → too new.
+    let caught: unknown;
+    try {
+      createChatSession({
+        sessionId: 'ses_1',
+        token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
+        serverProtocolVersion: '2',
+        createWebSocket: factory,
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(isSwiftAgentError(caught)).toBe(true);
+    if (!isSwiftAgentError(caught)) throw new Error('unreachable');
+    expect(caught.code).toBe('INCOMPATIBLE_VERSION');
+    // The socket factory must NOT have been invoked — no connection was opened.
+    expect(instances).toHaveLength(0);
+  });
+
+  it('connects normally on a compatible version (URL unchanged from WS-34)', () => {
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
+      serverProtocolVersion: '1',
+      createWebSocket: factory,
+    });
+
+    expect(instances).toHaveLength(1);
+    expect((instances[0] as MockWebSocket).url).toBe(CANONICAL_URL);
+  });
+
+  it('connects normally when the version is absent (legacy server, fail-open)', () => {
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
+      serverProtocolVersion: undefined,
+      createWebSocket: factory,
+    });
+
+    expect(instances).toHaveLength(1);
+    expect((instances[0] as MockWebSocket).url).toBe(CANONICAL_URL);
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { API_PROTOCOL_VERSION } from '@swiftagent/shared';
 import { buildTestApp, TEST_API_KEY } from './helpers.js';
 
 describe('Agents routes', () => {
@@ -31,6 +32,14 @@ describe('Agents routes', () => {
     const body = res.json();
     expect(body.name).toBe('new-agent');
     expect(body.agentId).toMatch(/^agt_/);
+    // WS-37: every response advertises the control-plane protocol version so the
+    // SDK can assert compatibility at registration.
+    expect(res.headers['x-swiftagent-protocol']).toBe(API_PROTOCOL_VERSION);
+  });
+
+  it('advertises the protocol header on unrelated endpoints (global onSend hook)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/health' });
+    expect(res.headers['x-swiftagent-protocol']).toBe(API_PROTOCOL_VERSION);
   });
 
   it('POST /v1/agents updates existing agent (200)', async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { isSwiftAgentError } from '@swiftagent/shared';
 import { ControlPlaneClient } from '../client.js';
 import { SdkHttpError } from '../types.js';
 
@@ -6,15 +7,32 @@ import { SdkHttpError } from '../types.js';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  statusText = 'OK',
+  headers: Record<string, string> = {},
+): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText,
     json: async () => body,
-    headers: new Headers(),
+    headers: new Headers(headers),
   } as Response;
 }
+
+const validAgentRecord = {
+  agentId: 'agt_abc123',
+  workspaceId: 'ws_abc123',
+  name: 'test-agent',
+  modelConfig: { model: 'openai/gpt-4' },
+  systemPrompt: 'hello',
+  memoryConfig: { strategy: 'last_n' },
+  toolRunnerUrl: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
 
 describe('ControlPlaneClient', () => {
   let client: ControlPlaneClient;
@@ -175,6 +193,96 @@ describe('ControlPlaneClient', () => {
       const result = await client.createRun('ses_abc123', { content: 'Hello' });
       expect(result.runId).toBe('run_abc123');
       expect(mockFetch.mock.calls[0][0]).toBe('http://localhost:3000/v1/sessions/ses_abc123/runs');
+    });
+  });
+
+  // ── Protocol compatibility (WS-37) ─────────────────────────────────
+
+  describe('registerAgent — protocol compatibility', () => {
+    it('passes on a matching x-swiftagent-protocol header', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(validAgentRecord, 201, 'Created', { 'x-swiftagent-protocol': '1' }),
+      );
+
+      const result = await client.registerAgent({
+        name: 'test-agent',
+        modelConfig: { model: 'openai/gpt-4' },
+        systemPrompt: 'hello',
+      });
+
+      expect(result.agentId).toBe('agt_abc123');
+    });
+
+    it('throws INCOMPATIBLE_VERSION on a mismatched header, before body parsing', async () => {
+      // Header says the server speaks protocol 2 (this SDK speaks 1) AND the body
+      // is malformed — the version error must win, proving the assertion runs
+      // before AgentRecordSchema.parse.
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({ not: 'an agent record' }, 201, 'Created', {
+          'x-swiftagent-protocol': '2',
+        }),
+      );
+
+      let caught: unknown;
+      try {
+        await client.registerAgent({
+          name: 'test-agent',
+          modelConfig: { model: 'openai/gpt-4' },
+          systemPrompt: 'hello',
+        });
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(isSwiftAgentError(caught)).toBe(true);
+      if (!isSwiftAgentError(caught)) throw new Error('unreachable');
+      expect(caught.code).toBe('INCOMPATIBLE_VERSION');
+    });
+
+    it('succeeds against a legacy server that omits the header (fail-open)', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse(validAgentRecord, 201));
+
+      const result = await client.registerAgent({
+        name: 'test-agent',
+        modelConfig: { model: 'openai/gpt-4' },
+        systemPrompt: 'hello',
+      });
+
+      expect(result.agentId).toBe('agt_abc123');
+    });
+  });
+
+  describe('createSession — surfaces serverProtocolVersion', () => {
+    const sessionBody = {
+      sessionId: 'ses_abc123',
+      clientToken: 'token_xyz',
+      websocketUrl: 'ws://localhost/ws',
+    };
+
+    it('folds the x-swiftagent-protocol header into the result (no assertion)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(sessionBody, 201, 'Created', { 'x-swiftagent-protocol': '1' }),
+      );
+
+      const result = await client.createSession({ agentName: 'test-agent' });
+      expect(result.sessionId).toBe('ses_abc123');
+      expect(result.serverProtocolVersion).toBe('1');
+    });
+
+    it('leaves serverProtocolVersion undefined when the header is absent', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse(sessionBody, 201));
+
+      const result = await client.createSession({ agentName: 'test-agent' });
+      expect(result.serverProtocolVersion).toBeUndefined();
+    });
+
+    it('does NOT throw even when the header would be incompatible (assert is client-side)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(sessionBody, 201, 'Created', { 'x-swiftagent-protocol': '2' }),
+      );
+
+      const result = await client.createSession({ agentName: 'test-agent' });
+      expect(result.serverProtocolVersion).toBe('2');
     });
   });
 

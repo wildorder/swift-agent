@@ -15,9 +15,12 @@
     "test:integration": "vitest run --config test/vitest.integration.config.ts",
     "smoke:realtime": "tsx test/smoke/realtime-smoke.ts",
     "smoke:typecheck": "tsc --noEmit -p test/smoke/tsconfig.json",
-    "smoke:lint": "eslint test/smoke"
+    "smoke:lint": "eslint test/smoke",
+    "changeset": "changeset",
+    "version-packages": "changeset version"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.0",
     "@eslint/js": "^9.0.0",
     "@swiftagent/api": "workspace:^",
     "@swiftagent/db": "workspace:^",

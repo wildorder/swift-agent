@@ -51,6 +51,14 @@ export interface CreateChatSessionOptions {
    * value throws at runtime (there is no hardcoded default).
    */
   websocketUrl?: string;
+  /**
+   * Server-advertised control-plane protocol version, sourced from the SDK's
+   * `CreateSessionResult.serverProtocolVersion` (WS-37). When present it is
+   * asserted against the react build's `API_PROTOCOL_VERSION` BEFORE the socket
+   * opens — a mismatch throws a typed `SwiftAgentError(INCOMPATIBLE_VERSION)`.
+   * `undefined` (legacy server) fails open and connects normally.
+   */
+  serverProtocolVersion?: string;
   reconnect?: ReconnectOptions;
   /** Injectable WebSocket factory for testing */
   createWebSocket?: (url: string) => WebSocket;
@@ -71,6 +79,12 @@ export interface UseAgentChatArgs {
   sessionId: string;
   token: string;
   websocketUrl?: string;
+  /**
+   * Server-advertised control-plane protocol version from the SDK's
+   * `CreateSessionResult.serverProtocolVersion` (WS-37). Asserted before connect;
+   * a mismatch surfaces the actionable `INCOMPATIBLE_VERSION` message via `lastError`.
+   */
+  serverProtocolVersion?: string;
   reconnect?: ReconnectOptions;
   createWebSocket?: (url: string) => WebSocket;
   onError?: (error: unknown) => void;

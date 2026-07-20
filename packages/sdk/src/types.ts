@@ -176,6 +176,13 @@ export interface CreateSessionResult {
   sessionId: string;
   clientToken: string;
   websocketUrl: string;
+  /**
+   * Server-advertised control-plane protocol version (the `x-swiftagent-protocol`
+   * header off `POST /v1/sessions`, WS-37). Feed this to the `@swiftagent/react`
+   * connect path so it can assert compatibility before opening the socket.
+   * `undefined` on a legacy server that omits the header (fail-open).
+   */
+  serverProtocolVersion?: string;
 }
 
 export interface ListMessagesOptions {

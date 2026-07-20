@@ -1,4 +1,4 @@
-import { ChatEventSchema } from '@swiftagent/shared';
+import { ChatEventSchema, assertProtocolCompatible } from '@swiftagent/shared';
 import type { ChatEvent } from '@swiftagent/shared';
 import type {
   ChatSessionClient,
@@ -62,6 +62,19 @@ export function createChatSession(
   opts: CreateChatSessionOptions,
 ): ChatSessionClient {
   const { token, websocketUrl, reconnect, onError } = opts;
+
+  // Refuse to connect against an incompatible server (WS-37). This runs BEFORE
+  // resolveConnectionUrl and before any socket is opened, mirroring how an
+  // invalid websocketUrl already fails loudly at construction. A mismatch throws
+  // a typed SwiftAgentError(INCOMPATIBLE_VERSION); an absent version (legacy
+  // server) fails open and connects normally. This is a pure pre-check — it does
+  // NOT touch WS-34's URL-resolution/reconnect logic below.
+  //
+  // Note the argument order: `assertProtocolCompatible(remote, local)` takes the
+  // server-advertised version as `remote`; the default `local` pair already
+  // carries this build's `API_PROTOCOL_VERSION` as its `current`, so the check is
+  // "server `serverProtocolVersion` vs. this SDK's API_PROTOCOL_VERSION".
+  assertProtocolCompatible(opts.serverProtocolVersion);
 
   // Resolve the connection URL up front so misconfiguration (missing/invalid
   // URL) fails loudly at construction time, before any socket is opened. The

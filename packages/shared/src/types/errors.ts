@@ -9,6 +9,7 @@ export const SwiftAgentErrorCode = {
   INTERNAL: 'INTERNAL',
   TIMEOUT: 'TIMEOUT',
   CONNECTION_ERROR: 'CONNECTION_ERROR',
+  INCOMPATIBLE_VERSION: 'INCOMPATIBLE_VERSION',
 } as const;
 
 export type SwiftAgentErrorCode = typeof SwiftAgentErrorCode[keyof typeof SwiftAgentErrorCode];
@@ -24,6 +25,7 @@ const CODE_TO_STATUS: Record<SwiftAgentErrorCode, number> = {
   INTERNAL: 500,
   TIMEOUT: 504,
   CONNECTION_ERROR: 503,
+  INCOMPATIBLE_VERSION: 409,
 };
 
 export class SwiftAgentError extends Error {

@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { JWTVerifyGetKey } from 'jose';
+import { PROTOCOL_HEADER, API_PROTOCOL_VERSION } from '@swiftagent/shared';
 import type {
   AgentRepo,
   ApiKeyRepo,
@@ -111,6 +112,17 @@ export async function buildApp(opts: BuildAppOptions): Promise<AppContext> {
   // Middleware
   registerRequestId(app);
   registerAuth(app, opts.repos.apiKeyRepo);
+
+  // Advertise the control-plane protocol version on every response (WS-37). This
+  // is additive and non-breaking: an `onSend` header is invisible to every Zod
+  // parser and covers all endpoints — including `POST /v1/agents` (SDK reads it
+  // at registration) and `POST /v1/sessions` (client reads it at connect time) —
+  // without any per-route or schema change. Old SDKs ignore it; new SDKs treat
+  // its absence as a legacy-but-compatible server (fail-open).
+  app.addHook('onSend', async (_req, reply, payload) => {
+    reply.header(PROTOCOL_HEADER, API_PROTOCOL_VERSION);
+    return payload;
+  });
 
   // Services
   const tokenService = createTokenService({ secret: opts.jwtSecret });

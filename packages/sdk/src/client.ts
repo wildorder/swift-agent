@@ -4,6 +4,8 @@ import {
   SessionRecordSchema,
   MessageRecordSchema,
   RunRecordSchema,
+  assertProtocolCompatible,
+  PROTOCOL_HEADER,
 } from '@swiftagent/shared';
 import type {
   AgentRecord,
@@ -73,30 +75,42 @@ export class ControlPlaneClient {
   // ── Agent ───────────────────────────────────────────────────────
 
   async registerAgent(body: RegisterAgentBody): Promise<AgentRecord> {
-    const res = await this.request('POST', '/v1/agents', body);
-    return AgentRecordSchema.parse(res);
+    const { body: resBody, headers } = await this.request('POST', '/v1/agents', body);
+    // Assert protocol compatibility BEFORE parsing the body so a version mismatch
+    // is reported ahead of any body-shape error (the clearest "SDK/server disagree"
+    // signal at the first authenticated control-plane call). Fails open when the
+    // server advertises no version (legacy server → header absent).
+    assertProtocolCompatible(headers.get(PROTOCOL_HEADER));
+    return AgentRecordSchema.parse(resBody);
   }
 
   async getAgent(agentId: string): Promise<AgentRecord> {
-    const res = await this.request('GET', `/v1/agents/${encodeURIComponent(agentId)}`);
-    return AgentRecordSchema.parse(res);
+    const { body } = await this.request('GET', `/v1/agents/${encodeURIComponent(agentId)}`);
+    return AgentRecordSchema.parse(body);
   }
 
   async getAgentByName(name: string): Promise<AgentRecord> {
-    const res = await this.request('GET', `/v1/agents?name=${encodeURIComponent(name)}`);
-    return AgentRecordSchema.parse(res);
+    const { body } = await this.request('GET', `/v1/agents?name=${encodeURIComponent(name)}`);
+    return AgentRecordSchema.parse(body);
   }
 
   // ── Session ─────────────────────────────────────────────────────
 
   async createSession(body: CreateSessionBody): Promise<CreateSessionResult> {
-    const res = await this.request('POST', '/v1/sessions', body);
-    return res as CreateSessionResult;
+    const { body: resBody, headers } = await this.request('POST', '/v1/sessions', body);
+    // Surface the server-advertised protocol version (same `x-swiftagent-protocol`
+    // header the onSend hook sets on every response) so the connect-time check in
+    // @swiftagent/react can assert compatibility before opening the socket. The SDK
+    // does NOT assert here — it stays a thin transport; `undefined` on a legacy server.
+    return {
+      ...(resBody as CreateSessionResult),
+      serverProtocolVersion: headers.get(PROTOCOL_HEADER) ?? undefined,
+    };
   }
 
   async getSession(sessionId: string): Promise<SessionRecord> {
-    const res = await this.request('GET', `/v1/sessions/${encodeURIComponent(sessionId)}`);
-    return SessionRecordSchema.parse(res);
+    const { body } = await this.request('GET', `/v1/sessions/${encodeURIComponent(sessionId)}`);
+    return SessionRecordSchema.parse(body);
   }
 
   // ── Messages ────────────────────────────────────────────────────
@@ -108,42 +122,46 @@ export class ControlPlaneClient {
 
     const query = qs.toString();
     const path = `/v1/sessions/${encodeURIComponent(sessionId)}/messages${query ? `?${query}` : ''}`;
-    const res = await this.request('GET', path);
+    const { body } = await this.request('GET', path);
 
-    const body = res as { data: unknown[]; hasMore: boolean };
+    const parsed = body as { data: unknown[]; hasMore: boolean };
     return {
-      data: body.data.map((m) => MessageRecordSchema.parse(m)),
-      hasMore: body.hasMore,
+      data: parsed.data.map((m) => MessageRecordSchema.parse(m)),
+      hasMore: parsed.hasMore,
     };
   }
 
   // ── Runs ────────────────────────────────────────────────────────
 
   async createRun(sessionId: string, body: CreateRunBody): Promise<AcceptedRun> {
-    const res = await this.request(
+    const { body: resBody } = await this.request(
       'POST',
       `/v1/sessions/${encodeURIComponent(sessionId)}/runs`,
       body,
     );
-    return AcceptedRunSchema.parse(res);
+    return AcceptedRunSchema.parse(resBody);
   }
 
   async getRun(runId: string): Promise<RunRecord> {
-    const res = await this.request('GET', `/v1/runs/${encodeURIComponent(runId)}`);
-    return RunRecordSchema.parse(res);
+    const { body } = await this.request('GET', `/v1/runs/${encodeURIComponent(runId)}`);
+    return RunRecordSchema.parse(body);
   }
 
   async cancelRun(runId: string): Promise<AcceptedRun> {
-    const res = await this.request(
+    const { body } = await this.request(
       'POST',
       `/v1/runs/${encodeURIComponent(runId)}/cancel`,
     );
-    return AcceptedRunSchema.parse(res);
+    return AcceptedRunSchema.parse(body);
   }
 
   // ── Internal ────────────────────────────────────────────────────
 
-  private async request(method: string, path: string, body?: unknown): Promise<unknown> {
+  private async request(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<{ body: unknown; headers: Headers }> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.apiKey}`,
@@ -168,6 +186,9 @@ export class ControlPlaneClient {
       );
     }
 
-    return responseBody;
+    // Response headers are returned alongside the body so control-plane version
+    // advertisement (the additive `x-swiftagent-protocol` header) is reachable by
+    // `registerAgent`/`createSession` without a second request (WS-37).
+    return { body: responseBody, headers: res.headers };
   }
 }

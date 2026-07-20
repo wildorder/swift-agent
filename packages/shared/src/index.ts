@@ -112,6 +112,15 @@ export type {
   RunnerResponse,
 } from './types/runner-protocol.js';
 
+// Protocol versioning & compatibility (WS-37) — control-plane + stream contract
+export {
+  API_PROTOCOL_VERSION,
+  SDK_MIN_SERVER_PROTOCOL,
+  PROTOCOL_HEADER,
+  PROTOCOL,
+  assertProtocolCompatible,
+} from './types/protocol.js';
+
 // Stream events
 export {
   MessageStartedEventSchema,
