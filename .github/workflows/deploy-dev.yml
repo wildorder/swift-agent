@@ -69,6 +69,10 @@ jobs:
           terraform import -var="aws_region=${{ secrets.AWS_REGION }}" \
             'module.database.aws_ssm_parameter.master_password' '/dev/swiftagent/db_master_password' 2>/dev/null || true
 
+          echo "Importing ECR repository created by the 'Ensure ECR repository exists' step..."
+          terraform import -var="aws_region=${{ secrets.AWS_REGION }}" \
+            'module.ecr.aws_ecr_repository.this' 'swiftagent/server' 2>/dev/null || true
+
           echo "State reconciliation complete"
 
       - name: Ensure ECR repository exists
