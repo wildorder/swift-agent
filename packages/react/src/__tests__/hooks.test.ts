@@ -52,9 +52,9 @@ class MockWebSocket {
     this.onmessage?.(new MessageEvent('message', { data: JSON.stringify(data) }));
   }
 
-  simulateClose(): void {
+  simulateClose(code = 1006, reason = ''): void {
     this.readyState = MockWebSocket.CLOSED;
-    this.onclose?.(new CloseEvent('close'));
+    this.onclose?.(new CloseEvent('close', { code, reason }));
   }
 }
 
@@ -233,6 +233,29 @@ describe('useAgentChat', () => {
     });
     expect(result.current.connectionStatus).toBe('connected');
     expect(result.current.lastError).toBeNull();
+  });
+
+  it('sets lastError to a readable string on an auth (4001) close (WS-41)', () => {
+    const { result } = renderHook(() =>
+      useAgentChat({
+        sessionId: 'ses_1',
+        token: 'tok_1',
+        websocketUrl: CANONICAL_URL,
+        createWebSocket: factory,
+      }),
+    );
+
+    act(() => {
+      (instances[0] as MockWebSocket).simulateOpen();
+    });
+    act(() => {
+      (instances[0] as MockWebSocket).simulateClose(4001, 'Missing token');
+    });
+
+    // A plain, readable string naming the close code — never `[object Event]`.
+    expect(typeof result.current.lastError).toBe('string');
+    expect(result.current.lastError).toContain('4001');
+    expect(result.current.lastError).not.toContain('[object');
   });
 
   it('handles tool call events in messages', () => {

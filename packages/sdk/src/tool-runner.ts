@@ -94,7 +94,14 @@ class IdempotencyCache {
   }
 }
 
-/** Constant-time-ish cap; truncates an error message to the protocol byte bound. */
+/**
+ * Cap an error message to the protocol byte bound (`RUNNER_MAX_ERROR_BYTES`, 8 KiB).
+ *
+ * No-stack, bounded policy (WS-41): every error that reaches the wire passes
+ * through here, and callers pass `err.message` — never `err.stack` and never an
+ * arbitrary stringified object — so a raw stack or an unbounded payload can never
+ * leak to the runtime executor across the runner boundary.
+ */
 function capError(message: string): string {
   if (Buffer.byteLength(message, 'utf-8') <= RUNNER_MAX_ERROR_BYTES) return message;
   return Buffer.from(message, 'utf-8').subarray(0, RUNNER_MAX_ERROR_BYTES).toString('utf-8');
@@ -265,6 +272,10 @@ async function executeTool(
     if (err instanceof ToolTimeoutError) {
       return { ok: false, status: 504, code: 'TIMEOUT', message: err.message };
     }
+    // Deliberate no-stack, no-arbitrary-object policy (WS-41): surface only
+    // `err.message` for a real Error, and a fixed literal otherwise. We never
+    // `String(err)` an arbitrary throw — it could serialize internals onto the
+    // wire. The message is byte-capped by `capError` at the send site.
     const message = err instanceof Error ? err.message : 'Unknown error';
     return { ok: false, status: 500, code: 'EXECUTION_ERROR', message };
   }

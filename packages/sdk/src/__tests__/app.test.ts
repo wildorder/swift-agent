@@ -1,9 +1,25 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import { ZodError } from 'zod';
 import { generateKeyPair, exportSPKI } from 'jose';
+import { isSwiftAgentError } from '@swiftagent/shared';
 import { createAgentApp } from '../app.js';
 import { defineAgent } from '../agent.js';
 import { tool } from '../tool.js';
+
+/** Assert a thrown value is a SwiftAgentError(VALIDATION) whose message matches. */
+function expectValidationError(fn: () => unknown, contains: string): void {
+  let caught: unknown;
+  try {
+    fn();
+  } catch (e) {
+    caught = e;
+  }
+  expect(isSwiftAgentError(caught)).toBe(true);
+  if (!isSwiftAgentError(caught)) throw new Error('unreachable');
+  expect(caught.code).toBe('VALIDATION');
+  expect(caught.message).toContain(contains);
+}
 
 let publicKeyPem: string;
 
@@ -50,11 +66,11 @@ describe('AgentApp', () => {
     await app.close();
   });
 
-  it('throws if apiKey is missing', () => {
-    expect(() => createAgentApp({ apiKey: '' })).toThrow('apiKey is required');
+  it('throws a SwiftAgentError(VALIDATION) naming apiKey when it is missing', () => {
+    expectValidationError(() => createAgentApp({ apiKey: '' }), 'apiKey');
   });
 
-  it('registers agents and throws on duplicate tool names', () => {
+  it('registers agents and throws a SwiftAgentError(VALIDATION) on duplicate tool names', () => {
     const t1 = tool({
       name: 'same',
       description: 'First',
@@ -72,7 +88,71 @@ describe('AgentApp', () => {
     const agent2 = defineAgent({ name: 'a2', model: 'openai/gpt-4', tools: [t2] });
 
     app.agent(agent1);
-    expect(() => app.agent(agent2)).toThrow('Duplicate tool name "same"');
+    expectValidationError(() => app.agent(agent2), 'Duplicate tool name "same"');
+  });
+
+  // ── Setup errors (WS-41, SC-07) ────────────────────────────────────
+
+  describe('listen() runner-verification setup errors', () => {
+    beforeEach(() => {
+      // Isolate from any ambient runner env so the option-vs-env branches are
+      // exercised. An empty string is falsy, so the "missing key/workspace"
+      // guards fire exactly as they would with the var unset.
+      vi.stubEnv('RUNNER_TOKEN_PUBLIC_KEY', '');
+      vi.stubEnv('RUNNER_WORKSPACE_ID', '');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('throws VALIDATION naming RUNNER_TOKEN_PUBLIC_KEY when no key is provided', async () => {
+      const runnerApp = createAgentApp({ apiKey: 'test-key', baseUrl: 'http://localhost:3000' });
+      await expect(runnerApp.listen(0)).rejects.toMatchObject({
+        name: 'SwiftAgentError',
+        code: 'VALIDATION',
+      });
+      await expect(runnerApp.listen(0)).rejects.toThrow('RUNNER_TOKEN_PUBLIC_KEY');
+    });
+
+    it('throws VALIDATION naming RUNNER_WORKSPACE_ID when the key is present but no workspace id', async () => {
+      const runnerApp = createAgentApp({
+        apiKey: 'test-key',
+        baseUrl: 'http://localhost:3000',
+        runnerPublicKey: publicKeyPem,
+      });
+      await expect(runnerApp.listen(0)).rejects.toMatchObject({
+        name: 'SwiftAgentError',
+        code: 'VALIDATION',
+      });
+      await expect(runnerApp.listen(0)).rejects.toThrow('RUNNER_WORKSPACE_ID');
+    });
+  });
+
+  // ── Malformed agent config (WS-41, SC-07) ──────────────────────────
+
+  describe('defineAgent malformed config', () => {
+    it('throws VALIDATION naming the failing field with the ZodError as cause', () => {
+      let caught: unknown;
+      try {
+        // temperature out of the [0, 2] range → Zod rejects it.
+        defineAgent({ name: 'bad', model: 'openai/gpt-4', temperature: 5 });
+      } catch (e) {
+        caught = e;
+      }
+      expect(isSwiftAgentError(caught)).toBe(true);
+      if (!isSwiftAgentError(caught)) throw new Error('unreachable');
+      expect(caught.code).toBe('VALIDATION');
+      expect(caught.message).toContain('temperature');
+      expect(caught.cause).toBeInstanceOf(ZodError);
+    });
+
+    it('throws VALIDATION naming an empty name field', () => {
+      expectValidationError(
+        () => defineAgent({ name: '', model: 'openai/gpt-4' }),
+        'name',
+      );
+    });
   });
 
   it('listen() starts tool runner and registers agents via POST /agents', async () => {

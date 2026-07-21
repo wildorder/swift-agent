@@ -286,33 +286,94 @@ describe('ControlPlaneClient', () => {
     });
   });
 
+  // ── Typed error mapping (WS-41, SC-08) ─────────────────────────────
+
   describe('error handling', () => {
-    it('throws SdkHttpError on non-OK response', async () => {
+    async function catchError(fn: () => Promise<unknown>): Promise<unknown> {
+      try {
+        await fn();
+      } catch (e) {
+        return e;
+      }
+      throw new Error('expected the call to throw');
+    }
+
+    it('maps a 401 to UNAUTHORIZED, mentions the API key, preserves the SdkHttpError cause', async () => {
       mockFetch.mockResolvedValueOnce(
-        jsonResponse({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404, 'Not Found'),
+        jsonResponse({ error: { code: 'UNAUTHORIZED', message: 'bad key' } }, 401, 'Unauthorized'),
       );
 
-      await expect(client.getSession('ses_missing')).rejects.toThrow(SdkHttpError);
-      try {
-        await client.getSession('ses_missing');
-      } catch {
-        // Already threw above
-      }
+      const err = await catchError(() => client.getSession('ses_1'));
+      expect(isSwiftAgentError(err)).toBe(true);
+      if (!isSwiftAgentError(err)) throw new Error('unreachable');
+      expect(err.code).toBe('UNAUTHORIZED');
+      expect(err.statusCode).toBe(401);
+      expect(err.message).toMatch(/API key/i);
+      expect(err.cause).toBeInstanceOf(SdkHttpError);
+      expect((err.cause as InstanceType<typeof SdkHttpError>).status).toBe(401);
     });
 
-    it('SdkHttpError includes status and body', async () => {
-      const errorBody = { error: { code: 'NOT_FOUND', message: 'Not found' } };
-      mockFetch.mockResolvedValueOnce(jsonResponse(errorBody, 404, 'Not Found'));
+    it.each([
+      [404, 'NOT_FOUND'],
+      [409, 'CONFLICT'],
+      [429, 'RATE_LIMIT'],
+      [500, 'INTERNAL'],
+      [502, 'PROVIDER_ERROR'],
+      [503, 'CONNECTION_ERROR'],
+      [504, 'TIMEOUT'],
+    ])('maps HTTP %i to %s with cause preserved', async (status, expectedCode) => {
+      // A bare (non-structured) body so the status alone drives the mapping.
+      mockFetch.mockResolvedValueOnce(jsonResponse(null, status, 'Err'));
 
-      try {
-        await client.getSession('ses_missing');
-        expect.fail('Should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(SdkHttpError);
-        const err = e as InstanceType<typeof SdkHttpError>;
-        expect(err.status).toBe(404);
-        expect(err.body).toEqual(errorBody);
-      }
+      const err = await catchError(() => client.getSession('ses_1'));
+      expect(isSwiftAgentError(err)).toBe(true);
+      if (!isSwiftAgentError(err)) throw new Error('unreachable');
+      expect(err.code).toBe(expectedCode);
+      expect(err.statusCode).toBe(status);
+      expect(err.cause).toBeInstanceOf(SdkHttpError);
+    });
+
+    it('honors a known structured server code over the status-derived one and includes the server message', async () => {
+      // HTTP 403 but the server body says FORBIDDEN with a specific message.
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({ code: 'FORBIDDEN', message: 'key lacks scope' }, 403, 'Forbidden'),
+      );
+
+      const err = await catchError(() => client.getSession('ses_1'));
+      expect(isSwiftAgentError(err)).toBe(true);
+      if (!isSwiftAgentError(err)) throw new Error('unreachable');
+      expect(err.code).toBe('FORBIDDEN');
+      expect(err.message).toContain('key lacks scope');
+    });
+
+    it('maps a network refusal to CONNECTION_ERROR naming the baseUrl, preserving the rejection', async () => {
+      const rejection = new TypeError('fetch failed');
+      mockFetch.mockRejectedValueOnce(rejection);
+
+      const err = await catchError(() => client.getSession('ses_1'));
+      expect(isSwiftAgentError(err)).toBe(true);
+      if (!isSwiftAgentError(err)) throw new Error('unreachable');
+      expect(err.code).toBe('CONNECTION_ERROR');
+      expect(err.message).toContain('http://localhost:3000');
+      expect(err.cause).toBe(rejection);
+    });
+
+    it('maps an aborted/timed-out fetch to TIMEOUT', async () => {
+      const abort = new DOMException('The operation was aborted', 'AbortError');
+      mockFetch.mockRejectedValueOnce(abort);
+
+      const err = await catchError(() => client.getSession('ses_1'));
+      expect(isSwiftAgentError(err)).toBe(true);
+      if (!isSwiftAgentError(err)) throw new Error('unreachable');
+      expect(err.code).toBe('TIMEOUT');
+      expect(err.cause).toBe(abort);
+    });
+
+    it('never surfaces a bare SdkHttpError to the caller', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ error: { message: 'nope' } }, 404, 'Not Found'));
+      const err = await catchError(() => client.getSession('ses_missing'));
+      expect(err).not.toBeInstanceOf(SdkHttpError);
+      expect(isSwiftAgentError(err)).toBe(true);
     });
   });
 });

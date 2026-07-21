@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { importSPKI, importJWK } from 'jose';
-import { ENV_KEYS } from '@swiftagent/shared';
+import { ENV_KEYS, SwiftAgentError, SwiftAgentErrorCode } from '@swiftagent/shared';
 import { ControlPlaneClient } from './client.js';
 import { startToolRunner } from './tool-runner.js';
 import type { RunnerVerifyKey } from './runner-token.js';
@@ -95,7 +95,11 @@ export interface AgentApp {
  */
 export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
   if (!config.apiKey) {
-    throw new Error('apiKey is required');
+    throw new SwiftAgentError(
+      SwiftAgentErrorCode.VALIDATION,
+      'createAgentApp requires an "apiKey" — pass your workspace API key ' +
+        '(e.g. process.env.SWIFT_AGENT_API_KEY) to createAgentApp({ apiKey }).',
+    );
   }
 
   const client = new ControlPlaneClient(config.apiKey, config.baseUrl);
@@ -108,8 +112,10 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
       // Merge tools, checking for duplicates across all registered agents
       for (const t of definition.tools) {
         if (toolsByName.has(t.name)) {
-          throw new Error(
-            `Duplicate tool name "${t.name}" — already registered by another agent`,
+          throw new SwiftAgentError(
+            SwiftAgentErrorCode.VALIDATION,
+            `Duplicate tool name "${t.name}" — each tool name must be unique across all ` +
+              `agents registered on this app; rename one of the conflicting tools.`,
           );
         }
         toolsByName.set(t.name, t as ToolDefinition);
@@ -168,13 +174,19 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
 
       const publicKeyMaterial = config.runnerPublicKey ?? process.env[ENV_KEYS.RUNNER_TOKEN_PUBLIC_KEY];
       if (!publicKeyMaterial) {
-        throw new Error(
-          `Runner verification requires ${ENV_KEYS.RUNNER_TOKEN_PUBLIC_KEY} (PEM or JWK)`,
+        throw new SwiftAgentError(
+          SwiftAgentErrorCode.VALIDATION,
+          `Runner verification requires the ${ENV_KEYS.RUNNER_TOKEN_PUBLIC_KEY} env var ` +
+            `(PEM/SPKI or JWK JSON) or the runnerPublicKey option — set one before calling app.listen().`,
         );
       }
       const expectedWorkspaceId = config.runnerWorkspaceId ?? process.env[ENV_KEYS.RUNNER_WORKSPACE_ID];
       if (!expectedWorkspaceId) {
-        throw new Error(`Runner verification requires ${ENV_KEYS.RUNNER_WORKSPACE_ID}`);
+        throw new SwiftAgentError(
+          SwiftAgentErrorCode.VALIDATION,
+          `Runner verification requires the ${ENV_KEYS.RUNNER_WORKSPACE_ID} env var ` +
+            `(the runner's ws_ workspace id) or the runnerWorkspaceId option — set one before calling app.listen().`,
+        );
       }
       const expectedAudience =
         config.runnerAudience ?? process.env[ENV_KEYS.RUNNER_AUDIENCE] ?? publicUrl;

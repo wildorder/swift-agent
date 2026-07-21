@@ -1,5 +1,11 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { SwiftAgentError, SwiftAgentErrorCode } from '@swiftagent/shared';
 import type { ToolDefinition, ToolSchema } from './types.js';
+
+/** Actionable VALIDATION error naming the offending tool config field (WS-41). */
+function invalidToolConfig(message: string): SwiftAgentError {
+  return new SwiftAgentError(SwiftAgentErrorCode.VALIDATION, message);
+}
 
 /**
  * Define a tool with a typed input schema and execute handler.
@@ -9,16 +15,16 @@ export function tool<TInput, TResult>(
   config: ToolDefinition<TInput, TResult>,
 ): ToolDefinition<TInput, TResult> {
   if (!config.name || typeof config.name !== 'string') {
-    throw new Error('Tool "name" is required and must be a non-empty string');
+    throw invalidToolConfig('Tool "name" is required and must be a non-empty string.');
   }
   if (!config.description || typeof config.description !== 'string') {
-    throw new Error('Tool "description" is required and must be a non-empty string');
+    throw invalidToolConfig('Tool "description" is required and must be a non-empty string.');
   }
   if (!config.inputSchema || typeof config.inputSchema.safeParse !== 'function') {
-    throw new Error('Tool "inputSchema" must be a Zod schema');
+    throw invalidToolConfig(`Tool "${config.name}" inputSchema must be a Zod schema.`);
   }
   if (typeof config.execute !== 'function') {
-    throw new Error('Tool "execute" must be a function');
+    throw invalidToolConfig(`Tool "${config.name}" execute must be a function.`);
   }
 
   return Object.freeze({ ...config });

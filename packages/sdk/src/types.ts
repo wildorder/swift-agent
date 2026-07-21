@@ -140,6 +140,13 @@ export interface RunnerAuthConfig {
 
 // ── SDK HTTP error ──────────────────────────────────────────────────
 
+/**
+ * Internal wire error for a non-2xx control-plane response. It carries the raw
+ * `status`/`body`, but is NOT surfaced to SDK consumers directly: `client.ts`
+ * maps it to a typed {@link SwiftAgentError} (with an actionable message and a
+ * `code`) and attaches this instance as `.cause` (WS-41). Reachable via the
+ * `@swiftagent/sdk/internal` subpath for advanced callers who want `.status`/`.body`.
+ */
 export class SdkHttpError extends Error {
   constructor(
     message: string,

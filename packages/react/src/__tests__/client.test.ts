@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isSwiftAgentError } from '@swiftagent/shared';
+import type { SwiftAgentError } from '@swiftagent/shared';
 import { createChatSession } from '../client.js';
 import type { ConnectionStatus } from '../types.js';
 
@@ -51,9 +52,9 @@ class MockWebSocket {
     this.onmessage?.(new MessageEvent('message', { data: JSON.stringify(data) }));
   }
 
-  simulateClose(): void {
+  simulateClose(code = 1006, reason = ''): void {
     this.readyState = MockWebSocket.CLOSED;
-    this.onclose?.(new CloseEvent('close'));
+    this.onclose?.(new CloseEvent('close', { code, reason }));
   }
 
   simulateError(): void {
@@ -548,5 +549,93 @@ describe('reconnection', () => {
     (instances[1] as MockWebSocket).simulateClose();
     vi.advanceTimersByTime(100);
     expect(instances).toHaveLength(3); // reconnect attempt works
+  });
+});
+
+// ── Typed close/error surfacing (WS-41) ─────────────────────────────
+
+describe('abnormal / auth close surfacing', () => {
+  let instances: MockWebSocket[];
+  let factory: (url: string) => WebSocket;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    instances = [];
+    factory = (url: string) => {
+      const ws = new MockWebSocket(url);
+      instances.push(ws);
+      return ws as unknown as WebSocket;
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('surfaces a typed UNAUTHORIZED error on a 4001 close and still reconnects (WS-34 intact)', () => {
+    const errors: unknown[] = [];
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
+      createWebSocket: factory,
+      reconnect: { maxRetries: 3, baseDelayMs: 100 },
+      onError: (e) => errors.push(e),
+    });
+
+    const ws0 = instances[0] as MockWebSocket;
+    ws0.simulateOpen();
+    ws0.simulateClose(4001, 'Missing token');
+
+    // onError got a real (Swift Agent) Error — never a raw DOM Event.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect(isSwiftAgentError(errors[0])).toBe(true);
+    expect((errors[0] as SwiftAgentError).code).toBe('UNAUTHORIZED');
+    const message = (errors[0] as Error).message;
+    expect(message).toContain('4001');
+    expect(message).not.toContain('[object');
+
+    // Reconnect/backoff (WS-34) is unbroken — the factory is re-invoked after the delay.
+    vi.advanceTimersByTime(100);
+    expect(instances).toHaveLength(2);
+  });
+
+  it('surfaces a typed CONNECTION_ERROR on a non-1000 abnormal close', () => {
+    const errors: unknown[] = [];
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
+      createWebSocket: factory,
+      reconnect: { maxRetries: 3, baseDelayMs: 100 },
+      onError: (e) => errors.push(e),
+    });
+
+    const ws0 = instances[0] as MockWebSocket;
+    ws0.simulateOpen();
+    ws0.simulateClose(1006, 'Abnormal');
+
+    expect(errors).toHaveLength(1);
+    expect(isSwiftAgentError(errors[0])).toBe(true);
+    expect((errors[0] as SwiftAgentError).code).toBe('CONNECTION_ERROR');
+  });
+
+  it('does NOT surface an error on a normal 1000 close', () => {
+    const errors: unknown[] = [];
+    createChatSession({
+      sessionId: 'ses_1',
+      token: 'tok_1',
+      websocketUrl: CANONICAL_URL,
+      createWebSocket: factory,
+      reconnect: { maxRetries: 3, baseDelayMs: 100 },
+      onError: (e) => errors.push(e),
+    });
+
+    const ws0 = instances[0] as MockWebSocket;
+    ws0.simulateOpen();
+    ws0.simulateClose(1000, 'Normal');
+
+    expect(errors).toHaveLength(0);
   });
 });

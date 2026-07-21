@@ -1,4 +1,9 @@
-import { ChatEventSchema, assertProtocolCompatible } from '@swiftagent/shared';
+import {
+  ChatEventSchema,
+  assertProtocolCompatible,
+  SwiftAgentError,
+  SwiftAgentErrorCode,
+} from '@swiftagent/shared';
 import type { ChatEvent } from '@swiftagent/shared';
 import type {
   ChatSessionClient,
@@ -123,17 +128,47 @@ export function createChatSession(
       }
     };
 
-    ws.onclose = (): void => {
+    ws.onclose = (event: CloseEvent): void => {
       ws = null;
       setStatus('disconnected');
       if (!intentionalClose) {
+        // Surface an abnormal/auth close as a typed, human-readable error before
+        // reconnecting (WS-41). A normal close (1000) is silent. The raw DOM
+        // CloseEvent is NEVER forwarded to onError — we translate its code/reason
+        // into a SwiftAgentError so `lastError` is a clean string, not
+        // `[object Event]`. Reconnect/backoff below is WS-34's contract, untouched.
+        if (event.code !== 1000) {
+          emitCloseError(event);
+        }
         scheduleReconnect();
       }
     };
 
     ws.onerror = (): void => {
-      // onclose will fire after onerror — reconnection handled there
+      // onclose will fire after onerror — reconnection AND error surfacing happen
+      // there. The raw DOM Event handed to onerror is intentionally NOT forwarded
+      // to onError (it stringifies to `[object Event]`); onclose has the code/reason.
     };
+  }
+
+  /** Translate an abnormal/auth WebSocket close into a typed, readable error. */
+  function emitCloseError(event: CloseEvent): void {
+    const reason = event.reason ? `: ${event.reason}` : '';
+    if (event.code === 4001) {
+      onError?.(
+        new SwiftAgentError(
+          SwiftAgentErrorCode.UNAUTHORIZED,
+          `Connection closed (4001)${reason} — authentication failed; check the client token / websocketUrl.`,
+        ),
+      );
+      return;
+    }
+    onError?.(
+      new SwiftAgentError(
+        SwiftAgentErrorCode.CONNECTION_ERROR,
+        `Connection closed (${event.code})${reason} — the stream dropped; check the server / network. Reconnecting…`,
+      ),
+    );
   }
 
   function scheduleReconnect(): void {

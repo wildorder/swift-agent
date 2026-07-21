@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod';
 import { SignJWT, generateKeyPair, type CryptoKey } from 'jose';
 import type { FastifyInstance } from 'fastify';
+import { RUNNER_MAX_ERROR_BYTES } from '@swiftagent/shared';
 import { startToolRunner } from '../tool-runner.js';
 import { tool } from '../tool.js';
 import type { ToolDefinition, ToolRegistry, RunnerAuthConfig } from '../types.js';
@@ -225,6 +226,60 @@ describe('tool-runner', () => {
     expect(body?.error.message).toBe('Something went wrong');
   });
 
+  it('returns only the message (never the stack) on a handler throw, bounded to the byte cap', async () => {
+    // A message shaped like a stack — the wire must carry the message text, not
+    // any `err.stack`, and must be <= RUNNER_MAX_ERROR_BYTES (WS-41).
+    const stackyTool = tool({
+      name: 'stacky',
+      description: 'throws with stack-like message',
+      inputSchema: z.object({}),
+      execute: async () => {
+        throw new Error('boom\n    at somewhere (/secret/path.ts:1:1)');
+      },
+    });
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(stackyTool), auth: authConfig() });
+    const port = await getPort(server);
+    const token = await mint({ toolName: 'stacky', callId: 'tc_s', idempotencyKey: 'tc_s' });
+    const { status, body } = await post(
+      port,
+      '/tools/stacky',
+      makeBody({ input: {}, idempotencyKey: 'tc_s' }, { callId: 'tc_s' }),
+      { Authorization: `Bearer ${token}` },
+    );
+    expect(status).toBe(500);
+    expect(body?.error.code).toBe('EXECUTION_ERROR');
+    expect(body?.error.message).toBe('boom\n    at somewhere (/secret/path.ts:1:1)');
+    // The `.message` is exactly the thrown message — no `.stack` frames appended.
+    expect(body?.error.message).not.toContain('at Object.execute');
+    expect(Buffer.byteLength(body?.error.message as string, 'utf-8')).toBeLessThanOrEqual(
+      RUNNER_MAX_ERROR_BYTES,
+    );
+  });
+
+  it('caps an over-long handler error message to RUNNER_MAX_ERROR_BYTES', async () => {
+    const hugeTool = tool({
+      name: 'huge',
+      description: 'throws a very long message',
+      inputSchema: z.object({}),
+      execute: async () => {
+        throw new Error('x'.repeat(RUNNER_MAX_ERROR_BYTES * 2));
+      },
+    });
+    server = await startToolRunner({ port: PORT, registry: buildRegistry(hugeTool), auth: authConfig() });
+    const port = await getPort(server);
+    const token = await mint({ toolName: 'huge', callId: 'tc_h', idempotencyKey: 'tc_h' });
+    const { status, body } = await post(
+      port,
+      '/tools/huge',
+      makeBody({ input: {}, idempotencyKey: 'tc_h' }, { callId: 'tc_h' }),
+      { Authorization: `Bearer ${token}` },
+    );
+    expect(status).toBe(500);
+    expect(Buffer.byteLength(body?.error.message as string, 'utf-8')).toBeLessThanOrEqual(
+      RUNNER_MAX_ERROR_BYTES,
+    );
+  });
+
   it('returns 504 on timeout', async () => {
     server = await startToolRunner({
       port: PORT,
@@ -242,6 +297,12 @@ describe('tool-runner', () => {
     );
     expect(status).toBe(504);
     expect(body?.error.code).toBe('TIMEOUT');
+    // Names the tool + the timeout, and stays within the byte cap (WS-41).
+    expect(body?.error.message).toContain('slow');
+    expect(body?.error.message).toContain('100ms');
+    expect(Buffer.byteLength(body?.error.message as string, 'utf-8')).toBeLessThanOrEqual(
+      RUNNER_MAX_ERROR_BYTES,
+    );
   });
 
   it('passes agentId/runId/callId into the handler context', async () => {
