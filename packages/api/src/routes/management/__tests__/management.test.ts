@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { ApiKeyRepo } from '@swiftagent/db';
-import type { ApiKeyRecord } from '@swiftagent/shared';
 import {
   createMockUserRepo,
   createMockUserWorkspaceRepo,
@@ -12,36 +10,7 @@ import { registerMeRoutes } from '../me.js';
 import { registerWorkspaceRoutes } from '../workspaces.js';
 import { registerKeyRoutes } from '../keys.js';
 import type { ManagementAuthenticatedRequest } from '../../../types.js';
-
-/** Management-specific mock that actually stores created keys. */
-function createManagementMockApiKeyRepo(): ApiKeyRepo {
-  const keys = new Map<string, ApiKeyRecord>();
-
-  return {
-    create: async (record) => {
-      const key: ApiKeyRecord = {
-        apiKeyId: record.apiKeyId,
-        workspaceId: record.workspaceId,
-        keyHash: record.keyHash,
-        name: record.name,
-        createdAt: new Date(),
-        revokedAt: null,
-      };
-      keys.set(record.apiKeyId, key);
-      return key;
-    },
-    getByKeyHash: async () => null,
-    listByWorkspace: async (workspaceId) =>
-      [...keys.values()].filter((k) => k.workspaceId === workspaceId),
-    revoke: async (apiKeyId) => {
-      const key = keys.get(apiKeyId);
-      if (!key) return null;
-      const revoked = { ...key, revokedAt: new Date() };
-      keys.set(apiKeyId, revoked);
-      return revoked;
-    },
-  };
-}
+import { createManagementMockApiKeyRepo } from './management-helpers.js';
 
 const TEST_COGNITO_SUB = 'cognito-sub-12345';
 const TEST_EMAIL = 'test@example.com';
