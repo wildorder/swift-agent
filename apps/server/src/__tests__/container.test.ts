@@ -34,6 +34,7 @@ vi.mock('@swiftagent/models', () => {
     createOpenAIProvider: vi.fn(),
     createAnthropicProvider: vi.fn(),
     createGoogleProvider: vi.fn(),
+    createEchoProvider: vi.fn(),
   };
 });
 

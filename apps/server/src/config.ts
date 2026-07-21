@@ -27,9 +27,17 @@ const CLOUD_ENVS = new Set(['dev', 'staging', 'prod']);
  * or not a cloud env) the check is skipped entirely, so local boot needs no
  * ceremony and a `ws://localhost:3001` value is allowed.
  *
- * `DEPLOY_ENV` is read directly from `env` (mirroring AUTO_MIGRATE) rather than
- * added to ENV_KEYS/ConfigSchema — it is a boot-time deployment marker, not app
- * config the schema needs to type.
+ * INSECURE OPT-OUT (`PUBLIC_WS_ALLOW_INSECURE=true`): a domainless environment
+ * (e.g. dev, whose ALB has no ACM cert and thus no TLS listener) cannot serve a
+ * real `wss://` endpoint on its raw `*.elb.amazonaws.com` name. Setting this
+ * boot-time flag permits a non-localhost `ws://` URL so the realtime path is
+ * reachable over plain HTTP (port 80). It is deliberately NOT set for
+ * staging/prod, which keep the strict `wss://`-only policy. The localhost ban
+ * still applies either way.
+ *
+ * `DEPLOY_ENV` / `PUBLIC_WS_ALLOW_INSECURE` are read directly from `env`
+ * (mirroring AUTO_MIGRATE) rather than added to ENV_KEYS/ConfigSchema — they are
+ * boot-time deployment markers, not app config the schema needs to type.
  *
  * @returns an error message when the URL violates cloud policy, else `null`.
  */
@@ -51,8 +59,11 @@ export function validatePublicWebsocketUrl(
     return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} is not a valid URL (got '${raw}')`;
   }
 
-  if (url.protocol !== 'wss:') {
-    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must use the wss:// scheme in a cloud environment (got '${raw}')`;
+  const allowInsecure = env['PUBLIC_WS_ALLOW_INSECURE'] === 'true';
+  const okProtocol = url.protocol === 'wss:' || (allowInsecure && url.protocol === 'ws:');
+  if (!okProtocol) {
+    const schemes = allowInsecure ? 'wss:// or ws://' : 'wss://';
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must use the ${schemes} scheme in a cloud environment (got '${raw}')`;
   }
   if (LOCAL_HOSTS.has(url.hostname)) {
     return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must not point at localhost in a cloud environment (got '${raw}')`;

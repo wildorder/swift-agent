@@ -90,6 +90,18 @@ variable "migrate_skip_drift_check" {
   default     = ""
 }
 
+variable "public_ws_allow_insecure" {
+  description = <<-EOT
+    When true, injects PUBLIC_WS_ALLOW_INSECURE=true so the server's startup
+    guard accepts a non-localhost ws:// PUBLIC_WEBSOCKET_URL (see
+    apps/server/src/config.ts). Intended ONLY for a domainless environment
+    whose ALB has no TLS listener (dev). Leave false for staging/prod, which
+    keep the strict wss://-only policy. Injected only when true.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "log_group_name" {
   description = "CloudWatch log group name for container logs"
   type        = string

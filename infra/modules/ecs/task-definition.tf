@@ -45,6 +45,15 @@ resource "aws_ecs_task_definition" "this" {
             name  = "MIGRATE_SKIP_DRIFT_CHECK"
             value = var.migrate_skip_drift_check
           }
+        ] : [],
+        # Only for a domainless env (dev) whose ALB has no TLS listener — lets
+        # the startup guard accept a ws:// PUBLIC_WEBSOCKET_URL. Absent (strict
+        # wss:// only) for staging/prod.
+        var.public_ws_allow_insecure ? [
+          {
+            name  = "PUBLIC_WS_ALLOW_INSECURE"
+            value = "true"
+          }
         ] : []
       )
 

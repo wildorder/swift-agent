@@ -139,6 +139,35 @@ describe('validatePublicWebsocketUrl (cloud startup guard, SC-04)', () => {
     expect(msg).toContain('localhost');
   });
 
+  it('cloud env + PUBLIC_WS_ALLOW_INSECURE=true + ws:// non-localhost → allowed', () => {
+    expect(
+      validatePublicWebsocketUrl({
+        DEPLOY_ENV: 'dev',
+        PUBLIC_WS_ALLOW_INSECURE: 'true',
+        PUBLIC_WEBSOCKET_URL: 'ws://dev-alb-123.us-west-2.elb.amazonaws.com/v1/stream',
+      }),
+    ).toBeNull();
+  });
+
+  it('cloud env + PUBLIC_WS_ALLOW_INSECURE=true still rejects ws://localhost', () => {
+    const msg = validatePublicWebsocketUrl({
+      DEPLOY_ENV: 'dev',
+      PUBLIC_WS_ALLOW_INSECURE: 'true',
+      PUBLIC_WEBSOCKET_URL: 'ws://localhost:3000/v1/stream',
+    });
+    expect(msg).not.toBeNull();
+    expect(msg).toContain('localhost');
+  });
+
+  it('PUBLIC_WS_ALLOW_INSECURE unset → ws:// still rejected (strict default)', () => {
+    const msg = validatePublicWebsocketUrl({
+      DEPLOY_ENV: 'prod',
+      PUBLIC_WEBSOCKET_URL: 'ws://api.swiftagent.dev/v1/stream',
+    });
+    expect(msg).not.toBeNull();
+    expect(msg).toContain('wss://');
+  });
+
   it('no DEPLOY_ENV → missing URL is allowed (local dev, zero ceremony)', () => {
     expect(validatePublicWebsocketUrl({})).toBeNull();
   });

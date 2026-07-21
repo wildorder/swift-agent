@@ -46,4 +46,5 @@ export {
   createOpenAIProvider,
   createAnthropicProvider,
   createGoogleProvider,
+  createEchoProvider,
 } from './providers/index.js';

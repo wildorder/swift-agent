@@ -182,13 +182,15 @@ module "ecr" {
   source = "../../modules/ecr"
 }
 
-# Public wss:// base URL, up to and including /v1/stream (sessions.ts appends only
-# `?token=…`). Dev has NO domain_prefix and enable_dns defaults false, so there is
-# no stable DNS name — derive from the ALB DNS name (a real, reachable,
-# non-localhost wss endpoint that satisfies the server's cloud startup guard),
-# overridable via the public_websocket_url tfvars when a custom dev domain exists.
+# Public WebSocket base URL, up to and including /v1/stream (sessions.ts appends
+# only `?token=…`). Dev has NO domain_prefix and enable_dns defaults false, so the
+# ALB has no TLS listener — a real wss:// endpoint is impossible on the raw ALB
+# DNS name. Derive an insecure ws:// URL from the ALB DNS name (reachable over the
+# HTTP :80 listener) and pair it with public_ws_allow_insecure below so the
+# server's startup guard accepts the ws:// scheme. Overridable via the
+# public_websocket_url tfvars when a custom dev domain with TLS exists.
 locals {
-  public_websocket_url = var.public_websocket_url != "" ? var.public_websocket_url : "wss://${module.loadbalancer.alb_dns_name}/v1/stream"
+  public_websocket_url = var.public_websocket_url != "" ? var.public_websocket_url : "ws://${module.loadbalancer.alb_dns_name}/v1/stream"
 }
 
 module "secrets" {
@@ -256,12 +258,14 @@ module "ecs" {
   task_role_arn           = module.iam.ecs_task_role_arn
   ssm_parameter_arns      = merge(module.secrets.parameter_arns, module.cognito.parameter_arns)
   log_group_name          = "/ecs/${var.environment}-swiftagent"
-  enable_autoscaling      = var.enable_autoscaling
-  autoscaling_min         = var.autoscaling_min
-  autoscaling_max         = var.autoscaling_max
-  autoscaling_cpu_target  = var.autoscaling_cpu_target
-  alb_arn_suffix          = module.loadbalancer.alb_arn_suffix
-  target_group_arn_suffix = module.loadbalancer.target_group_arn_suffix
+  # Dev ALB has no TLS listener — allow the ws:// PUBLIC_WEBSOCKET_URL above.
+  public_ws_allow_insecure = true
+  enable_autoscaling       = var.enable_autoscaling
+  autoscaling_min          = var.autoscaling_min
+  autoscaling_max          = var.autoscaling_max
+  autoscaling_cpu_target   = var.autoscaling_cpu_target
+  alb_arn_suffix           = module.loadbalancer.alb_arn_suffix
+  target_group_arn_suffix  = module.loadbalancer.target_group_arn_suffix
 }
 
 # -----------------------------------------------------------------------------

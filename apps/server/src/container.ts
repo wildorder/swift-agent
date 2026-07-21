@@ -28,6 +28,7 @@ import {
   createOpenAIProvider,
   createAnthropicProvider,
   createGoogleProvider,
+  createEchoProvider,
 } from '@swiftagent/models';
 import { Tracer, type TraceSink } from '@swiftagent/observability';
 import {
@@ -149,6 +150,14 @@ export function buildContainer(config: ServerConfig): Container {
     });
     registeredProviders.push('google');
   }
+
+  // Echo provider — always registered, needs no API key, makes no external
+  // call. Reachable only by an agent whose modelConfig.model is `echo/*` (the
+  // seeded `smoke-echo` agent used by the deployed realtime smoke test). The
+  // explicit throwaway config stops the registry resolving a real env key. It
+  // is intentionally NOT added to `registeredProviders`, which tracks only the
+  // key-gated real providers surfaced in the startup banner.
+  modelRegistry.register('echo', createEchoProvider, { apiKey: 'echo-provider-no-key' });
 
   // 4. Tracer — TraceRepo implements TraceSink interface
   const tracer = new Tracer(repos.traceRepo as unknown as TraceSink);
