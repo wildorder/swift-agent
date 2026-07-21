@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
 import { createAgentApp, defineAgent, tool } from '@swiftagent/sdk';
-import { ChatEventSchema, isSwiftAgentError } from '@swiftagent/shared';
+import { ChatEventSchema, isSwiftAgentError, type SwiftAgentError } from '@swiftagent/shared';
 import { connectWs, type WsClient, type WsFrame } from '../support/ws-client.js';
 import { startAcceptanceServer, type AcceptanceServer } from './support/acceptance-server.js';
 
@@ -176,43 +176,31 @@ describe('WS-42 quickstart acceptance', () => {
 
   // ── Negative path (SC-09 / WS-41): a typed, human-readable error ───────────
   //
-  // FLAGGED GAP (WS-41): `SwiftAgentError`/`isSwiftAgentError` ARE exported from
-  // `@swiftagent/shared`, but WS-41's routing of that typed error THROUGH the SDK
-  // client has NOT landed — the SDK currently throws `SdkHttpError` (with a
-  // numeric `.status`) and a plain `Error('apiKey is required')`. Per the WS-42
-  // scope rules we DO NOT patch the SDK; we assert the invariant that actually
-  // matters (a typed, machine-readable, human-readable error — never
-  // `[object Event]` / a bare string) in a FORWARD-COMPATIBLE way: the assertion
-  // passes for today's `SdkHttpError` AND for the `SwiftAgentError` WS-41 will
-  // route, so it needs no edit once WS-41 lands.
-  function assertTypedReadableError(
+  // WS-41 has landed: `createAgentApp` throws `SwiftAgentError(VALIDATION)` on a
+  // missing apiKey, and `ControlPlaneClient` maps every non-2xx / transport
+  // failure to a typed `SwiftAgentError` (status-derived `.code`, actionable
+  // `.message`, raw wire error preserved as `.cause`). So we assert the STRONG
+  // contract directly: the throw `isSwiftAgentError`, carries the expected
+  // machine-readable `.code`, and a human-readable `.message` — never
+  // `[object Event]` / a bare `HTTP 401`.
+  function assertSwiftAgentError(
     err: unknown,
-    opts: { expectStatus?: number; requireDiscriminator?: boolean } = {},
-  ): void {
-    expect(err).toBeInstanceOf(Error);
-    const e = err as Error & { code?: unknown; status?: unknown; statusCode?: unknown };
+    expectedCode: string,
+    opts: { expectStatus?: number } = {},
+  ): asserts err is SwiftAgentError {
+    expect(isSwiftAgentError(err)).toBe(true);
+    const e = err as SwiftAgentError;
+    expect(e.code).toBe(expectedCode);
     // Human-readable message — not the notorious `[object Event]` or empty.
     expect(typeof e.message).toBe('string');
     expect(e.message.length).toBeGreaterThan(0);
     expect(e.message).not.toBe('[object Event]');
-    // Machine-readable discriminator: SwiftAgentError.code (WS-41) OR
-    // SdkHttpError.status (today, on the HTTP path). The `requireDiscriminator`
-    // opt-out covers the pre-WS-41 CONSTRUCTION guard, which today throws a plain
-    // `Error('apiKey is required')` with no code/status — a FLAGGED gap: once
-    // WS-41 routes SwiftAgentError(VALIDATION), a `.code` appears and this check
-    // could be tightened. It is still a typed, readable Error today.
-    if (opts.requireDiscriminator ?? true) {
-      const hasDiscriminator =
-        isSwiftAgentError(err) || typeof e.code === 'string' || typeof e.status === 'number';
-      expect(hasDiscriminator).toBe(true);
-    }
     if (opts.expectStatus !== undefined) {
-      const status = (e.status ?? e.statusCode) as number | undefined;
-      expect(status).toBe(opts.expectStatus);
+      expect(e.statusCode).toBe(opts.expectStatus);
     }
   }
 
-  it('rejects an empty apiKey with a typed, readable error naming apiKey', () => {
+  it('rejects an empty apiKey with SwiftAgentError(VALIDATION) naming apiKey', () => {
     let thrown: unknown;
     try {
       createAgentApp({ apiKey: '' });
@@ -220,11 +208,11 @@ describe('WS-42 quickstart acceptance', () => {
       thrown = err;
     }
     expect(thrown).toBeDefined();
-    assertTypedReadableError(thrown, { requireDiscriminator: false });
-    expect((thrown as Error).message.toLowerCase()).toContain('apikey');
+    assertSwiftAgentError(thrown, 'VALIDATION');
+    expect((thrown as SwiftAgentError).message.toLowerCase()).toContain('apikey');
   });
 
-  it('surfaces a typed UNAUTHORIZED error on a bad API key (not an opaque failure)', async () => {
+  it('surfaces SwiftAgentError(UNAUTHORIZED) on a bad API key (not an opaque failure)', async () => {
     // Seed a real agent so the ONLY thing wrong is the key — isolates the 401.
     const { agentName } = await server.seedEchoAgent();
     const app = createAgentApp({ apiKey: 'ak_totally-bogus-key', baseUrl: server.baseUrl });
@@ -239,16 +227,12 @@ describe('WS-42 quickstart acceptance', () => {
     }
 
     expect(thrown).toBeDefined();
-    // 401 today (SdkHttpError.status); UNAUTHORIZED code once WS-41 routes it.
-    assertTypedReadableError(thrown, { expectStatus: 401 });
-    if (isSwiftAgentError(thrown)) {
-      expect(thrown.code).toBe('UNAUTHORIZED');
-    }
+    assertSwiftAgentError(thrown, 'UNAUTHORIZED', { expectStatus: 401 });
   });
 
   // ── Bounded / fail-loud (SC-09): a broken target fails within budget ───────
   it(
-    'fails loud within the wall-clock budget against an unreachable server (does not hang)',
+    'fails loud with SwiftAgentError(CONNECTION_ERROR) against an unreachable server (does not hang)',
     async () => {
       // Point the SDK at a closed port on loopback — no listener accepts it.
       const app = createAgentApp({ apiKey: 'ak_whatever', baseUrl: 'http://127.0.0.1:1' });
@@ -262,7 +246,9 @@ describe('WS-42 quickstart acceptance', () => {
         await app.close();
       }
       const elapsed = Date.now() - start;
-      expect(thrown).toBeInstanceOf(Error); // connection refused — a real Error, not silence
+      // Connection refused → a typed CONNECTION_ERROR, not silence and not a raw
+      // ECONNREFUSED Error. WS-41 names the baseUrl in the message.
+      assertSwiftAgentError(thrown, 'CONNECTION_ERROR');
       expect(elapsed).toBeLessThan(SCENARIO_BUDGET_MS); // bounded: it did not hang
     },
     SCENARIO_BUDGET_MS,
