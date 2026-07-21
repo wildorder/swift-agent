@@ -21,6 +21,7 @@
   "dependencies": {
     "@fastify/cors": "^10",
     "@swiftagent/db": "workspace:*",
+    "@swiftagent/observability": "workspace:*",
     "@swiftagent/runtime": "workspace:*",
     "@swiftagent/shared": "workspace:*",
     "fastify": "^5",
