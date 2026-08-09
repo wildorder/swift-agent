@@ -2,7 +2,7 @@
 
 ## Program Overview
 
-**Status:** Planning — created 2026-07-21.
+**Status:** Completed on 2026-07-21.
 
 **Product:** Swift Agent — the hosted real-time agent runtime. See [swift-agent.md](../../swift-agent.md) for full vision; see [as-built.md](../as-built.md) for the current system.
 

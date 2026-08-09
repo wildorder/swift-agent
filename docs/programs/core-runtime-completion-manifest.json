@@ -3,8 +3,9 @@
     "id": "core-runtime-completion",
     "name": "Swift Agent — Core Runtime Completion",
     "description": "Complete and harden the SDK registration-to-model-to-remote-tool-to-response execution path across REST and WebSocket entry points.",
-    "status": "planning",
-    "created": "2026-07-15"
+    "status": "completed",
+    "created": "2026-07-15",
+    "completed": "2026-07-16"
   },
   "technology": {},
   "successCriteria": [
@@ -129,7 +130,7 @@
       "id": "WS-19",
       "name": "Persisted Tool Definition Contract",
       "taskFile": "tasks/core-runtime-completion/ws-19-persisted-tool-contract.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "db-migration-baseline:WS-01",
@@ -149,7 +150,7 @@
       "id": "WS-20",
       "name": "Provider Tool-Calling Completion",
       "taskFile": "tasks/core-runtime-completion/ws-20-provider-tool-calling.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-19",
@@ -165,7 +166,7 @@
       "id": "WS-21",
       "name": "Per-Agent Executor Resolution",
       "taskFile": "tasks/core-runtime-completion/ws-21-executor-resolution.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": [
         "WS-19",
@@ -182,7 +183,7 @@
       "id": "WS-22",
       "name": "Secure Remote SDK Runner Integration",
       "taskFile": "tasks/core-runtime-completion/ws-22-remote-runner-integration.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-20",
@@ -200,7 +201,7 @@
       "id": "WS-23",
       "name": "Unified Run Execution and REST Semantics",
       "taskFile": "tasks/core-runtime-completion/ws-23-unified-run-execution.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-20",
@@ -221,7 +222,7 @@
       "id": "WS-24",
       "name": "Cancellation, Timeout, and Failure Hardening",
       "taskFile": "tasks/core-runtime-completion/ws-24-run-lifecycle-hardening.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-23",
@@ -240,7 +241,7 @@
       "id": "WS-25",
       "name": "Full Runtime Integration Tests",
       "taskFile": "tasks/core-runtime-completion/ws-25-runtime-integration-tests.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-24"

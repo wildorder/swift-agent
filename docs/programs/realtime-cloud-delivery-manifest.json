@@ -3,8 +3,9 @@
     "id": "realtime-cloud-delivery",
     "name": "Swift Agent — Realtime Cloud Delivery",
     "description": "Make the locally working realtime runtime accessible, reliable, and verifiable through deployed AWS environments: unify REST + WebSocket onto a single public port, establish one canonical WebSocket URL contract, wire PUBLIC_WEBSOCKET_URL through Terraform/SSM/ECS with fail-fast validation, harden deploy-time connection draining, correct Redis fanout and health, align the React SDK and site docs, and add a deployed realtime smoke test that blocks releases.",
-    "status": "planning",
-    "created": "2026-07-16"
+    "status": "completed",
+    "created": "2026-07-16",
+    "completed": "2026-07-17"
   },
   "technology": {},
   "successCriteria": [
@@ -100,7 +101,7 @@
       "id": "WS-30",
       "name": "Unified Realtime Server (Port Consolidation)",
       "taskFile": "tasks/realtime-cloud-delivery/ws-30-unified-realtime-server.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "product-x:WS-06",
@@ -117,7 +118,7 @@
       "id": "WS-31",
       "name": "Realtime Infra: Single-Port Routing & Drain Tuning",
       "taskFile": "tasks/realtime-cloud-delivery/ws-31-realtime-infra-routing-drain.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-30"
@@ -135,7 +136,7 @@
       "id": "WS-32",
       "name": "Environment URL Configuration & Startup Validation",
       "taskFile": "tasks/realtime-cloud-delivery/ws-32-env-url-config-validation.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-31"
@@ -154,7 +155,7 @@
       "id": "WS-33",
       "name": "Redis Fanout Correctness & Health",
       "taskFile": "tasks/realtime-cloud-delivery/ws-33-redis-fanout-health.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-30"
@@ -169,7 +170,7 @@
       "id": "WS-34",
       "name": "Client & Documentation Alignment",
       "taskFile": "tasks/realtime-cloud-delivery/ws-34-client-docs-alignment.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-30",
@@ -185,7 +186,7 @@
       "id": "WS-35",
       "name": "Deployment Verification: Realtime Smoke Tests",
       "taskFile": "tasks/realtime-cloud-delivery/ws-35-deployment-realtime-smoke.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-30",

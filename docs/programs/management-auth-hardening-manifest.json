@@ -3,8 +3,9 @@
     "id": "management-auth-hardening",
     "name": "Swift Agent — Management Auth Hardening",
     "description": "Server-side companion to console-identity-readiness: explicit Cognito token_use validation, a legible auth error taxonomy, and route-protection contract tests for /v1/management/*.",
-    "status": "planning",
-    "created": "2026-07-21"
+    "status": "completed",
+    "created": "2026-07-21",
+    "completed": "2026-07-21"
   },
   "technology": {
     "identity_provider": "AWS Cognito User Pool (OIDC)",
@@ -27,7 +28,7 @@
       "id": "WS-19",
       "name": "Token-Type Validation Hardening",
       "taskFile": "tasks/management-auth-hardening/ws-19-token-type-validation.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": [],
       "packages": ["packages/api"]
@@ -36,7 +37,7 @@
       "id": "WS-20",
       "name": "Management Route-Protection & Contract Tests",
       "taskFile": "tasks/management-auth-hardening/ws-20-route-protection-contract-tests.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": ["WS-19"],
       "packages": ["packages/api"]

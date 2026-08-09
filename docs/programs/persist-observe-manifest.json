@@ -3,8 +3,9 @@
     "id": "persist-observe",
     "name": "Swift Agent — Persistence & Observability Reliability",
     "description": "Make database evolution and run/trace observability production-safe: migration status/drift detection with a CI guard, a rollback + reconciliation runbook, a run-history/metrics API over persisted spans, trace-persistence hardening, and migration + observability integration tests.",
-    "status": "planning",
-    "created": "2026-07-16"
+    "status": "completed",
+    "created": "2026-07-16",
+    "completed": "2026-07-16"
   },
   "technology": {},
   "successCriteria": [
@@ -90,7 +91,7 @@
       "id": "WS-26",
       "name": "Migration Status & Drift-Detection Command",
       "taskFile": "tasks/persist-observe/ws-26-migration-status-drift.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "db-migration-baseline:WS-01",
@@ -105,7 +106,7 @@
       "id": "WS-27",
       "name": "CI Drift Guard, Deploy Alignment & Rollback Runbook",
       "taskFile": "tasks/persist-observe/ws-27-ci-guard-deploy-runbook.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "S",
       "dependencies": [
         "WS-26"
@@ -121,7 +122,7 @@
       "id": "WS-28",
       "name": "Run History & Metrics API + Trace-Persistence Hardening",
       "taskFile": "tasks/persist-observe/ws-28-run-metrics-api.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "core-runtime-completion:WS-23",
@@ -140,7 +141,7 @@
       "id": "WS-29",
       "name": "Migration & Observability Integration Tests",
       "taskFile": "tasks/persist-observe/ws-29-persist-observe-integration-tests.md",
-      "status": "not_started",
+      "status": "completed",
       "size": "M",
       "dependencies": [
         "WS-26",
