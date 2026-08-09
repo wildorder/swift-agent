@@ -7,7 +7,7 @@
   "author": "Swift Agent",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wingitlabs/swift-agent.git",
+    "url": "git+https://github.com/wildorder/swift-agent.git",
     "directory": "packages/shared"
   },
   "main": "./dist/index.js",
