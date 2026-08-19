@@ -5,7 +5,9 @@
     "description": "Complete the unbuilt rungs of the adoption ladder: a hosted playground and one-click setup (scaffold CLI + managed-host deploy template), on a repaired local stack, with public-npm packaging prepared coherently but not published.",
     "status": "planning",
     "created": "2026-08-18",
-    "planGeneration": "2026-08-19T00:00:00Z-osd8"
+    "planGeneration": "2026-08-19T23:45:00Z-osd12",
+    "executionMode": "orchestrated",
+    "executionModeReason": "Three separately-shippable release surfaces must each be independently green and independently reversible: a container image published to GHCR, npm packaging metadata for three packages, and a publicly-hosted playground deployment. The publishing flip is a genuine expand -> migrate -> contract migration with load-bearing ordering (Apache-2.0 and public publishConfig must be in the tree before any image publishes; the local registry harness must exist before the scaffold CLI can install the packages as real dependencies), and no single agent session can coherently own a new two-part deployable app (apps/playground backend + frontend), a twelve-surface repository posture flip, a scaffold CLI, a container pipeline, and a managed-host deploy template. After the root repair the packaging chain and the hosting chain are causally independent and run in parallel, which is material parallelism rather than cosmetic decomposition."
   },
   "technology": {
     "playgroundHost": "Fly.io or Railway (decided in WS-47) — deliberately separate from the AWS Terraform stack; must support WebSockets and pinning to exactly one instance",
@@ -16,17 +18,21 @@
     "note": "No changes to the runtime stack and no new runtime dependencies."
   },
   "constraints": {
-    "singleInstance": "docs/runbooks/realtime-operations.md §1 and §6: connections, replay buffers, session locks, and in-flight runs are process-local; Redis pub/sub is wired but dormant; ECS is pinned to desired_count = 1. Every deployment surface this program creates must pin to exactly one instance with autoscaling disabled. Horizontal scale is Phase 2 and is out of scope.",
+    "singleInstance": "docs/runbooks/realtime-operations.md §1 and §6: connections, replay buffers, session locks, and in-flight runs are process-local; Redis pub/sub is wired but dormant; ECS is pinned to desired_count = 1. Every deployment surface this program creates must pin to exactly one instance with autoscaling disabled. Horizontal scale is Phase 2 and is out of scope. VERIFICATION: setting replicas or desired_count to 1 is necessary but not sufficient — SC-12 requires observing that exactly one instance serves traffic ACROSS a rolling deployment and a restart, since that is precisely when a managed host silently runs two.",
     "forwardOnlyMigrations": "docs/runbooks/migrations.md §1: migrations are forward-only via node packages/db/dist/migrate.js, with a drift preflight that refuses to apply on divergence. Deploy surfaces run migrate as an explicit release step; no down-migrations exist or will be added.",
-    "publishingSurfaces": "Going public requires changing five agreeing surfaces together: packages/{sdk,react,shared}/package.json (publishConfig + license), a repository LICENSE file, .changeset/config.json access, docs/policies/versioning.md normative text, and scripts/verify-pack.mjs assertions.",
+    "publishingSurfaces": "DOMAIN (clarified 2026-08-19, audit round 2): the posture flip applies to the three publishable packages @swiftagent/{sdk,react,shared} and their public-consumer path ONLY. The nine other workspace packages — @swiftagent/{api,db,gateway,models,observability,runtime,server} and the two quickstart example packages — intentionally remain \"private\": true and are out of domain; AGENTS.md's rule that every other package is private stays true after the flip. Within that domain, going public means changing every ACTIVE surface that asserts or enforces the private/restricted posture, not the five originally listed. The complete active set: packages/{sdk,react,shared}/package.json (publishConfig + license); a repository LICENSE file; .changeset/config.json; docs/policies/versioning.md normative text; scripts/verify-pack.mjs assertions; .npmrc (which functionally routes @swiftagent:registry to npm.pkg.github.com and would otherwise keep sending consumer installs to GitHub Packages); the AGENTS.md Delivery convention at line 119; docs/as-built.md; README.md and docs/quickstart.md; packages/{sdk,react,shared}/README.md; .github/workflows/ci.yml and both publish-sdks workflows; and test/acceptance/install-published.ts, test/acceptance/install-registry.acceptance.test.ts, and test/vitest.acceptance.config.ts. Historical records — superseded program plans, task specifications, and as-built snapshots describing the posture that WAS true — are preserved as historical dispositions and are NOT rewritten; only active normative, functional, and shipped-documentation copies change.",
     "contributionTerms": "Apache-2.0 §5 licenses inbound contributions under the same outbound terms unless a contributor states otherwise, so a signed CLA is not required for the license to function. A DCO (Signed-off-by trailer, enforced in CI) is the proportionate instrument. Consequence to accept knowingly: contributors retain copyright in their contributions, so relicensing the project to different terms later would require their permission. A CLA would preserve that option at the cost of contributor friction; it is deliberately not adopted.",
-    "artifactAudience": "Two distinct artifacts serve two distinct audiences: published npm packages serve the SDK consumer writing defineAgent/tool, while a published container image serves the runtime operator deploying the server. This program targets the operator, so the image is a first-class deliverable, not an optimisation. Both are release surfaces and both stay behind the same manual gate until the user audits them.",
-    "playgroundTakeaway": "The playground exists to land one takeaway: \"this is infrastructure, not a chat widget.\" It CANNOT demonstrate the product's central claim that tools run on infra the visitor controls — on a hosted demo they run on ours — so it must not imply otherwise. It proves what it can actually show, in this order: typed events you can build any UI on -> tool calls with real identity, timing, and failure semantics -> the session survives a dropped connection -> here is the code and the one command that reproduces it locally. Proving the tool boundary for real is the job of rungs 2/3 and of the proposed reverse-runner-transport program."
+    "artifactAudience": "Two distinct artifacts serve two distinct audiences: published npm packages serve the SDK consumer writing defineAgent/tool, while a published container image serves the runtime operator deploying the server. This program targets the operator, so the image is a first-class deliverable, not an optimisation. THE TWO ARE GATED DIFFERENTLY AND DELIBERATELY: npm publishing commits to a semver API surface and is effectively permanent once released, so it stays armed-but-unfired pending the user audit (asserted as a workflow property via a dry run, requiring no human action to complete WS-44). The container image commits to no API surface, its tags are replaceable, and it is AUTHORIZED to publish automatically — gated causally by WS-50 depending on WS-44 so the Apache-2.0 licence always lands before any image is published. No workstream in this program completes on a human approval step. GHCR BOOTSTRAP (corrected 2026-08-19, audit round 2): the compose pin is the sha256 MANIFEST-LIST DIGEST produced by the multi-arch push (image: ghcr.io/…@sha256:…). No tag satisfies \"pinned\" — version tags included — because GitHub's package lifecycle permits container package versions to be removed and replaced and GHCR defines no immutable-tag enforcement; only the content-addressed digest cannot drift. The digest cannot be referenced before it exists, so WS-50 publishes first and commits the compose digest pin as a second step within the same workstream. Version tags are published as human-readable aliases, never as the pin; upgrading means committing a new digest.",
+    "playgroundTakeaway": "The playground exists to land one takeaway: \"this is infrastructure, not a chat widget.\" It CANNOT demonstrate the product's central claim that tools run on infra the visitor controls — on a hosted demo they run on ours — so it must not imply otherwise. It proves what it can actually show, in this order: typed events you can build any UI on -> tool calls with real identity, timing, and failure semantics -> the session survives a dropped connection -> here is the code and the one command that reproduces it locally. Proving the tool boundary for real is the job of rungs 2/3 and of the proposed reverse-runner-transport program. BEATS 2 AND 3 CORRECTED 2026-08-19 after plan-audit: ChatEvent tool events carry callId, toolName, and status only (packages/shared/src/types/events.ts) — no deadline reaches the public surface, and ToolContext, ToolCallContext, RunnerRequestContext, and RunnerRequest omit it too. Beat 2 therefore renders a DEMO-OWNED timing budget: the playground configured that budget in its own tool wrapper, so it displays the configured value beside a duration measured from the real tool_call_started/tool_call_completed pair. No ChatEvent, runtime, or SDK surface is added. Beat 3 is corrected likewise: createChatSession().disconnect() sets intentionalClose and deliberately suppresses reconnection (packages/react/src/client.ts:211), so recovery is demonstrated by constructing a NEW session client against the same session id, and the on-page copy describes what actually happens rather than claiming an automatic reconnect.",
+    "canonicalGate": "pnpm test (the configured verify gate) is FLAKY-RED at baseline as of 2026-08-19: apps/server/src/__tests__/index.test.ts awaits a dynamic import of ../index.js and takes ~2.5s of vitest's 5000ms default in isolation, so it intermittently times out under parallel turbo load. Observed failing on one full `pnpm test` run and passing on the next, with no source change between them. pnpm build, pnpm typecheck, and pnpm lint are green. Every workstream in this program must finish with all four commands green, so a gate that fails at random will fail checkpoints that are actually correct and trigger spurious replans. WS-51 makes the gate deterministic and is a hard dependency of both zero-dependency roots.",
+    "localBootstrap": "SC-01 is NOT a two-value compose repair. A clean checkout has Postgres, Redis, and the listener and nothing else: test/smoke/realtime-smoke.ts requires a pre-seeded SMOKE_API_KEY and an existing smoke-echo agent, and does not self-provision. A `docker compose up` that completes a real tool round trip therefore additionally requires a server-accepted model configuration, a usable raw dev API key whose stored hash matches, a registered workspace and a tool-bearing agent, runner signing/verification keys with a reachable runner service, and a deterministic tool-calling model fixture. WS-43 owns all of it, which is why it is sized L rather than S.",
+    "npmGate": "DECIDED 2026-08-19 by the user, after plan-audit raised it as a requirements conflict: the npm gate STAYS, and the claims come down to meet it. `npx create-swift-agent` cannot work for a stranger while the scaffold and @swiftagent/{sdk,react,shared} are unpublished — the generated project installs the latter. Rather than authorize publication, SC-06 and SC-10 now assert local-registry verification and a built-pending-release ladder status. No workstream may link a bare `npx create-swift-agent` as a working command, or mark that ladder rung built without qualification.",
+    "ghcrVisibility": "DECIDED 2026-08-19 by the user, after plan-audit raised it as a requirements conflict: a newly published GHCR package inherits repository visibility, so an anonymous `docker pull` from a clean checkout fails until the package is made publicly readable. WS-50 performs that visibility change ONCE as a documented repository-configuration step (via `gh api`, the same category as adding a repository secret) and proves it with an anonymous pull from a logged-out context. This is explicitly NOT a per-run human approval gate, and it does NOT make any deliverable depend on repository visibility — package visibility is set directly and independently of it."
   },
   "successCriteria": [
     {
       "id": "SC-01",
-      "description": "From a clean checkout, `docker compose up` starts Postgres, Redis, and the server; a client created against it completes a streaming turn including one tool call over WebSocket, asserted by an automated smoke check."
+      "description": "From a clean checkout, `docker compose up` starts Postgres, Redis, and the server AND self-provisions everything a real turn needs — a server-accepted model configuration, a usable raw dev API key whose stored hash matches, a workspace and a tool-bearing agent, runner signing/verification keys with a reachable runner, and a deterministic tool-calling fixture — after which an automated smoke check completes a streaming turn over WebSocket asserting BOTH tool_call_started and tool_call_completed, with no manual seeding and no pre-supplied SMOKE_API_KEY."
     },
     {
       "id": "SC-02",
@@ -38,15 +44,15 @@
     },
     {
       "id": "SC-04",
-      "description": "A publish dry run succeeds for all three packages, and no workflow can upload to npm without an explicit manual trigger; demonstrated without publishing anything."
+      "description": "A `pnpm publish --dry-run` succeeds for all three packages — pnpm, not npm, because publication must go through pnpm to rewrite `workspace:*` dependency ranges to concrete versions, and the packed manifests are inspected to confirm that rewriting — and no workflow can upload to npm without an explicit manual trigger; demonstrated without publishing anything."
     },
     {
       "id": "SC-05",
-      "description": "The local registry harness installs all three packages into a throwaway consumer that imports and type-checks against them, run as a repeatable command in CI."
+      "description": "The local registry harness is a real npm registry protocol endpoint (Verdaccio) — a directory of tarballs or file: dependencies does not satisfy this — and it installs all three packages into a throwaway consumer that imports and type-checks against them, run as a repeatable command in CI."
     },
     {
       "id": "SC-06",
-      "description": "`npx create-swift-agent <name>` (exercised against the local registry) produces a project that installs, type-checks, builds, and completes a streaming turn with a tool call, asserted end to end in CI."
+      "description": "create-swift-agent is packed and published INTO the WS-45 local registry (including its bin entry, verified from the packed tarball), and `npx create-swift-agent <name>` resolved against that registry produces a project that installs, type-checks, builds, and completes a streaming turn with a tool call — its generated-project test owning the same local runtime, API-key, and runner bootstrap that WS-43 defines. This asserts the scaffold works; it does NOT assert that a stranger can run it from public npm. See SC-10."
     },
     {
       "id": "SC-07",
@@ -58,19 +64,19 @@
     },
     {
       "id": "SC-09",
-      "description": "Playground guardrails are enforced and tested: per-IP and per-session limits, a message cap, a token cap, and a global daily ceiling persisted across restarts, each producing a friendly refusal rather than an unhandled error; and the deployed instance uses a dedicated provider key carrying a provider-side budget cap, documented with its configured value."
+      "description": "Playground guardrails are enforced SERVER-SIDE by a trusted mediator that is the sole enforcement point between the browser and the playground's runtime — browser-side controls do not count as enforcement, the browser never receives the runtime workspace API key or any model-provider credential, the mediator holds the runtime API key, and the dedicated provider key is configured only as environment on the playground's isolated runtime deployment (the standard apps/server config path — no provider proxy and no runtime feature is added). Per-IP and per-session limits, a message cap, and a token cap are enforced in the mediator and tested against a client that ignores the UI; a global daily spend ledger persisted in Postgres, whose schema and migration WS-49 owns, survives restarts and settles atomically via reserve-then-settle against terminal RunRecord usage read from the public GET /v1/runs/:runId surface; every refusal is delivered as a defined refusal frame of the mediator's own protocol — not a new ChatEvent variant, an unhandled error, or a dropped socket; and the deployed instance uses a dedicated provider key carrying a provider-side budget cap, documented with its configured value."
     },
     {
       "id": "SC-10",
-      "description": "README.md links the live playground, the deploy button, and `npx create-swift-agent`, and every ladder rung in docs/vision.md reads as built rather than planned."
+      "description": "README.md links the live playground and the deploy button as working commands, and presents `npx create-swift-agent` as built and verified against a local registry but NOT yet released — never as a command a reader can run today. docs/vision.md ladder statuses match that distinction exactly: rungs whose artifacts are publicly reachable read as built, and the scaffold rung reads as built-pending-release. No surface claims a bare `npx create-swift-agent` works while the packages are unpublished."
     },
     {
       "id": "SC-11",
-      "description": "No repository surface still asserts a private/restricted publishing posture: .changeset/config.json declares access: public, and docs/policies/versioning.md describes the public-npm posture accurately, including correcting its stale claim that every package is \"private\": true."
+      "description": "For the three publishable packages @swiftagent/{sdk,react,shared} and their public-consumer path, no ACTIVE repository surface still asserts or enforces a private/restricted publishing posture. The nine other workspace packages (@swiftagent/{api,db,gateway,models,observability,runtime,server} and the two quickstart example packages) intentionally remain \"private\": true and are out of this criterion's domain. The in-domain set is exhaustive and enumerated in constraints.publishingSurfaces: package metadata, LICENSE, .changeset/config.json, docs/policies/versioning.md, scripts/verify-pack.mjs, .npmrc, AGENTS.md, docs/as-built.md, README.md, docs/quickstart.md, all three package READMEs, ci.yml, both publish-sdks workflows, and the acceptance install harness plus its vitest config. Historical program plans, task specifications, and as-built snapshots are preserved unchanged as historical record."
     },
     {
       "id": "SC-12",
-      "description": "Every deployment surface created by this program pins to exactly one running instance with autoscaling disabled, and ships documentation citing the single-instance rationale in docs/runbooks/realtime-operations.md §6."
+      "description": "Every deployment surface created by this program pins to exactly one running instance with autoscaling disabled, AND that is verified by observing a single serving instance across a rolling deployment and a restart rather than by configuration value alone; each ships documentation citing the single-instance rationale in docs/runbooks/realtime-operations.md §6."
     },
     {
       "id": "SC-13",
@@ -78,15 +84,19 @@
     },
     {
       "id": "SC-14",
-      "description": "A multi-arch (linux/amd64 + linux/arm64) apps/server image builds and publishes to ghcr.io from a workflow that cannot push without an explicit manual trigger; a pulled image starts, migrates, and serves REST + WebSocket identically to a locally built one."
+      "description": "A multi-arch (linux/amd64 + linux/arm64) apps/server image builds and publishes to ghcr.io automatically from a workflow requiring no manual trigger, and a pulled image starts, migrates, and serves REST + WebSocket identically to a locally built one."
     },
     {
       "id": "SC-15",
-      "description": "docker-compose.yml consumes the published image at a pinned tag rather than building the monorepo from source, and a documented override still lets contributors build locally."
+      "description": "docker-compose.yml consumes the published ghcr.io image pinned at its sha256 MANIFEST-LIST DIGEST (image: ghcr.io/…@sha256:…) — no tag satisfies this, version tags included, because GHCR permits container package versions to be removed and replaced and defines no immutable-tag enforcement — adopted only after that digest exists via the WS-50 staged bootstrap; the GHCR package is publicly readable and an ANONYMOUS `docker pull` from a logged-out context succeeds; a clean-checkout run pulls rather than builds; and a documented override still lets contributors build locally."
     },
     {
       "id": "SC-16",
-      "description": "The playground delivers all four demo beats, each verifiable by a visitor without reading docs: raw ChatEvent JSON is viewable beside the rendered chat; a tool call shows callId, deadline, and measured duration, and a deliberately failing tool can be triggered to show the failure path; a disconnect control drops the connection mid-stream and the session recovers; and the agent source plus the reproduce-locally command are shown on the page."
+      "description": "The playground delivers all four demo beats on the public surface with no runtime or SDK addition: raw ChatEvent JSON is viewable beside the rendered chat; a tool call shows callId, the demo-configured timing budget, and a duration measured from the real tool_call_started/tool_call_completed pair, and a deliberately failing tool can be triggered to show the failure path; a control drops the connection mid-stream and the session is recovered by constructing a new session client against the same session id, with on-page copy describing what actually happens; and the agent source plus the reproduce-locally command are shown on the page."
+    },
+    {
+      "id": "SC-17",
+      "description": "pnpm build, pnpm typecheck, pnpm lint, and pnpm test all pass deterministically from a clean checkout, with the apps/server index-export import-graph test no longer able to fail on a timing margin under parallel load; demonstrated by repeated cache-bypassed full-suite runs rather than a single green run, TWICE: once at WS-51 (the root repair) and again at the end of WS-49 (the sole terminal workstream), after apps/playground, packages/create-swift-agent, and every other workstream's packages and tests are in the tree."
     }
   ],
   "packages": [
@@ -123,66 +133,94 @@
   ],
   "workstreams": [
     {
+      "id": "WS-51",
+      "name": "Canonical Verification Gate Stability",
+      "taskFile": "tasks/oss-direction/ws-51-canonical-gate-stability.md",
+      "status": "not_started",
+      "size": "S",
+      "scope": {
+        "summary": "Makes the four configured verification commands (pnpm build, typecheck, lint, test) pass deterministically, so every later workstream in this program can be judged on a gate that only goes red for real defects.",
+        "includes": [
+          "Removing the timing margin in apps/server/src/__tests__/index.test.ts, whose dynamic import of ../index.js consumes ~2.5s of vitest's 5000ms default and times out under parallel turbo load",
+          "Auditing the other package test suites for the same shape — a bare `await import()` of a heavy module graph inside a default-timeout test — and applying the same fix wherever it is found, not only to the one observed failure",
+          "Establishing the fix as a convention (an explicit timeout, a hoisted static import, or a raised suite-level testTimeout) rather than an ad-hoc number, so new tests do not reintroduce the flake",
+          "Demonstrating stability by repeated full-suite runs with the turbo cache bypassed, not by one green run"
+        ],
+        "excludes": [
+          "Changing what any test asserts, or weakening an assertion to make it pass",
+          "Skipping, quarantining, or marking any test as expected-to-fail",
+          "Broad test-infrastructure work: no vitest workspace restructuring, no runner replacement, no parallelism/concurrency retuning beyond what removing the margin requires",
+          "Integration tests under the root test/ tree, which are excluded from the configured gate and run separately via pnpm test:integration under Testcontainers",
+          "Fixing product defects discovered while auditing; genuine server or SDK bugs are reported, not silently absorbed"
+        ]
+      },
+      "dependencies": [],
+      "packages": ["apps/server"]
+    },
+    {
       "id": "WS-43",
       "name": "Local Stack Coherence",
       "taskFile": "tasks/oss-direction/ws-43-local-stack-coherence.md",
       "status": "not_started",
-      "size": "S",
+      "size": "L",
       "scope": {
-        "summary": "Makes `docker compose up` produce a genuinely working end-to-end local stack, and proves it with an automated smoke check.",
+        "summary": "Makes `docker compose up` produce a genuinely working end-to-end local stack from a clean checkout — including every credential, identity, and fixture a real tool round trip needs — and proves it with an automated smoke check that asserts the tool events.",
         "includes": [
           "Repairing docker-compose.yml so published ports and PUBLIC_WEBSOCKET_URL match the single listener on API_PORT in apps/server/src/main.ts:99",
-          "Verifying the compose-built server image starts, migrates via the existing AUTO_MIGRATE flag, and serves REST + WebSocket on one port",
-          "An automated smoke check that creates a session against the compose stack and completes one streaming turn including a tool call",
-          "Documenting the one-command local path in README.md and docs/quickstart.md"
+          "A self-provisioning local bootstrap, because the clean-checkout stack today has Postgres, Redis, and the listener and nothing else. It must establish: a model configuration the server accepts; a workspace; a raw dev API key whose stored hash matches, surfaced to the developer; a registered agent carrying at least one tool; and runner signing/verification keys with a reachable runner service",
+          "A deterministic tool-calling model fixture, so the smoke check asserts a real tool round trip rather than depending on a live provider deciding to call a tool",
+          "Verifying the compose stack starts, migrates via the existing AUTO_MIGRATE flag, and serves REST + WebSocket on one port",
+          "Extending or replacing the smoke check so it runs against compose with NO pre-supplied SMOKE_API_KEY and NO manually seeded smoke-echo agent — test/smoke/realtime-smoke.ts today requires both — and asserts both tool_call_started and tool_call_completed, not only token frames",
+          "Documenting the one-command local path in README.md and docs/quickstart.md, including where the generated dev API key appears"
         ],
         "excludes": [
           "Removing or deprecating the GATEWAY_PORT env key, or changing the standalone-gateway entry point",
-          "Changing the AUTO_MIGRATE mechanism — it is real and correct (apps/server/src/config.ts:130); only ports and PUBLIC_WEBSOCKET_URL are defective",
+          "Changing the AUTO_MIGRATE mechanism — it is real and correct (apps/server/src/config.ts:130)",
           "Any change under infra/ or to the AWS deploy workflows",
-          "Changes to apps/server source beyond what a genuine, evidenced defect requires",
-          "The scaffold-generated compose file (owned by WS-46) and the managed-host deploy config (owned by WS-47)"
+          "Making the bootstrap credentials or fixture reachable in any non-local deployment; this path is development-only and must be inert or absent in the deploy template and the playground",
+          "Adding a new public runtime or SDK surface to make provisioning possible — use existing repositories, migrations, and configuration",
+          "The scaffold-generated compose file (owned by WS-46) and the managed-host deploy config (owned by WS-47), both of which consume this wiring rather than defining it"
         ]
       },
-      "dependencies": [],
-      "packages": [
-        "apps/server",
-        "test/smoke",
-        "docs"
-      ]
+      "dependencies": ["WS-51"],
+      "packages": ["apps/server", "packages/db", "packages/models", "test/smoke", "docs"]
     },
     {
       "id": "WS-44",
       "name": "Public Release Readiness (Gated)",
       "taskFile": "tasks/oss-direction/ws-44-public-release-readiness.md",
       "status": "not_started",
-      "size": "M",
+      "size": "L",
       "scope": {
-        "summary": "Flips every repository surface from a private/restricted posture to a public Apache-2.0 project — package metadata, license, contribution terms, changesets, policy, and the pack verifier — and arms the release pipeline without firing it; no package is published.",
+        "summary": "Flips every ACTIVE repository surface from a private/restricted posture to a public Apache-2.0 project — package metadata, license, contribution terms, changesets, policy, the pack verifier, .npmrc registry routing, shipped READMEs, CI, and the acceptance install harness — and arms the release pipeline without firing it; no package is published.",
         "includes": [
           "publishConfig.registry -> https://registry.npmjs.org with access: public on all three publishable packages (currently npm.pkg.github.com + restricted)",
           "Replacing license: UNLICENSED with the decided SPDX identifier Apache-2.0 and adding the matching repository LICENSE file (none exists today)",
           "Flipping .changeset/config.json access from restricted to public",
           "Amending docs/policies/versioning.md §1, which normatively states packages are private and publish to a restricted registry, and which is additionally stale in claiming every package is \"private\": true when the three publishable packages carry no private field",
           "Updating scripts/verify-pack.mjs, which currently asserts the GitHub Packages registry and will fail the build otherwise",
-          "Updating .github/workflows/publish-sdks.yml and publish-sdks-prerelease.yml to target npm behind an explicit manual trigger, and the CI consumer-install job that authenticates to GitHub Packages",
-          "A verified `npm publish --dry-run` for all three packages",
-          "Updating install instructions in README.md and docs/quickstart.md to state that public publishing is armed but not yet released",
+          "Updating .npmrc, which functionally routes @swiftagent:registry to https://npm.pkg.github.com and would otherwise keep sending every consumer install to GitHub Packages regardless of package metadata",
+          "Updating the AGENTS.md Delivery convention at line 119 so the three publishable packages target public npm — while PRESERVING the rule that every other workspace package is private, which remains true after the flip (constraints.publishingSurfaces domain)",
+          "Updating docs/as-built.md, README.md, docs/quickstart.md, and packages/{sdk,react,shared}/README.md wherever they describe the restricted posture or a GitHub Packages install",
+          "Updating .github/workflows/publish-sdks.yml and publish-sdks-prerelease.yml to target npm behind an explicit manual trigger, plus the ci.yml consumer-install job that authenticates to GitHub Packages",
+          "Updating the acceptance install harness — test/acceptance/install-published.ts, test/acceptance/install-registry.acceptance.test.ts, and test/vitest.acceptance.config.ts — which executes against the restricted registry today",
+          "A verified `pnpm publish --dry-run` for each of the three packages — pnpm, not npm, because the workspace publication path is pnpm/Changesets and depends on pnpm rewriting workspace:* dependency ranges to concrete versions (the same mechanism scripts/verify-pack.mjs already exercises via pnpm pack) — with the packed manifests it produces inspected to confirm the rewriting",
           "A CONTRIBUTING.md and a DCO file adopting the Developer Certificate of Origin 1.1, requiring a Signed-off-by trailer on every commit, with the rationale that Apache-2.0 §5 already makes contributions inbound=outbound so no CLA is required",
-          "A CI check enforcing the Signed-off-by trailer on pull-request commits, and a pull-request template prompting for it",
+          "A CI check enforcing the Signed-off-by trailer on pull-request commits, and a DCO sign-off prompt AMENDED INTO the existing .github/pull_request_template.md (it already exists with Description, Linked Workstream, and Checklist sections — do not create a second template)",
           "Stating in CONTRIBUTING.md that contributors retain copyright in their contributions, so the project cannot be relicensed without their permission"
         ],
         "excludes": [
-          "Actually publishing to npm or cutting a release — explicitly deferred to a separate audit at the user's direction",
+          "Actually publishing to npm or cutting a release — explicitly deferred to a separate audit at the user’s direction; this decision was re-confirmed on 2026-08-19 (see constraints.npmGate)",
+          "Rewriting HISTORICAL records — superseded program plans under docs/programs/, task specifications under tasks/, and as-built snapshots describing the posture that WAS true are preserved as historical dispositions, not edited to match the new posture",
           "Revisiting the license choice — Apache-2.0 is decided; apply it, including the NOTICE convention and the standard appendix boilerplate",
-          "Changing any package's public API surface, exports map, or build output",
+          "Changing any package’s public API surface, exports map, or build output",
           "Reserving or configuring the npm organization account itself (a manual, human-owned step)",
           "The local registry harness (owned by WS-45)",
           "Adopting a CLA or any copyright-assignment agreement — deliberately rejected in favour of a DCO; do not add CLA-assistant bots or signing flows",
           "A code of conduct, issue templates, or a docs site — still out of scope"
         ]
       },
-      "dependencies": [],
+      "dependencies": ["WS-51"],
       "packages": [
         "packages/sdk",
         "packages/react",
@@ -191,6 +229,7 @@
         "scripts",
         ".github",
         ".github/workflows",
+        "test/acceptance",
         "docs"
       ]
     },
@@ -201,28 +240,23 @@
       "status": "not_started",
       "size": "S",
       "scope": {
-        "summary": "Provides a local npm registry so any consumer can install @swiftagent/{sdk,react,shared} as real npm dependencies before they are published.",
+        "summary": "Provides a local npm registry — a real registry protocol endpoint (Verdaccio), not tarballs — so any consumer can install workspace packages as real npm dependencies before they are published: the three publishable packages, and later the scaffold CLI that WS-46 publishes into it.",
         "includes": [
-          "A Verdaccio-backed (or tarball-backed) local registry started and torn down by a committed script",
+          "A Verdaccio-backed local registry started and torn down by a committed script — it MUST be a real npm registry protocol endpoint; a directory of tarballs or file: dependencies does not qualify, because WS-46 publishes create-swift-agent into it and resolves through real npx (SC-05, SC-06)",
           "Publishing the three packed packages into it and installing them into a throwaway consumer that imports and type-checks against them",
+          "A publish path general enough to accept any workspace package, since WS-46 publishes create-swift-agent into this same registry so that `npx create-swift-agent` resolves through real npx rather than a file path",
           "A repeatable command wired into CI",
           "Documentation of the harness for use by scaffold and example verification"
         ],
         "excludes": [
-          "The scaffold CLI itself and its templates (owned by WS-46) — this workstream only makes installing possible",
+          "The scaffold CLI itself, its templates, and its own publication step (owned by WS-46) — this workstream provides the registry and the publish path, not the package that later uses them",
           "Publishing to the real npm registry (owned by WS-44, and deferred there)",
           "Changing packaging metadata, license fields, or the pack allowlist (owned by WS-44)",
           "Shipping the harness as a runtime or published dependency — it is test-time only"
         ]
       },
-      "dependencies": [
-        "WS-44"
-      ],
-      "packages": [
-        "scripts",
-        ".github/workflows",
-        "test"
-      ]
+      "dependencies": ["WS-44"],
+      "packages": ["scripts", ".github/workflows", "test"]
     },
     {
       "id": "WS-46",
@@ -231,32 +265,26 @@
       "status": "not_started",
       "size": "M",
       "scope": {
-        "summary": "Delivers `npx create-swift-agent <name>`, which scaffolds a runnable agent project — backend, frontend, and compose file — in about a minute.",
+        "summary": "Delivers `create-swift-agent`, which scaffolds a runnable agent project — backend, frontend, and compose file — in about a minute, verified end to end against the WS-45 local registry rather than public npm.",
         "includes": [
           "A new unscoped package at packages/create-swift-agent with its own build and packaging",
+          "Packing create-swift-agent and PUBLISHING IT INTO the WS-45 local registry, with its bin entry verified from the packed tarball, so `npx create-swift-agent` is exercised through real npx resolution rather than a local file path",
           "Project templates: an SDK backend with one Zod-schema tool, a Vite/React frontend using useAgentChat, a compose file matching the WS-43 wiring, and .env.example",
           "Interactive prompts for project name and model provider/key, with non-interactive flags for CI",
-          "An end-to-end CI test that generates a project against the WS-45 local registry, then installs, type-checks, builds, and completes a streaming turn with a tool call",
+          "An end-to-end CI test that generates a project against the local registry, then installs, type-checks, builds, and completes a streaming turn with a tool call — the test owning the same local runtime, API-key, and runner bootstrap WS-43 defines, since a generated project has no seeded workspace either",
           "Templates consuming only the public SDK surface, under the existing no-restricted-imports guard"
         ],
         "excludes": [
-          "Publishing create-swift-agent to npm (packaging is prepared; release is gated with the rest)",
+          "Publishing create-swift-agent to public npm — packaging is prepared and locally proven; release is gated with the rest (constraints.npmGate)",
+          "Presenting a bare `npx create-swift-agent` anywhere as a command a reader can run today. Until the packages are on public npm it is built-pending-release, and the generated project would fail `npm install` besides. Documentation wording for that distinction is SC-10, owned by WS-49",
           "Deploy-target configuration for managed hosts (owned by WS-47)",
-          "The playground application (owned by WS-48) — the scaffold's template is intentionally minimal, not the demo",
-          "Repairing the root docker-compose.yml (owned by WS-43); this consumes that wiring rather than defining it",
+          "The playground application (owned by WS-48) — the scaffold’s template is intentionally minimal, not the demo",
+          "Repairing the root docker-compose.yml or defining the local bootstrap (owned by WS-43); this consumes that wiring",
           "A plugin system, multiple template variants, or framework choices beyond the single canonical template"
         ]
       },
-      "dependencies": [
-        "WS-43",
-        "WS-44",
-        "WS-45"
-      ],
-      "packages": [
-        "packages/create-swift-agent",
-        ".github/workflows",
-        "docs"
-      ]
+      "dependencies": ["WS-43", "WS-44", "WS-45"],
+      "packages": ["packages/create-swift-agent", ".github/workflows", "docs"]
     },
     {
       "id": "WS-47",
@@ -273,7 +301,8 @@
           "Provisioning and wiring managed Postgres and Redis, running forward-only migrations as an explicit release step per docs/runbooks/migrations.md, and passing a health check",
           "Secret and environment documentation, including a correct public wss:// PUBLIC_WEBSOCKET_URL",
           "A README deploy button and a self-host guide section",
-          "A reproducible verification that a fresh deploy comes up healthy"
+          "A reproducible verification that a fresh deploy comes up healthy",
+          "Verifying single-instance behaviour by observation rather than configuration: exactly one instance serves traffic across a rolling deployment and a restart, which is when a managed host is most likely to run two (SC-12)"
         ],
         "excludes": [
           "Deploying the playground itself (owned by WS-49) — this delivers the reusable template, not the demo instance",
@@ -283,15 +312,8 @@
           "Playground abuse controls and guest-session policy (owned by WS-49)"
         ]
       },
-      "dependencies": [
-        "WS-43",
-        "WS-50"
-      ],
-      "packages": [
-        "apps/server",
-        "deploy",
-        "docs"
-      ]
+      "dependencies": ["WS-43", "WS-50"],
+      "packages": ["apps/server", "deploy", "docs"]
     },
     {
       "id": "WS-48",
@@ -304,10 +326,10 @@
         "includes": [
           "apps/playground/backend: an SDK agent with two to three genuinely useful tools whose calls are worth watching",
           "BEAT 1 — typed events, not text: the event panel renders the raw ChatEvent JSON (toggleable against the prettified view) so a visitor sees message_started -> token -> tool_call_started -> tool_call_completed -> message_completed and understands they can build any UX on it",
-          "BEAT 2 — a tool call is a real round trip: surface callId, the deadline, and the measured duration; and include one tool that deliberately times out or errors, triggerable by a button, so the failure path is demonstrated rather than hidden. An infrastructure evaluator is asking \"what happens when a tool hangs?\" — answer it unprompted",
-          "BEAT 3 — survives a dropped connection: a disconnect control the visitor can hit mid-stream, showing the client reconnect and the session continue",
+          "BEAT 2 — a tool call is a real round trip: surface callId, the DEMO-OWNED timing budget, and the measured duration. The budget is the playground’s own: no deadline reaches the public surface (ChatEvent tool events carry callId, toolName, and status only), so the demo displays the budget it configured in its own tool wrapper beside a duration measured from the real tool_call_started/tool_call_completed pair. Include one tool that deliberately times out or errors, triggerable by a button, so the failure path is demonstrated rather than hidden — an infrastructure evaluator is asking \"what happens when a tool hangs?\", so answer it unprompted",
+          "BEAT 3 — survives a dropped connection: a control the visitor hits mid-stream that drops the connection, after which the session is recovered by constructing a NEW session client against the same session id. createChatSession().disconnect() sets intentionalClose and deliberately suppresses reconnection (packages/react/src/client.ts:211), so the demo must perform the recovery explicitly and the on-page copy must describe what actually happens rather than implying an automatic reconnect",
           "BEAT 4 — the conversion beat: the ~20 lines of defineAgent/tool that produced the demo shown beside it, plus the one command that reproduces it locally",
-          "Building all four beats on the PUBLIC surface only: the vanilla createChatSession exposes onEvent() for the raw feed and disconnect() for the drop test, so compose the public client rather than extending @swiftagent/react",
+          "Building all four beats on the PUBLIC surface only, having verified datum by datum that each is reachable there. Where it is not — the tool deadline — the beat is satisfied from demo-owned state instead of by adding a surface",
           "Guest session creation against a locally running runtime, with no signup",
           "Consuming only the public SDK/react surface, enforced by the no-restricted-imports guard",
           "Build, typecheck, lint, and tests green; exercised in CI like examples/quickstart"
@@ -319,37 +341,36 @@
           "Rate limiting, spend caps, and abuse controls (owned by WS-49) — this workstream runs locally and trusted",
           "The deploy template itself (owned by WS-47)",
           "New runtime, SDK, or react features. If a beat appears to need data the public surface does not expose, compose the public vanilla client or report the gap — do not add a hook or export",
-          "A marketing site, landing page, or docs site around the demo"
+          "A marketing site, landing page, or docs site around the demo",
+          "Adding deadline (or any other field) to ChatEvent, ToolContext, or the runner protocol to make Beat 2 easier — explicitly rejected on 2026-08-19; the timing budget is demo-owned"
         ]
       },
-      "dependencies": [
-        "WS-43"
-      ],
-      "packages": [
-        "apps/playground",
-        "packages/sdk",
-        "packages/react",
-        ".github/workflows"
-      ]
+      "dependencies": ["WS-43"],
+      "packages": ["apps/playground", "packages/sdk", "packages/react", ".github/workflows"]
     },
     {
       "id": "WS-49",
       "name": "Playground Guardrails & Public Deployment",
       "taskFile": "tasks/oss-direction/ws-49-playground-guardrails-deploy.md",
       "status": "not_started",
-      "size": "M",
+      "size": "L",
       "scope": {
-        "summary": "Makes the playground safe to expose to the internet on the owner's model budget, deploys it publicly on a single pinned instance, and proves the live URL works.",
+        "summary": "Makes the playground safe to expose to the internet on the owner’s model budget — enforced server-side by a trusted mediator that is the sole enforcement point, with the provider credential confined to the playground runtime's own environment — deploys it publicly on a single pinned instance, proves the live URL works, owns the program-final documentation pass, and re-proves the verification gate at program end.",
         "includes": [
-          "Per-IP and per-session rate limits, a per-session message cap, and a per-session token cap",
-          "A global daily spend ceiling persisted in Postgres (NOT an in-memory counter — process-local state resets on every restart per docs/runbooks/realtime-operations.md §1, which would silently make the ceiling per-uptime-window rather than per-day), degrading to a friendly refusal rather than an unhandled error, with tests for each limit",
+          "A trusted server-side mediator between the browser and the playground's runtime that is the ONLY place limits are enforced. The mediator holds the runtime workspace API key; the browser holds no credential of any kind. The dedicated model-provider key is configured ONLY as environment on the playground's isolated runtime deployment — the standard apps/server config path (apps/server/src/config.ts validates it, apps/server/src/container.ts registers the providers) — so the mediator never touches provider traffic and no provider-proxy or runtime feature is added. Browser-side controls are presentation, never enforcement: a visitor can bypass anything the client decides",
+          "Per-IP and per-session rate limits, a per-session message cap, and a per-session token cap, enforced in the mediator and tested against a client that ignores the UI",
+          "A defined refusal frame every limit produces, delivered over the WebSocket as a typed, rendered message of the mediator's OWN app-level protocol — not a new ChatEvent variant, an unhandled error, a 500, or a silently dropped socket — with a test per limit",
+          "Atomic reserve-then-settle accounting: reserve an estimated cost before a run starts, settle against the terminal RunRecord usage when it ends — read from the public GET /v1/runs/:runId surface, which exposes terminal tokenUsage — and release reservations for runs that never terminate, so concurrent sessions cannot race past the ceiling",
+          "A global daily spend ledger persisted in Postgres, whose schema and forward-only migration THIS workstream owns and adds (it does not exist today). Not an in-memory counter — process-local state resets on every restart per docs/runbooks/realtime-operations.md §1, which would silently make the ceiling per-uptime-window rather than per-day",
           "Short guest-session TTL and ephemeral retention configuration for the deployed instance",
           "Deploying apps/playground to the WS-47 host target with its own database and secrets, isolated from dev/staging/prod, pinned to exactly one instance",
           "A smoke test against the live public URL asserting a streaming turn with a visible tool call",
-          "Linking the live playground, deploy button, and scaffold command from README.md, and updating the ladder table in docs/vision.md to read as built",
           "A dedicated model-provider API key used only by the playground, with a provider-side budget cap configured on it — the backstop that holds even if the application limiter has a bug, is bypassed, or is misconfigured; documented as a required manual setup step with the cap value",
           "A deliberately cheap default model for the playground, chosen to minimise blast radius before any limiter fires, with the choice and its cost rationale recorded",
-          "Alerting or a documented check at a fraction of the daily ceiling, so the owner learns about unusual spend from a notification rather than from an invoice"
+          "Alerting or a documented check at a fraction of the daily ceiling, so the owner learns about unusual spend from a notification rather than from an invoice",
+          "The SC-10 documentation pass: linking the live playground and deploy button as working commands, while presenting `npx create-swift-agent` as built and verified against a local registry but not yet released, with docs/vision.md ladder statuses matching that distinction exactly. This pass is why WS-49 depends on WS-46: the built-and-verified claim may only be published after the workstream that builds and verifies the scaffold has landed",
+          "Verifying single-instance behaviour by observation across a rolling deployment and a restart, not by configuration value alone (SC-12)",
+          "The program-final SC-17 gate re-proof: as the sole terminal workstream, finish with repeated cache-bypassed runs of pnpm build, typecheck, lint, and test, now that apps/playground, packages/create-swift-agent, and every other workstream's packages and tests are in the tree — complementing the WS-51 root repair, which proved stability before those packages existed"
         ],
         "excludes": [
           "Building the playground UI or its tools (owned by WS-48)",
@@ -358,53 +379,47 @@
           "Scaling the playground beyond one instance for load — the correct response to load is tighter caps, not more instances",
           "Authentication, signup, or per-user accounts for the playground — it stays anonymous",
           "Analytics, telemetry, or usage dashboards",
-          "Bring-your-own-key mode for visitors — a viable later fallback if spend proves uncomfortable, but out of scope here: the playground must stay a zero-friction 60-second demo"
+          "Bring-your-own-key mode for visitors — a viable later fallback if spend proves uncomfortable, but out of scope here: the playground must stay a zero-friction 60-second demo",
+          "Claiming in any documentation surface that a bare `npx create-swift-agent` works today — the packages are unpublished and the generated project would fail to install (constraints.npmGate)",
+          "Enforcing any limit in the browser and counting it as enforcement",
+          "Owning or proxying the model-provider credential in the mediator — the credential lives only in the playground runtime's environment; routing provider traffic through the mediator would require a provider-proxy runtime feature or embedding the private server package, both forbidden (no runtime work, public surfaces only)"
         ]
       },
-      "dependencies": [
-        "WS-47",
-        "WS-48"
-      ],
-      "packages": [
-        "apps/playground",
-        "deploy",
-        "test/smoke",
-        "docs"
-      ]
+      "dependencies": ["WS-46", "WS-47", "WS-48"],
+      "packages": ["apps/playground", "packages/db", "deploy", "test/smoke", "docs"]
     },
     {
       "id": "WS-50",
-      "name": "Public Container Image (Gated)",
+      "name": "Public Container Image",
       "taskFile": "tasks/oss-direction/ws-50-public-container-image.md",
       "status": "not_started",
       "size": "M",
       "scope": {
-        "summary": "Builds and publishes the apps/server image to GHCR as the operator-facing artifact, and repoints docker-compose.yml from building the monorepo from source to pulling that image.",
+        "summary": "Builds and publishes the apps/server image to GHCR automatically as the operator-facing artifact, makes that package anonymously pullable, and repoints docker-compose.yml from building the monorepo from source to pulling it pinned at its sha256 manifest-list digest.",
         "includes": [
-          "A GitHub Actions workflow building apps/server/Dockerfile and pushing to ghcr.io, multi-arch (linux/amd64 + linux/arm64) so Apple Silicon works",
-          "A tag strategy: immutable version tags plus a moving tag, documented so operators know what they are pinning",
-          "Repointing docker-compose.yml from `build:` to `image:` at a pinned tag, with a documented compose override (or profile) so contributors can still build from source",
+          "A GitHub Actions workflow building apps/server/Dockerfile and publishing to ghcr.io automatically on the repository default branch and on release tags — no manual trigger and no human approval step; publishing is authorized, and depending on WS-44 guarantees the Apache-2.0 licence is already in the tree",
+          "Multi-arch builds (linux/amd64 + linux/arm64) so Apple Silicon operators are served",
+          "A ONE-TIME package-visibility step making the GHCR package publicly readable, performed via `gh api` and documented as a repository-configuration prerequisite (the same category as adding a repository secret). A newly published GHCR package inherits repository visibility, so without this an anonymous pull fails. Decided 2026-08-19: this is not a per-run approval gate, and it sets package visibility directly rather than depending on repository visibility",
+          "Proving anonymous reachability with a `docker pull` from a logged-out context, since a successful authenticated push does not demonstrate public distribution",
+          "A tag strategy: version tags plus a moving tag as human-readable aliases, documented so operators know what they are pinning — with the explicit caveat that GHCR tags, version tags included, are mutable (package versions can be removed and replaced), so the only reference that cannot drift is the sha256 manifest-list digest produced by the multi-arch push",
+          "A STAGED BOOTSTRAP for the compose pin: publish first, then repoint docker-compose.yml from `build:` to `image: ghcr.io/…@sha256:…` at the manifest-list digest that now exists. The pin is the DIGEST, never a tag; it cannot be committed before its first publication; and the documented upgrade path is committing a new digest",
+          "A documented compose override (or profile) so contributors can still build from source",
           "Build provenance/attestation where the platform provides it at no extra cost",
           "Verifying a pulled image starts, migrates, and serves REST + WebSocket exactly as the locally built one does",
           "Operator documentation in README.md and the self-host guide: how to pull, pin, and upgrade"
         ],
         "excludes": [
-          "The first public push to GHCR — armed behind the same explicit manual trigger as npm publishing, so the user's audit covers both release surfaces; until then compose documents the build-from-source override",
+          "Gating the image push behind a manual trigger or human approval — deliberately authorized; the npm gate exists to protect a semver API commitment and does NOT transfer to a build artifact whose tags are replaceable",
+          "Making any deliverable or criterion depend on GitHub REPOSITORY visibility. Package visibility is set directly and independently; the repository may be public or private without changing anything here",
           "Publishing any image other than apps/server (no playground, scaffold, or migration images)",
-          "Changing apps/server/Dockerfile's build strategy or the --prod prune behaviour beyond what multi-arch requires",
+          "Changing apps/server/Dockerfile’s build strategy or the --prod prune behaviour beyond what multi-arch requires",
           "Signing infrastructure beyond what the platform offers for free (no cosign key management, no SBOM pipeline)",
-          "Repairing compose ports or PUBLIC_WEBSOCKET_URL (owned by WS-43) — this consumes that corrected wiring",
+          "Repairing compose ports, PUBLIC_WEBSOCKET_URL, or the local bootstrap (owned by WS-43) — this consumes that corrected wiring",
           "Any change under infra/ or to the ECR-based AWS deploy workflows, which continue unchanged"
         ]
       },
-      "dependencies": [
-        "WS-43"
-      ],
-      "packages": [
-        "apps/server",
-        ".github/workflows",
-        "docs"
-      ]
+      "dependencies": ["WS-43", "WS-44"],
+      "packages": ["apps/server", ".github/workflows", "docs"]
     }
   ],
   "outOfScope": [
@@ -418,6 +433,8 @@
     "A docs site, code of conduct, or issue templates — CONTRIBUTING.md and the DCO are now in scope (WS-44) because contribution terms are part of the licensing posture; the rest of the community scaffolding is not",
     "A CLA or copyright-assignment agreement — deliberately rejected; see constraints.contributionTerms",
     "Publishing images for anything other than apps/server, and any container signing or SBOM pipeline beyond free platform-provided provenance",
-    "An AWS Bedrock model provider — no bedrock/* provider exists in packages/models today, and adding one is explicitly not part of this program; recorded as candidate future work in docs/vision.md. The playground uses direct provider keys, which give a stronger hard spend stop than AWS Budgets do."
+    "An AWS Bedrock model provider — no bedrock/* provider exists in packages/models today, and adding one is explicitly not part of this program; recorded as candidate future work in docs/vision.md. The playground uses direct provider keys, which give a stronger hard spend stop than AWS Budgets do.",
+    "Publishing create-swift-agent, or any @swiftagent/* package, to public npm. Re-confirmed 2026-08-19: the gate stays and the documentation claims come down to meet it, so no surface advertises a bare npx command that cannot work.",
+    "Adding a tool deadline to ChatEvent, ToolContext, or the runner protocol. Rejected 2026-08-19 in favour of a demo-owned timing budget, preserving the no-runtime-feature-work rule."
   ]
 }
