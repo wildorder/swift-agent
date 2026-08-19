@@ -49,7 +49,7 @@ If no type-checker is configured, state that explicitly instead of claiming succ
 
 ## Project: Swift Agent
 
-See `swift-agent.md` for full product vision. See `tasks/product-x/` for workstream specs.
+See `docs/vision.md` for full product vision (`swift-agent.md` is now just a pointer to it). See `tasks/product-x/` for workstream specs.
 
 ### Tech Stack
 

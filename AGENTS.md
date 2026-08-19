@@ -70,7 +70,7 @@ auth — no Amplify, no AWS SDK for auth.
 
 ### Product
 
-Hosted real-time agent runtime — embed a streaming, tool-calling, multi-model AI agent without building the infrastructure.
+Open-source real-time agent runtime — the self-hostable transport and tool-execution layer beneath streaming, tool-calling, multi-model AI agents. Adopters run it themselves; their tools execute in their own codebase and their data stays in their own Postgres.
 
 ### Conventions
 
