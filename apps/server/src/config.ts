@@ -7,6 +7,14 @@ import { loadConfig as sharedLoadConfig, ENV_KEYS, type AppConfig } from '@swift
  */
 export interface ServerConfig extends AppConfig {
   AUTO_MIGRATE: boolean;
+  /**
+   * WS-43 local-only boot flag: registers the zero-cost `fixture` tool-calling
+   * provider and satisfies the at-least-one-model-key requirement so a clean
+   * `docker compose up` boots with no real provider key. Read directly from env
+   * (like AUTO_MIGRATE / DEPLOY_ENV — NOT in ENV_KEYS) and hard-refused when
+   * DEPLOY_ENV is a cloud env, so it is structurally unreachable in deployments.
+   */
+  LOCAL_FIXTURE_PROVIDER: boolean;
 }
 
 /** Hosts that are never a valid public endpoint in a cloud environment. */
@@ -89,14 +97,28 @@ export function loadServerConfig(
     }
   }
 
-  // At least one model provider key is required
+  // WS-43: the LOCAL_FIXTURE_PROVIDER boot flag (local compose only). When set
+  // it satisfies the model-key requirement below via the zero-cost `fixture`
+  // provider; when combined with a cloud DEPLOY_ENV it is a hard config error,
+  // aggregated into the same fail-fast message as other missing vars, so the
+  // fixture can never boot in a deployed environment.
+  const localFixtureProvider = env['LOCAL_FIXTURE_PROVIDER'] === 'true';
+  const deployEnv = env['DEPLOY_ENV'];
+  if (localFixtureProvider && deployEnv && CLOUD_ENVS.has(deployEnv)) {
+    missing.push(
+      `LOCAL_FIXTURE_PROVIDER must not be set in a cloud environment (DEPLOY_ENV=${deployEnv}) — it is a local-compose-only flag`,
+    );
+  }
+
+  // At least one model provider key is required — unless the local fixture
+  // provider is enabled (a valid, zero-cost model configuration on its own).
   const modelKeys = [
     ENV_KEYS.OPENAI_API_KEY,
     ENV_KEYS.ANTHROPIC_API_KEY,
     ENV_KEYS.GOOGLE_API_KEY,
   ] as const;
   const hasModelKey = modelKeys.some((k) => !!env[k]);
-  if (!hasModelKey) {
+  if (!hasModelKey && !localFixtureProvider) {
     missing.push(`At least one of: ${modelKeys.join(', ')}`);
   }
 
@@ -134,6 +156,7 @@ export function loadServerConfig(
     // Clear REDIS_URL if it wasn't actually provided
     [ENV_KEYS.REDIS_URL]: redisProvided ? config[ENV_KEYS.REDIS_URL] : undefined as unknown as string,
     AUTO_MIGRATE: autoMigrate,
+    LOCAL_FIXTURE_PROVIDER: localFixtureProvider,
   };
 }
 
@@ -159,5 +182,8 @@ export function redactConfig(config: ServerConfig): Record<string, string> {
     // not a second listening port, so the banner marks it local-only.
     GATEWAY_PORT: '(local-only)',
     AUTO_MIGRATE: String(config.AUTO_MIGRATE),
+    // Not a secret — a plain boolean so the banner shows when the local-only
+    // fixture provider is active (WS-43).
+    LOCAL_FIXTURE_PROVIDER: String(config.LOCAL_FIXTURE_PROVIDER),
   };
 }

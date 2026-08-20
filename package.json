@@ -16,6 +16,7 @@
     "test:acceptance": "vitest run --config test/vitest.acceptance.config.ts",
     "test:acceptance:install": "tsx test/acceptance/install-published.ts",
     "smoke:realtime": "tsx test/smoke/realtime-smoke.ts",
+    "smoke:local": "tsx test/smoke/local-smoke-entry.ts",
     "smoke:typecheck": "tsc --noEmit -p test/smoke/tsconfig.json",
     "smoke:lint": "eslint test/smoke",
     "changeset": "changeset",

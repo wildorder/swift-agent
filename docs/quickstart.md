@@ -121,3 +121,26 @@ pass the value returned by session creation.
 Follow [`examples/quickstart/README.md`](../examples/quickstart/README.md) for
 prerequisites, `.env` configuration, and the exact `pnpm --filter` commands to
 start the backend and frontend.
+
+### Zero-external-key path: the local compose stack
+
+You do not need an OpenAI/Anthropic/Google key (or any pre-existing Swift Agent
+deployment) to run against a real server. From a clean checkout of this repo:
+
+```sh
+docker compose up
+```
+
+self-provisions everything — see [README → Run locally](../README.md#run-locally)
+for the full walk-through. The stack serves REST + WebSocket at
+`http://localhost:3000`, and the bootstrap writes a generated dev API key to
+`./.swiftagent-local/dev-api-key` (it is also printed, clearly framed, in the
+`bootstrap` service's log). Point the example backend at it:
+
+```sh
+SWIFT_AGENT_API_KEY=<contents of ./.swiftagent-local/dev-api-key>
+SWIFT_AGENT_BASE_URL=http://localhost:3000
+```
+
+Optionally verify the stack first with `pnpm smoke:local`, which completes a
+streaming turn asserting a real tool round trip with no pre-supplied secrets.

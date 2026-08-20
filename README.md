@@ -62,8 +62,44 @@ at every rung of the ladder — same `defineAgent`, same `tool()`, same
 | --- | --- | --- |
 | Hosted playground | Zero — open a link | Planned |
 | `create-swift-agent` scaffold | ~60s | Planned |
-| `docker compose up` | ~5 min, local | [`docker-compose.yml`](./docker-compose.yml) covers dependencies |
+| `docker compose up` | ~5 min, local | [`docker-compose.yml`](./docker-compose.yml) — full self-provisioned stack, see [Run locally](#run-locally) |
 | `terraform apply` | ~20 min, your AWS | [`infra/`](./infra) — dev / staging / prod |
+
+### Run locally
+
+One command brings up a genuinely working end-to-end stack from a clean
+checkout — Postgres, Redis, the server (REST + WebSocket on port 3000), plus a
+one-shot bootstrap that self-provisions a workspace, a generated dev API key, a
+`local-dev` agent backed by a zero-cost deterministic tool-calling fixture
+model, and a reachable tool-runner service. No `.env`, no model-provider key,
+no manual seeding:
+
+```sh
+docker compose up
+```
+
+The generated dev API key appears in **two places** (it is minted per checkout
+and never committed):
+
+- the `bootstrap` service's log output (a clearly framed `LOCAL DEV API KEY`
+  block), and
+- `./.swiftagent-local/dev-api-key` (gitignored).
+
+Optionally prove the stack end to end — it completes a streaming turn over
+WebSocket and asserts a real tool round trip (`tool_call_started` →
+`tool_call_completed`), reading the key from the file above:
+
+```sh
+pnpm smoke:local
+```
+
+To point the [quickstart](./docs/quickstart.md) backend at this stack, use the
+generated key and the local base URL:
+
+```sh
+SWIFT_AGENT_API_KEY=$(cat ./.swiftagent-local/dev-api-key)
+SWIFT_AGENT_BASE_URL=http://localhost:3000
+```
 
 ## Development
 

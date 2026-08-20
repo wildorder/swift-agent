@@ -28,13 +28,14 @@ services:
       retries: 5
 
   # ── Swift Agent Server ──────────────────────────────────────────────
+  # A SINGLE public listener serves REST + WebSocket on API_PORT (see
+  # apps/server/src/main.ts) — port 3000 is the only published port.
   swift-agent:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
     ports:
-      - '3000:3000' # API
-      - '3001:3001' # WebSocket Gateway
+      - '3000:3000' # REST + WebSocket (unified listener)
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,20 +46,109 @@ services:
       DATABASE_URL: postgresql://swiftagent:swiftagent_dev@postgres:5432/swiftagent
       # Redis — connects to the redis service above
       REDIS_URL: redis://redis:6379
-      # Server ports
+      # Server port (REST + WebSocket on one listener)
       API_PORT: '3000'
-      GATEWAY_PORT: '3001'
       # JWT secret for client token signing (dev only)
       CLIENT_JWT_SECRET: dev-jwt-secret-change-in-production
-      # Public WebSocket URL (for client token responses)
-      PUBLIC_WEBSOCKET_URL: ws://localhost:3001
+      # Public WebSocket URL handed to clients verbatim (sessions.ts appends
+      # only `?token=…`), so it must carry the canonical /v1/stream path and
+      # the single published port.
+      PUBLIC_WEBSOCKET_URL: ws://localhost:3000/v1/stream
       # Auto-run database migrations on startup
       AUTO_MIGRATE: 'true'
+      # Register the zero-cost tool-calling fixture provider so a clean
+      # checkout boots with no real model key (WS-43). The server refuses this
+      # flag in any cloud DEPLOY_ENV.
+      LOCAL_FIXTURE_PROVIDER: 'true'
+      # Allow the plain-http compose-network runner target (http://runner:8090).
+      RUNNER_REQUIRE_HTTPS: 'false'
+      # DEV ONLY — local compose only; deployed environments provision their
+      # own keys (see infra/). This committed EdDSA private JWK signs only
+      # short-lived scoped tokens for the local runner service on the compose
+      # network (same precedent as the committed CLIENT_JWT_SECRET above).
+      RUNNER_TOKEN_PRIVATE_KEY: '{"crv":"Ed25519","d":"Q0ihC1z_6613OSzAxI13X588cxuec8mUUbJMi-SKmmo","x":"AtVR_YILLC99-cB21IYSh14yrVE78bz9KwnrwAw1Vv4","kty":"OKP"}'
       # Node environment
       NODE_ENV: development
+    # The runtime's SSRF guard (packages/runtime/src/ssrf.ts) blocks every
+    # private range and permits only loopback (under allowLoopback), so the
+    # compose-network address of the runner would be rejected. The runner
+    # service therefore shares THIS container's network namespace (see its
+    # network_mode), and `runner` is pinned to loopback here so the agent's
+    # toolRunnerUrl http://runner:8090 resolves to a permitted address.
+    extra_hosts:
+      - 'runner:127.0.0.1'
     env_file:
       - path: .env
         required: false
+    # Override the image HEALTHCHECK with an IPv4 literal: the server listens on
+    # 0.0.0.0 (IPv4), but Alpine wget resolves `localhost` to ::1 first, so the
+    # image's own check always fails with "connection refused" (pre-existing
+    # Dockerfile defect surfaced by WS-43 — the bootstrap one-shot gates on this
+    # health status via depends_on).
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1']
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  # ── One-shot local bootstrap (WS-43, SC-01) ─────────────────────────
+  # Runs from the prod image after the server is healthy (so AUTO_MIGRATE has
+  # created the schema) and idempotently provisions the workspace, generated
+  # dev API key, and fixture-backed `local-dev` agent. The raw key + runner
+  # workspace id land in ./.swiftagent-local (gitignored) via the bind mount.
+  bootstrap:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    command: ['node', 'packages/db/dist/provision-local.js']
+    depends_on:
+      swift-agent:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://swiftagent:swiftagent_dev@postgres:5432/swiftagent
+    volumes:
+      - ./.swiftagent-local:/bootstrap-out
+
+  # ── Local tool runner (WS-43, SC-01) ────────────────────────────────
+  # Runs from the Dockerfile's `builder` target: the prod image is
+  # --prod-pruned and does not contain @swiftagent/sdk, while the builder
+  # stage has the full workspace + dev deps (tsx). Internal port only — the
+  # server reaches it as http://runner:8090 on the compose network.
+  runner:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      target: builder
+    # The server-filtered turbo build in the builder stage does not build the
+    # SDK (not a server dependency), so build it before starting the runner.
+    command:
+      [
+        'sh',
+        '-c',
+        'pnpm turbo run build --filter=@swiftagent/sdk... && pnpm exec tsx test/smoke/local-runner.ts',
+      ]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    # Share the server's network namespace: the SSRF guard on the tool-call
+    # boundary only permits loopback targets in dev, so the runner must be
+    # reachable from the server as 127.0.0.1:8090 (paired with the server's
+    # `runner:127.0.0.1` extra_hosts entry above).
+    network_mode: 'service:swift-agent'
+    environment:
+      # DEV ONLY — local compose only; deployed environments provision their
+      # own keys (see infra/). Public verification half of the dev-only EdDSA
+      # keypair whose private JWK is set on the swift-agent service above.
+      RUNNER_TOKEN_PUBLIC_KEY: '{"crv":"Ed25519","x":"AtVR_YILLC99-cB21IYSh14yrVE78bz9KwnrwAw1Vv4","kty":"OKP"}'
+      # Must equal the agent's toolRunnerUrl — tokens are minted with aud bound
+      # to it (apps/server/src/container.ts).
+      RUNNER_AUDIENCE: http://runner:8090
+    volumes:
+      - ./.swiftagent-local:/bootstrap-out:ro
+      # The build context dockerignores the root test/ tree, so the runner entry
+      # point is bind-mounted into the builder image instead (dev-only service).
+      - ./test/smoke:/app/test/smoke:ro
 
 volumes:
   pgdata:

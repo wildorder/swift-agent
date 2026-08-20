@@ -23,8 +23,11 @@ vi.mock('@swiftagent/db', () => {
   };
 });
 
+// Hoisted so both the vi.mock factory and the test bodies can see the register
+// spy (asserting exactly which provider ids get registered, WS-43).
+const { registerFn } = vi.hoisted(() => ({ registerFn: vi.fn() }));
+
 vi.mock('@swiftagent/models', () => {
-  const registerFn = vi.fn();
   return {
     ProviderRegistry: vi.fn(() => ({
       register: registerFn,
@@ -35,6 +38,7 @@ vi.mock('@swiftagent/models', () => {
     createAnthropicProvider: vi.fn(),
     createGoogleProvider: vi.fn(),
     createEchoProvider: vi.fn(),
+    createToolFixtureProvider: vi.fn(),
   };
 });
 
@@ -107,6 +111,7 @@ describe('buildContainer', () => {
     API_PORT: 3000,
     GATEWAY_PORT: 3001,
     AUTO_MIGRATE: false,
+    LOCAL_FIXTURE_PROVIDER: false,
   };
 
   beforeEach(() => {
@@ -159,6 +164,30 @@ describe('buildContainer', () => {
     };
     const container = buildContainer(config);
     expect(container.registeredProviders).toEqual([]);
+  });
+
+  // WS-43: the `fixture` tool-calling provider is gated on the local-only flag;
+  // `echo` stays always-registered (cloud smoke); neither joins
+  // `registeredProviders` (doc-commented choice: banner tracks key-gated real
+  // providers only, the flag itself shows in redactConfig).
+  it('registers the fixture provider only when LOCAL_FIXTURE_PROVIDER is set', () => {
+    buildContainer(baseConfig);
+    const idsWithoutFlag = registerFn.mock.calls.map((c) => c[0] as string);
+    expect(idsWithoutFlag).toContain('echo');
+    expect(idsWithoutFlag).not.toContain('fixture');
+
+    vi.clearAllMocks();
+
+    const container = buildContainer({ ...baseConfig, LOCAL_FIXTURE_PROVIDER: true });
+    const idsWithFlag = registerFn.mock.calls.map((c) => c[0] as string);
+    expect(idsWithFlag).toContain('echo');
+    expect(idsWithFlag).toContain('fixture');
+    // Excluded from the key-gated banner list, like echo.
+    expect(container.registeredProviders).toEqual(['openai']);
+
+    // Registered with an explicit throwaway config, never a real env key.
+    const fixtureCall = registerFn.mock.calls.find((c) => c[0] === 'fixture');
+    expect(fixtureCall?.[2]).toEqual({ apiKey: 'fixture-provider-no-key' });
   });
 
   // WS-21 / SC-07: composition wires a per-agent resolver, not a fixed

@@ -47,4 +47,5 @@ export {
   createAnthropicProvider,
   createGoogleProvider,
   createEchoProvider,
+  createToolFixtureProvider,
 } from './providers/index.js';

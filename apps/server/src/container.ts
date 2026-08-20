@@ -29,6 +29,7 @@ import {
   createAnthropicProvider,
   createGoogleProvider,
   createEchoProvider,
+  createToolFixtureProvider,
 } from '@swiftagent/models';
 import { Tracer, type TraceSink } from '@swiftagent/observability';
 import {
@@ -158,6 +159,25 @@ export function buildContainer(config: ServerConfig): Container {
   // is intentionally NOT added to `registeredProviders`, which tracks only the
   // key-gated real providers surfaced in the startup banner.
   modelRegistry.register('echo', createEchoProvider, { apiKey: 'echo-provider-no-key' });
+
+  // Tool-fixture provider (WS-43) — registered ONLY when the local-only
+  // LOCAL_FIXTURE_PROVIDER boot flag is set (loadServerConfig hard-fails when
+  // that flag meets a cloud DEPLOY_ENV, so this branch is structurally
+  // unreachable in deployed environments — unlike echo, which stays
+  // always-registered for the cloud smoke test). Needs no API key, makes no
+  // external call: it deterministically emits one `local_echo` tool_call on its
+  // first turn so the local compose smoke can assert a real tool round trip.
+  // Reachable only by an agent whose modelConfig.model is `fixture/*` (the
+  // bootstrap-provisioned `local-dev` agent). The explicit throwaway config
+  // stops the registry resolving a real env key. Like echo, it is intentionally
+  // NOT added to `registeredProviders`, which tracks only the key-gated real
+  // providers surfaced in the startup banner (the banner instead surfaces the
+  // flag itself via redactConfig's LOCAL_FIXTURE_PROVIDER boolean).
+  if (config.LOCAL_FIXTURE_PROVIDER) {
+    modelRegistry.register('fixture', createToolFixtureProvider, {
+      apiKey: 'fixture-provider-no-key',
+    });
+  }
 
   // 4. Tracer — TraceRepo implements TraceSink interface
   const tracer = new Tracer(repos.traceRepo as unknown as TraceSink);

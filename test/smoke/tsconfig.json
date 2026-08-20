@@ -10,5 +10,10 @@
       "@swiftagent/shared": ["../../packages/shared/src/index.ts"]
     }
   },
-  "include": ["realtime-smoke.ts", "../support/ws-client.ts"]
+  "include": [
+    "realtime-smoke.ts",
+    "local-smoke-entry.ts",
+    "local-runner.ts",
+    "../support/ws-client.ts"
+  ]
 }

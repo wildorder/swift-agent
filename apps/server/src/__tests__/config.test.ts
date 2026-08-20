@@ -78,6 +78,79 @@ describe('loadServerConfig', () => {
   });
 });
 
+describe('LOCAL_FIXTURE_PROVIDER boot flag (WS-43)', () => {
+  // Valid env with NO model provider key at all — the clean-checkout compose shape.
+  const noKeyEnv: Record<string, string> = {
+    DATABASE_URL: 'postgres://localhost:5432/test',
+    CLIENT_JWT_SECRET: 'test-secret-key',
+  };
+
+  it('LOCAL_FIXTURE_PROVIDER=true satisfies the at-least-one-model-key requirement', () => {
+    const config = loadServerConfig({ ...noKeyEnv, LOCAL_FIXTURE_PROVIDER: 'true' });
+    expect(config.LOCAL_FIXTURE_PROVIDER).toBe(true);
+    expect(config.OPENAI_API_KEY).toBeUndefined();
+  });
+
+  it('without the flag the model-key requirement stands', () => {
+    expect(() => loadServerConfig(noKeyEnv)).toThrow(/At least one of/);
+  });
+
+  it('defaults to false (and any non-"true" value is false)', () => {
+    const config = loadServerConfig({ ...noKeyEnv, OPENAI_API_KEY: 'sk-test' });
+    expect(config.LOCAL_FIXTURE_PROVIDER).toBe(false);
+    const config2 = loadServerConfig({
+      ...noKeyEnv,
+      OPENAI_API_KEY: 'sk-test',
+      LOCAL_FIXTURE_PROVIDER: '1',
+    });
+    expect(config2.LOCAL_FIXTURE_PROVIDER).toBe(false);
+  });
+
+  it.each(['prod', 'dev', 'staging'])(
+    'hard-fails when the flag meets cloud DEPLOY_ENV=%s, naming the flag',
+    (deployEnv) => {
+      const env = {
+        ...noKeyEnv,
+        LOCAL_FIXTURE_PROVIDER: 'true',
+        DEPLOY_ENV: deployEnv,
+        PUBLIC_WEBSOCKET_URL: 'wss://api.swiftagent.dev/v1/stream',
+      };
+      expect(() => loadServerConfig(env)).toThrow(/LOCAL_FIXTURE_PROVIDER/);
+      expect(() => loadServerConfig(env)).toThrow(/Missing required environment variables/);
+    },
+  );
+
+  it('cloud refusal aggregates with other missing-var messages in one error', () => {
+    try {
+      loadServerConfig({ LOCAL_FIXTURE_PROVIDER: 'true', DEPLOY_ENV: 'prod' });
+      expect.unreachable('loadServerConfig should have thrown');
+    } catch (err) {
+      const msg = (err as Error).message;
+      expect(msg).toContain('LOCAL_FIXTURE_PROVIDER');
+      expect(msg).toContain('DATABASE_URL');
+      expect(msg).toContain('CLIENT_JWT_SECRET');
+      // Cloud + missing PUBLIC_WEBSOCKET_URL is also aggregated (existing SC-04 guard).
+      expect(msg).toContain('PUBLIC_WEBSOCKET_URL');
+    }
+  });
+
+  it('non-cloud DEPLOY_ENV (e.g. test) does not refuse the flag', () => {
+    const config = loadServerConfig({
+      ...noKeyEnv,
+      LOCAL_FIXTURE_PROVIDER: 'true',
+      DEPLOY_ENV: 'test',
+    });
+    expect(config.LOCAL_FIXTURE_PROVIDER).toBe(true);
+  });
+
+  it('redactConfig surfaces the flag as a plain boolean string', () => {
+    const on = redactConfig(loadServerConfig({ ...noKeyEnv, LOCAL_FIXTURE_PROVIDER: 'true' }));
+    expect(on.LOCAL_FIXTURE_PROVIDER).toBe('true');
+    const off = redactConfig(loadServerConfig({ ...noKeyEnv, OPENAI_API_KEY: 'sk-test' }));
+    expect(off.LOCAL_FIXTURE_PROVIDER).toBe('false');
+  });
+});
+
 describe('validatePublicWebsocketUrl (cloud startup guard, SC-04)', () => {
   const VALID = 'wss://api.swiftagent.dev/v1/stream';
 
