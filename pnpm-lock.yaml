@@ -48,8 +48,8 @@ importers:
         specifier: ^8.18.1
         version: 8.18.1
       '@wildorder/program-pipeline':
-        specifier: ^0.15.0
-        version: 0.15.0
+        specifier: ^0.16.0
+        version: 0.16.0
       drizzle-orm:
         specifier: ^0.36
         version: 0.36.4(postgres@3.4.8)
@@ -2937,8 +2937,8 @@ packages:
       tinyrainbow: 2.0.0
     dev: true
 
-  /@wildorder/program-pipeline@0.15.0:
-    resolution: {integrity: sha512-iS7rVeE/S8QYKthUmfjiAVCVhZbfzI2EMzAWVvi30/VgNB3hROteFIwcQyh9c6ZQNHlZMGKMAweIMuEyOrvx0A==}
+  /@wildorder/program-pipeline@0.16.0:
+    resolution: {integrity: sha512-XP/amA2GPQNBT/MOTszyc3QGmi6XRiZ9S4jKbIwSeRAdgedsCO/wq/+Ox8Nbsbz+zx+Ddaw7c3LOPGd32r3nWQ==}
     engines: {node: '>=20'}
     hasBin: true
     dependencies:
