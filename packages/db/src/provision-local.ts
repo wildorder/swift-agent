@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chownSync, chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   generateWorkspaceId,
@@ -85,6 +85,28 @@ function printKeyBanner(rawKey: string, reused: boolean): void {
   console.log('');
 }
 
+/**
+ * The compose bootstrap runs as root (on Linux the daemon creates the
+ * ./.swiftagent-local bind mount root-owned, so the image's non-root user
+ * cannot write it). Hand a written file back to the mount directory's owner
+ * so the invoking host user can read it; when the directory is root-owned
+ * (daemon-created), fall back to world-readable — this is a dev-only local
+ * key in a gitignored directory. No-op on Windows / non-root runs.
+ */
+function handOffToMountOwner(path: string): void {
+  try {
+    if (typeof process.getuid !== 'function' || process.getuid() !== 0) return;
+    const dir = statSync(OUT_DIR);
+    if (dir.uid !== 0) {
+      chownSync(path, dir.uid, dir.gid);
+    } else {
+      chmodSync(path, 0o644);
+    }
+  } catch {
+    // Best effort — never fail provisioning over ownership cosmetics.
+  }
+}
+
 async function provision(): Promise<void> {
   const connectionString = process.env['DATABASE_URL'];
   if (!connectionString) {
@@ -145,6 +167,7 @@ async function provision(): Promise<void> {
 
     // 3. Surface the raw key: file (mode-restricted) + clearly framed log line.
     writeFileSync(KEY_FILE, `${rawKey}\n`, { mode: 0o600 });
+    handOffToMountOwner(KEY_FILE);
     printKeyBanner(rawKey, reusedKey);
 
     // 4. Find-or-create the fixture-backed local agent with the local_echo tool.
@@ -169,6 +192,7 @@ async function provision(): Promise<void> {
     writeFileSync(RUNNER_ENV_FILE, `${JSON.stringify({ workspaceId }, null, 2)}\n`, {
       mode: 0o644,
     });
+    handOffToMountOwner(RUNNER_ENV_FILE);
     console.log(`  Runner env written: ${RUNNER_ENV_FILE} ({ workspaceId: ${workspaceId} })`);
 
     console.log('Local bootstrap complete.');

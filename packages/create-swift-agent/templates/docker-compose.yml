@@ -97,6 +97,11 @@ services:
   bootstrap:
     image: ${SWIFT_AGENT_SERVER_IMAGE:-ghcr.io/wildorder/swift-agent:latest}
     command: ['node', 'packages/db/dist/provision-local.js']
+    # Root, deliberately: on Linux the daemon creates the ./.swiftagent-local
+    # bind mount root-owned, so the image's non-root user cannot write it.
+    # The provisioner hands the written files back to the mount's owner (or
+    # leaves them world-readable when the owner is root). Dev-only, one-shot.
+    user: '0:0'
     depends_on:
       swift-agent:
         condition: service_healthy

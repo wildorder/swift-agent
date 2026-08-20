@@ -275,8 +275,20 @@ async function main() {
     // registry.npmjs.org, reachable from everywhere.
     rmSync(join(projectDir, 'backend', 'package-lock.json'), { force: true });
     run('docker', ['build', '-f', 'apps/server/Dockerfile', '-t', SERVER_IMAGE, '.']);
-    run('docker', ['compose', 'up', '-d'], { cwd: projectDir, env: composeEnv });
+    // Mark the stack up BEFORE `up` runs: `up -d` failing on a one-shot
+    // service (e.g. bootstrap exit 1) still leaves containers behind that
+    // teardown must remove — and their logs are the diagnostics we need.
     composeUp = true;
+    try {
+      run('docker', ['compose', 'up', '-d'], { cwd: projectDir, env: composeEnv });
+    } catch (err) {
+      try {
+        run('docker', ['compose', 'logs', '--tail', '150'], { cwd: projectDir, env: composeEnv });
+      } catch {
+        /* diagnostics only */
+      }
+      throw err;
+    }
 
     const keyFile = join(projectDir, '.swiftagent-local', 'dev-api-key');
     try {
