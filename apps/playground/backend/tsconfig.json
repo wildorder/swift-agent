@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "../dist/backend"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../packages/sdk" },
+    { "path": "../../../packages/shared" }
+  ]
+}
