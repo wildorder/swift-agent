@@ -16,6 +16,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:4100',
+      // WS-49: the mediator mint route + the proxied WebSocket stream.
+      '/playground': {
+        target: 'http://127.0.0.1:4100',
+        ws: true,
+      },
     },
   },
 });

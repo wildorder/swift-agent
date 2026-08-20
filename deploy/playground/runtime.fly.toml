@@ -1,0 +1,68 @@
+# WS-49: the PLAYGROUND'S ISOLATED RUNTIME on Fly.io — the WS-47 template
+# (deploy/fly.toml) instantiated for the playground with its own app name,
+# its own managed Postgres/Redis, and its own secrets. Fully isolated from
+# dev/staging/prod: nothing here shares infrastructure with infra/.
+#
+# SINGLE INSTANCE, BY DESIGN (SC-12): all realtime state is process-local —
+# see docs/runbooks/realtime-operations.md §1/§6. Every knob pinning one
+# Machine and disabling autoscaling is load-bearing, as is
+# strategy = "immediate" (bluegreen/canary would run two mid-deploy).
+
+app = "swift-agent-playground-runtime"
+primary_region = "iad"
+
+[build]
+  # The WS-50 published operator image, pinned at its sha256 MANIFEST-LIST
+  # digest — never a tag, never built on the host. OWNER STEP: the image has
+  # not been published yet; take the digest from the first "Publish Container
+  # Image" workflow run (see docs/runbooks/container-image.md) and replace:
+  image = "ghcr.io/wildorder/swift-agent@sha256:REPLACE_WITH_MANIFEST_LIST_DIGEST"
+
+[deploy]
+  # Forward-only migrations as an explicit release step (docs/runbooks/
+  # migrations.md) — this applies the WS-49 ledger migration
+  # (playground_spend_days / playground_spend_reservations) too, since the
+  # ledger rides the single migration chain in packages/db.
+  release_command = "node packages/db/dist/migrate.js"
+  # Never two Machines mid-deploy (SC-12): replace in place.
+  strategy = "immediate"
+
+[env]
+  API_PORT = "3000"
+  NODE_ENV = "production"
+  # Handed verbatim to session responses; the playground MEDIATOR (not the
+  # browser) dials it. Derive from this app's name:
+  PUBLIC_WEBSOCKET_URL = "wss://swift-agent-playground-runtime.fly.dev/v1/stream"
+
+# Secrets (set with `fly secrets set -a swift-agent-playground-runtime`,
+# never committed — see deploy/playground/README.md):
+#   DATABASE_URL              from THIS app's own Fly Managed Postgres
+#   REDIS_URL                 from THIS app's own Upstash Redis
+#   CLIENT_JWT_SECRET         operator-generated (openssl rand -hex 32)
+#   ANTHROPIC_API_KEY         the DEDICATED playground provider key — used by
+#                             nothing else, carrying a provider-side budget
+#                             cap (REQUIRED owner console step, see README §5)
+#   RUNNER_TOKEN_PRIVATE_KEY  EdDSA private JWK; its public half goes to the
+#                             playground app (RUNNER_TOKEN_PUBLIC_KEY)
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Autoscaling fully disabled — exactly one Machine, always running:
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+# Exactly one machine in one region; no [http_service.concurrency] section —
+# concurrency-triggered scaling must never be configured for this app.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  count = 1

@@ -12,6 +12,7 @@
   },
   "include": [
     "realtime-smoke.ts",
+    "playground-smoke.ts",
     "local-smoke-entry.ts",
     "local-runner.ts",
     "../support/ws-client.ts"

@@ -26,10 +26,12 @@
   "dependencies": {
     "@swiftagent/shared": "workspace:*",
     "drizzle-orm": "^0.36",
+    "nanoid": "^5",
     "postgres": "^3.4",
     "zod": "^3.24"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^10.0.0",
     "@types/node": "^25.5.2",
     "drizzle-kit": "^0.30",
     "typescript": "^5.5.0",

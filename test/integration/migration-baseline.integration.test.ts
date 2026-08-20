@@ -24,13 +24,15 @@ import {
 
 const CONTAINER_TIMEOUT_MS = 120_000;
 
-// The 11 application tables materialized by the baseline + increments. The
+// The 13 application tables materialized by the baseline + increments. The
 // migrator's own `drizzle.__drizzle_migrations` lives in the `drizzle` schema
 // and is excluded by the `public` filter.
 const EXPECTED_TABLES = [
   'agents',
   'api_keys',
   'messages',
+  'playground_spend_days',
+  'playground_spend_reservations',
   'runs',
   'sessions',
   'tool_calls',
@@ -45,6 +47,7 @@ const JOURNAL_TAGS = [
   '0000_baseline',
   '0001_conscious_steel_serpent',
   '0002_reflective_maverick',
+  '0003_lame_kronos',
 ];
 
 describe('migration-baseline (SC-10 / SC-01)', () => {
@@ -60,7 +63,7 @@ describe('migration-baseline (SC-10 / SC-01)', () => {
     if (pg) await pg.teardown();
   });
 
-  it('baseline-from-empty materializes all 11 tables, the run_status + span enums, and agents.tools', async () => {
+  it('baseline-from-empty materializes all 13 tables, the run_status + span enums, and agents.tools', async () => {
     const tableRows = await pg.sql<{ table_name: string }[]>`
       SELECT table_name
       FROM information_schema.tables
@@ -101,13 +104,13 @@ describe('migration-baseline (SC-10 / SC-01)', () => {
     expect(enumNames).toEqual(expect.arrayContaining(['span_type', 'span_status', 'run_status']));
   });
 
-  it('records exactly 3 ordered bookkeeping rows and computes all three APPLIED in journal order', async () => {
+  it('records one ordered bookkeeping row per journal entry and computes all APPLIED in journal order', async () => {
     const rows = await pg.sql<{ id: number | string; created_at: number | string }[]>`
       SELECT id, created_at
       FROM drizzle.__drizzle_migrations
       ORDER BY created_at ASC, id ASC
     `;
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(JOURNAL_TAGS.length);
 
     const applied = await queryAppliedMigrations(pg.sql);
     const status = computeMigrationStatus(journal, applied);
@@ -122,9 +125,9 @@ describe('migration-baseline (SC-10 / SC-01)', () => {
     const rows = await pg.sql<{ id: number }[]>`
       SELECT id FROM drizzle.__drizzle_migrations
     `;
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(JOURNAL_TAGS.length);
 
-    // Schema is unchanged — still exactly the 11 application tables.
+    // Schema is unchanged — still exactly the 13 application tables.
     const tableRows = await pg.sql<{ table_name: string }[]>`
       SELECT table_name
       FROM information_schema.tables
@@ -137,7 +140,7 @@ describe('migration-baseline (SC-10 / SC-01)', () => {
     const applied = await queryAppliedMigrations(pg.sql);
     const status = computeMigrationStatus(journal, applied);
 
-    expect(status).toHaveLength(3);
+    expect(status).toHaveLength(JOURNAL_TAGS.length);
     for (const entry of status) {
       expect(entry.status).toBe('APPLIED');
       expect(typeof entry.appliedAt).toBe('number');
@@ -152,7 +155,7 @@ describe('migration-baseline (SC-10 / SC-01)', () => {
       expect(applied).toEqual([]);
 
       const status = computeMigrationStatus(journal, applied);
-      expect(status).toHaveLength(3);
+      expect(status).toHaveLength(JOURNAL_TAGS.length);
       expect(status.map((s) => s.tag)).toEqual(JOURNAL_TAGS);
       expect(status.every((s) => s.status === 'PENDING')).toBe(true);
     } finally {

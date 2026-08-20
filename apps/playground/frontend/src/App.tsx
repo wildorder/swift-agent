@@ -12,6 +12,7 @@ import { ConnectionControls } from './components/ConnectionControls';
 import { SourcePanel } from './components/SourcePanel';
 import { FailureButton } from './components/FailureButton';
 import { BoundaryNote } from './components/BoundaryNote';
+import { RefusalList } from './components/RefusalNotice';
 
 interface DemoConfig {
   budgets: { toolName: string; budgetMs: number }[];
@@ -96,6 +97,8 @@ function Playground({
         produces — infrastructure, not a chat widget.
       </p>
       <BoundaryNote />
+
+      <RefusalList refusals={controller.refusals} />
 
       <h2>Event stream</h2>
       <EventPanel events={controller.events} />

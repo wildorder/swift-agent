@@ -100,12 +100,13 @@ need — and **agent code is identical at every rung**. The same `defineAgent`, 
 same `tool()`, the same `useAgentChat`. Only the server URL moves.
 
 
-| Rung                     | Effort                      | Who it is for                               |
-| ------------------------ | --------------------------- | ------------------------------------------- |
-| **Hosted playground**    | Zero — open a link          | Evaluators deciding whether to keep reading |
-| **`create-swift-agent`** | ~60s — scaffold and run     | Developers trying it for real               |
-| **`docker compose up`**  | ~5 min — whole stack, local | Developers building against it              |
-| **`terraform apply`**    | ~20 min — their own AWS     | Teams taking it to production               |
+| Rung                     | Effort                      | Who it is for                               | Status |
+| ------------------------ | --------------------------- | ------------------------------------------- | ------ |
+| **Hosted playground**    | Zero — open a link          | Evaluators deciding whether to keep reading | Application built (`apps/playground`, mediator-guarded); the public URL goes live with the owner's first deploy of `deploy/playground/` |
+| **`create-swift-agent`** | ~60s — scaffold and run     | Developers trying it for real               | Built and e2e-verified (`packages/create-swift-agent`) |
+| **`docker compose up`**  | ~5 min — whole stack, local | Developers building against it              | Built — self-provisioning local stack (`docker-compose.yml`) |
+| **One-click deploy template** | ~15 min — their own Fly.io | Developers hosting a real instance     | Template built (`deploy/`): pinned single instance, managed Postgres/Redis, forward-only migrate step |
+| **`terraform apply`**    | ~20 min — their own AWS     | Teams taking it to production               | Built (`infra/` — dev / staging / prod) |
 
 
 ### Why Open Source Rather Than Hosted-Only

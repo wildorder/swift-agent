@@ -7,4 +7,5 @@ export { messageRoleEnum, messages } from './messages.js';
 export { toolCallStatusEnum, toolCalls } from './tool-calls.js';
 export { spanTypeEnum, spanStatusEnum, traces, traceSpans } from './traces.js';
 export { users } from './users.js';
+export { playgroundSpendDays, playgroundSpendReservations } from './playground-spend.js';
 export { userWorkspaces } from './user-workspaces.js';

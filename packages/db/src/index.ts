@@ -28,6 +28,11 @@ export {
   type UserRepo,
   createUserWorkspaceRepo,
   type UserWorkspaceRepo,
+  createPlaygroundSpendRepo,
+  type PlaygroundSpendRepo,
+  type PlaygroundSpendTerminalStatus,
+  type PlaygroundSpendReservationRow,
+  type ReserveResult,
 } from './repositories/index.js';
 
 // Migration status + drift-detection tooling (consumed by WS-29 integration tests)

@@ -15,6 +15,10 @@ export const playgroundTools = [
 export const playgroundAgent = defineAgent({
   name: 'playground-assistant',
   model: process.env.PLAYGROUND_MODEL ?? 'anthropic/claude-3-5-haiku',
+  // WS-49 guardrail: bounds per-round output, which (× the runtime's 10 max
+  // tool iterations) anchors the ledger's per-run reservation formula — see
+  // deploy/playground/README.md.
+  maxTokens: 1024,
   system:
     'You are the Swift Agent playground assistant. Use get_weather for weather ' +
     'questions and calculate for arithmetic. Call unreliable_service only when ' +

@@ -9,6 +9,11 @@ run it.
 The example has two halves: a **backend** that defines an agent and mints
 browser sessions, and a **frontend** React app that renders the streaming chat.
 
+> **Fastest path:** `npx create-swift-agent my-agent` scaffolds all of the
+> below — backend, frontend, and a no-provider-key local compose stack — in
+> about a minute ([`packages/create-swift-agent`](../packages/create-swift-agent)).
+> The walk-through that follows is the same wiring, by hand.
+
 ## 1. Install
 
 `@swiftagent/*` packages install from public npm — no registry configuration

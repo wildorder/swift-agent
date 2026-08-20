@@ -38,9 +38,21 @@ Deployable control plane lives under [`apps/server`](./apps/server).
 
 ## Quickstart
 
-Read the narrative walk-through in [`docs/quickstart.md`](./docs/quickstart.md),
-which wires an agent end to end using the canonical, CI-maintained example in
-[`examples/quickstart/`](./examples/quickstart). Run instructions live in
+Scaffold a runnable project — backend, React frontend, and a local
+`docker compose` stack that completes a real streaming tool round trip with no
+model-provider key — in about a minute:
+
+```sh
+npx create-swift-agent my-agent
+```
+
+(See [`packages/create-swift-agent`](./packages/create-swift-agent) for the
+generator's options and what it produces.)
+
+Or wire an existing project by hand: read the narrative walk-through in
+[`docs/quickstart.md`](./docs/quickstart.md), which builds the canonical,
+CI-maintained example in [`examples/quickstart/`](./examples/quickstart). Run
+instructions live in
 [`examples/quickstart/README.md`](./examples/quickstart/README.md).
 
 Install the SDKs from public npm — no registry configuration or token needed:
@@ -60,9 +72,10 @@ at every rung of the ladder — same `defineAgent`, same `tool()`, same
 
 | Rung | Effort | Status |
 | --- | --- | --- |
-| Hosted playground | Zero — open a link | Planned |
-| `create-swift-agent` scaffold | ~60s | Planned |
+| Hosted playground | Zero — open a link | Built — [`apps/playground`](./apps/playground), guarded by a server-side mediator; goes live with the owner's first deploy of [`deploy/playground/`](./deploy/playground) |
+| `create-swift-agent` scaffold | ~60s | `npx create-swift-agent my-agent` — [`packages/create-swift-agent`](./packages/create-swift-agent) |
 | `docker compose up` | ~5 min, local | [`docker-compose.yml`](./docker-compose.yml) — full self-provisioned stack, see [Run locally](#run-locally) |
+| `fly deploy` template | ~15 min, your Fly.io account | [`deploy/`](./deploy) — one pinned instance, managed Postgres + Redis, forward-only migrations |
 | `terraform apply` | ~20 min, your AWS | [`infra/`](./infra) — dev / staging / prod |
 
 ### Run locally

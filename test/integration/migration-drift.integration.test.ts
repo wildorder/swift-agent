@@ -21,7 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrateDistPath = resolve(__dirname, '../../packages/db/dist/migrate.js');
 
 const CONTAINER_TIMEOUT_MS = 120_000;
-const LATEST_IDX = 2; // 3 committed migrations → last-applied ordinal is 2.
+const LATEST_IDX = 3; // 4 committed migrations → last-applied ordinal is 3.
 
 interface CliResult {
   code: number;

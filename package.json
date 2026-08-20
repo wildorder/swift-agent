@@ -19,6 +19,7 @@
     "e2e:create-swift-agent": "node scripts/create-swift-agent-e2e.mjs",
     "smoke:realtime": "tsx test/smoke/realtime-smoke.ts",
     "smoke:local": "tsx test/smoke/local-smoke-entry.ts",
+    "smoke:playground": "tsx test/smoke/playground-smoke.ts",
     "smoke:typecheck": "tsc --noEmit -p test/smoke/tsconfig.json",
     "smoke:lint": "eslint test/smoke",
     "changeset": "changeset",

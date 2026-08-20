@@ -1,13 +1,20 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { createAgentApp } from '@swiftagent/sdk';
+import { ControlPlaneClient } from '@swiftagent/sdk/internal';
+import { createDbClient, createPlaygroundSpendRepo } from '@swiftagent/db';
 import { ENV_KEYS } from '@swiftagent/shared';
 import { playgroundAgent } from './agent.js';
 import { listDemoBudgets } from './tools/budget.js';
 import type { DemoBudget } from './tools/budget.js';
+import { loadMediatorConfig } from './mediator/config.js';
+import { registerMediator } from './mediator/mediator.js';
+import type { MediatorDeps } from './mediator/mediator.js';
 
 /**
  * The one command that reproduces this demo's stack locally, quoted exactly
@@ -56,72 +63,80 @@ export function loadDemoConfig(): DemoConfig {
   };
 }
 
-/** The minimal session-minting surface the HTTP server needs (mockable in tests). */
-export interface SessionMinter {
-  create(opts: { agentName: string; userId?: string }): Promise<{
-    sessionId: string;
-    clientToken: string;
-    websocketUrl: string;
-  }>;
-}
-
 /**
- * Build the demo's HTTP server (quickstart pattern). The browser gets ONLY
- * `{ sessionId, token, websocketUrl }` from `/api/session` — the workspace API
- * key never leaves this process — plus the demo-owned config from
- * `/api/demo-config`. Permissive CORS so the page works without the Vite proxy.
+ * Build the demo's HTTP server, hardened into the WS-49 mediator topology:
+ *
+ * - `POST /playground/session` mints a guest session (per-IP rate limited);
+ *   the browser receives an opaque guest id + the limits — NO credential of
+ *   any kind (no workspace key, no client JWT, no upstream websocketUrl).
+ * - `/playground/stream?gid=…` is the ONLY socket the browser holds; the
+ *   mediator proxies to the runtime and enforces every limit (SC-09).
+ * - `/api/demo-config` is WS-48's demo-owned config route, untouched.
+ * - When `staticDir` is provided (the deployed single-instance container),
+ *   the built frontend is served from the same process.
  */
-export function buildServer(deps: {
-  sessions: SessionMinter;
+export async function buildServer(deps: {
+  mediator: MediatorDeps;
   demoConfig: DemoConfig;
   logger?: boolean;
-}): FastifyInstance {
-  const server = Fastify({ logger: deps.logger ?? false });
+  staticDir?: string;
+  /** Honor X-Forwarded-For for per-IP limiting behind the host proxy. */
+  trustProxy?: boolean;
+}): Promise<FastifyInstance> {
+  const server = Fastify({
+    logger: deps.logger ?? false,
+    trustProxy: deps.trustProxy ?? false,
+  });
 
   server.addHook('onRequest', async (_request, reply) => {
     reply.header('access-control-allow-origin', '*');
-    reply.header('access-control-allow-methods', 'GET,OPTIONS');
+    reply.header('access-control-allow-methods', 'GET,POST,OPTIONS');
     reply.header('access-control-allow-headers', 'content-type');
-  });
-  server.options('/api/session', async (_request, reply) => {
-    reply.code(204).send();
   });
   server.options('/api/demo-config', async (_request, reply) => {
     reply.code(204).send();
   });
 
-  // Guest session mint — no signup, no visitor-supplied key. The frontend gets
-  // a short-lived client token + the canonical websocketUrl, nothing else.
-  server.get('/api/session', async () => {
-    const session = await deps.sessions.create({
-      agentName: playgroundAgent.name,
-      userId: 'playground-guest',
-    });
-    return {
-      sessionId: session.sessionId,
-      token: session.clientToken,
-      websocketUrl: session.websocketUrl,
-    };
-  });
-
   // Everything the frontend beats need that is NOT on the event stream: the
   // demo-owned budgets (Beat 2), the agent source (Beat 4), and the
-  // reproduce-locally command (Beat 4).
+  // reproduce-locally command (Beat 4). WS-48's route, untouched.
   server.get('/api/demo-config', async () => deps.demoConfig);
+
+  // SC-12: the serving instance's identity, polled by the observation
+  // procedure (deploy/playground/README.md) to prove at most one instance
+  // ever serves across a rolling deploy and a restart.
+  server.get('/health', async () => ({
+    status: 'ok',
+    instance: process.env.FLY_MACHINE_ID ?? hostname(),
+    uptimeSeconds: Math.round(process.uptime()),
+  }));
+
+  await registerMediator(server, deps.mediator);
+
+  if (deps.staticDir) {
+    await server.register(fastifyStatic, { root: deps.staticDir });
+    // SPA fallback: any unknown GET path serves the app shell.
+    server.setNotFoundHandler(async (request, reply) => {
+      if (request.method === 'GET' && !request.url.startsWith('/api') && !request.url.startsWith('/playground')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: 'Not found' });
+    });
+  }
 
   return server;
 }
 
 /**
- * Wire up the AgentApp and the HTTP server. All environment reads happen here
- * (never at import time) so tests can import this module without booting.
+ * Wire up the AgentApp, the ledger, and the HTTP server. All environment reads
+ * happen here (never at import time) so tests can import this module without
+ * booting.
  */
 async function main(): Promise<void> {
-  const app = createAgentApp({
-    apiKey: process.env.SWIFT_AGENT_API_KEY ?? '',
-    baseUrl: process.env.SWIFT_AGENT_BASE_URL,
-  });
+  const apiKey = process.env.SWIFT_AGENT_API_KEY ?? '';
+  const baseUrl = process.env.SWIFT_AGENT_BASE_URL;
 
+  const app = createAgentApp({ apiKey, baseUrl });
   app.agent(playgroundAgent);
 
   if (
@@ -134,20 +149,52 @@ async function main(): Promise<void> {
     );
   }
 
-  const server = buildServer({
-    sessions: app.sessions,
+  // The playground's OWN isolated database — the Postgres-persisted daily
+  // spend ledger (never in-memory; runbook §1 is exactly why).
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('[playground-backend] DATABASE_URL is required (the spend ledger is Postgres-persisted)');
+  }
+  const dbClient = createDbClient(databaseUrl);
+
+  // The mediator composes the SDK's raw control-plane client for session
+  // minting, run observation (getRun), and cap-breach cancellation.
+  const control = new ControlPlaneClient(apiKey, baseUrl);
+
+  const staticDirCandidate =
+    process.env.PLAYGROUND_STATIC_DIR ??
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend');
+
+  const server = await buildServer({
+    mediator: {
+      control,
+      ledger: createPlaygroundSpendRepo(dbClient.db),
+      config: loadMediatorConfig(),
+      agentName: playgroundAgent.name,
+    },
     demoConfig: loadDemoConfig(),
     logger: true,
+    trustProxy: process.env.PLAYGROUND_TRUST_PROXY === '1',
+    ...(existsSync(join(staticDirCandidate, 'index.html')) ? { staticDir: staticDirCandidate } : {}),
+  });
+
+  server.addHook('onClose', async () => {
+    await dbClient.close();
   });
 
   // Starts the tool runner (hosting the playground tools) and registers the
-  // agent with the control plane.
-  await app.listen();
+  // agent with the control plane. The runner port is passed EXPLICITLY so the
+  // host's PORT env (consumed by the HTTP server below) can never collide
+  // with the runner's listener.
+  const runnerPort = process.env.PLAYGROUND_TOOL_RUNNER_PORT
+    ? Number.parseInt(process.env.PLAYGROUND_TOOL_RUNNER_PORT, 10)
+    : 8090;
+  await app.listen(runnerPort);
 
   const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 4100;
   await server.listen({ port, host: '0.0.0.0' });
   console.log(
-    `[playground-backend] Listening on http://127.0.0.1:${port} (/api/session, /api/demo-config)`,
+    `[playground-backend] Listening on http://127.0.0.1:${port} (POST /playground/session, WS /playground/stream, /api/demo-config)`,
   );
 }
 
