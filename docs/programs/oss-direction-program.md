@@ -168,10 +168,16 @@ rather than its warm-up.
 and §6 are explicit: all realtime state — connections, replay buffers, session
 locks, in-flight runs — lives in one process's memory, Redis pub/sub is wired but
 dormant, and the ECS service is pinned to `desired_count = 1` precisely because a
-second task would break session invariants. Every deployment surface this program
-creates (the deploy template and the playground) must therefore pin to **exactly
-one instance** with autoscaling disabled, and must say why in the documentation
-it ships. A host that cannot guarantee a single running instance is disqualified.
+second task would break session invariants. Every **managed, publicly-hosted**
+deployment surface this program creates — exactly two, the WS-47 deploy template
+and the WS-49 playground deployment (SC-12 names the family) — must therefore pin
+to **exactly one instance** with autoscaling disabled, and must say why in the
+documentation it ships. A host that cannot guarantee a single running instance is
+disqualified. The third deployment artifact the program produces, WS-46's
+scaffold-generated compose file, is a local development artifact outside that
+family: it has no autoscaling or rolling-deploy operation to observe, and it is
+single-instance by construction — the generated compose defines exactly one
+server service, which WS-46's generated-project test asserts.
 
 **New deployable app — `apps/playground`.** A demo agent backend plus a browser
 frontend, structured like `examples/quickstart` (`backend/` + `frontend/`). It is
@@ -237,10 +243,25 @@ configured only as environment on the playground's isolated runtime deployment**
 (the standard `apps/server` path, with its provider-side budget cap), the
 **mediator holds the runtime workspace API key** and is the sole enforcement
 point for every limit, and the **browser holds no credential of either kind**.
-The spend ledger settles against terminal `RunRecord` usage read from the public
-`GET /v1/runs/:runId` surface, and refusal frames are typed frames of the
+Refusal frames are typed frames of the
 playground's own mediator protocol — no new `ChatEvent` variants, no runtime or
 SDK addition.
+
+**Spend accounting cannot trust `RunRecord.tokenUsage` (corrected 2026-08-20,
+audit round 5).** An earlier revision settled the ledger against terminal
+`RunRecord` usage from `GET /v1/runs/:runId`. That value is structurally an
+under-count for every multi-round run: `packages/runtime/src/loop.ts:181`
+overwrites `lastUsage` on each provider round and completion persists only the
+final round (`loop.ts:412-414`), and every successful playground tool call is
+model → tool → model, so at least the first round's tokens are always missing.
+Aggregating at the source is forbidden runtime work. The ledger therefore
+charges conservatively instead of accurately: the mediator reserves each run's
+maximum cost up front — derived from its own enforced message and token caps
+and the cheap model's pricing — and **every reservation settles at its full
+reserved amount**, for all four terminal statuses and (after a timeout) for
+abandoned runs; a reservation is never released downward, and `tokenUsage` is
+recorded as observability data only. The ceiling can only stop the demo early;
+it can never be exceeded while the ledger reports compliance (SC-09).
 
 **New package — `packages/create-swift-agent`.** A scaffold CLI. Deliberately
 **unscoped** so `npx create-swift-agent` works, which is a documented exception to
@@ -409,25 +430,13 @@ No changes to the runtime stack. No new runtime dependencies.
 
 ---
 
-## Workstreams
+## Execution Shape
 
-| ID    | Workstream                                | Dependencies        | Estimated Effort |
-| ----- | ----------------------------------------- | ------------------- | ---------------- |
-| WS-51 | Canonical Verification Gate Stability     | —                   | S                |
-| WS-43 | Local Stack Coherence & Bootstrap         | WS-51               | L                |
-| WS-50 | Public Container Image                    | WS-43, WS-44        | M                |
-| WS-44 | Public Release Readiness (Gated)          | WS-51               | L                |
-| WS-45 | Local Package Consumption Harness         | WS-44               | S                |
-| WS-46 | `create-swift-agent` Scaffold CLI         | WS-43, WS-44, WS-45 | M                |
-| WS-47 | One-Click Deploy Template                 | WS-43, WS-50        | M                |
-| WS-48 | Playground Application                    | WS-43               | L                |
-| WS-49 | Playground Guardrails & Public Deployment | WS-46, WS-47, WS-48 | L                |
-
-**Size key:** S = 1–2 days, M = 3–5 days, L = 5–10 days
-
----
-
-## Dependency Graph
+The workstream roster, dependencies, sizes, scopes, and exclusions are
+canonical in [`oss-direction-manifest.json`](oss-direction-manifest.json)
+(`workstreams[]`); the graph below is an architectural illustration derived
+from those dependencies, kept for the causal reasoning around it — the
+manifest is authoritative wherever they differ.
 
 ```
 WS-51 Canonical Gate ──┬──► WS-43 Local Stack ──┬──► WS-50 Container Image ──► WS-47 Deploy ──┐
@@ -439,7 +448,7 @@ WS-51 Canonical Gate ──┬──► WS-43 Local Stack ──┬──► WS-
                        │                         └──────────┐                                 │  Final Docs/Gate
                        │                                    │                                 │
                        └──► WS-44 Public Release ──┬────────┼──► WS-46 create-swift-agent ────┘
-                              Readiness (gated)    │        │         (scaffold CLI)
+                              Readiness (armed)    │        │         (scaffold CLI)
                                                    └► WS-45 ┘
                                                       Local Registry Harness
 ```
@@ -455,135 +464,6 @@ orchestrator could green WS-49 while the claimed artifact does not exist; and
 WS-49 owns the program-final SC-17 gate re-proof, which is only meaningful after
 every workstream has added its packages and tests.
 
-## Critical Path
-
-Four chains are now co-critical into WS-49, and the resizing is the reason:
-
-- `WS-51 → WS-43 → WS-50 → WS-47 → WS-49` — approximately 17–32 days.
-- `WS-51 → WS-44 → WS-50 → WS-47 → WS-49` — approximately 17–32 days.
-- `WS-51 → WS-43 → WS-48 → WS-49` — approximately 16–32 days.
-- `WS-51 → WS-44 → WS-45 → WS-46 → WS-49` — approximately 15–29 days.
-
-Four workstreams are now `L`, not one. WS-43 grew from `S` once the local
-bootstrap turned out to be its real content; WS-44 grew once the publishing
-surface set closed at twelve; WS-49 grew once its limits became a server-side
-mediator with a persisted ledger rather than middleware. WS-50 sits on **both**
-WS-43 and WS-44, so the packaging chain no longer has the slack an earlier draft
-credited it with — and the `WS-45 → WS-46` tail is no longer free-floating
-either, since WS-49 now waits on it. WS-49 cannot start until all four chains
-land.
-
----
-
-## Scope (In)
-
-- Making the configured verification gate (`pnpm build`, `typecheck`, `lint`,
-  `test`) deterministic, so every workstream checkpoint in this program is judged
-  on a signal that only goes red for a real defect.
-- Repairing `docker-compose.yml` so the full local stack starts and streams
-  end to end on a single port, **and** a self-provisioning local bootstrap —
-  model configuration, workspace, usable dev API key, tool-bearing agent, runner
-  keys, and a deterministic tool-calling fixture — so a clean checkout can
-  complete a real tool round trip with nothing seeded by hand, proven by a smoke
-  check that asserts the tool events.
-- Public-npm packaging readiness for `@swiftagent/{sdk,react,shared}`, applied
-  coherently across **all twelve currently existing active surfaces** tabulated
-  in _Architecture Changes_ (packages the program creates later are born with
-  the correct posture by their creating workstreams — `create-swift-agent`
-  public in WS-46, `@swiftagent/playground` private in WS-48 — and WS-49
-  re-runs the posture search over the terminal tree) — registry and access metadata, an Apache-2.0 `LICENSE` plus matching
-  license fields, `.changeset/config.json`, the normative text in
-  `docs/policies/versioning.md`, the `verify-pack.mjs` assertions, `.npmrc`
-  registry routing, `AGENTS.md`, `docs/as-built.md`, entry and per-package
-  READMEs, CI and both publish workflows, and the executable acceptance install
-  harness — with the release workflow firing only from an explicit manual
-  `workflow_dispatch` trigger (the actual release path, pressed once by the
-  owner per decision 4), a release runbook documenting that trigger, and a
-  verified `pnpm publish --dry-run` whose packed manifests are inspected to
-  confirm `workspace:*` ranges rewrite to concrete versions.
-- Contribution terms for a public repository: a `CONTRIBUTING.md` and `DCO`
-  adopting Developer Certificate of Origin 1.1, a `Signed-off-by` CI check, and a
-  DCO prompt amended into the existing `.github/pull_request_template.md`.
-- A local registry harness — a real npm registry protocol endpoint (Verdaccio),
-  not tarballs or `file:` dependencies — that installs the three packages as
-  real npm dependencies into a throwaway consumer.
-- `create-swift-agent`: a scaffold CLI producing a runnable backend, frontend,
-  and compose file, with a model-key prompt, published into the local registry so
-  real `npx` resolution is exercised before release, an end-to-end
-  generated-project test, and inclusion in the WS-44 release workflow so the
-  owner's single trigger releases it to public npm alongside the three packages.
-- A one-click deploy template for the chosen managed host, covering the runtime,
-  managed Postgres and Redis, forward-only migrations, secrets, a single pinned
-  instance, and a README deploy button.
-- The playground application: an agent backend with two to three real tools, and
-  a frontend built around the four demo beats above — raw typed-event feed, tool
-  calls with identity/timing plus a triggerable failure path, a survivable
-  dropped connection, and the source shown beside the running demo.
-- Playground abuse controls enforced **server-side by a trusted mediator that is
-  the sole enforcement point** — the mediator holds the runtime workspace API
-  key, the dedicated provider key (with its provider-side budget cap) is
-  configured only on the playground's isolated runtime deployment via the
-  standard `apps/server` environment, and the browser holds no credential of
-  either kind — covering per-IP and per-session limits, message and token
-  caps, a restart-surviving daily spend ledger with reserve-then-settle
-  accounting and its own schema and migration — settling against actual terminal
-  usage when the run completes with persisted `tokenUsage`, and settling
-  conservatively at the full reserved estimate for terminal runs whose
-  `tokenUsage` is null (failed, cancelled, timed_out) — typed refusal frames in
-  the mediator's own protocol, a cheap default model, and ephemeral session
-  retention; plus public deployment and a smoke test against the live URL.
-- A multi-arch `apps/server` container image published to GHCR automatically,
-  consumed by compose pinned at its sha256 manifest-list digest adopted through
-  a staged bootstrap, and by the deploy template — with the documented one-time
-  owner UI step that makes it anonymously pullable (decisions 5 and 6 — no API
-  exists for it, the program does not claim it happened), a ready-to-run
-  logged-out `docker pull` verification command for the owner to run after
-  clicking, documented authenticated-pull credentials for every in-program
-  consumer that needs the image before the click, and a documented
-  build-from-source override for contributors.
-- A program-final gate re-proof: repeated cache-bypassed runs of all four
-  configured verification commands after the last workstream lands, once
-  `apps/playground` and `packages/create-swift-agent` and their tests exist —
-  owned by WS-49 as the sole terminal workstream, complementing the WS-51 root
-  repair.
-
-## Scope (Out)
-
-- **Pressing the release trigger inside a workstream.** Publication to public
-  npm is decided and real (decision 4), but it fires from the delivered
-  `workflow_dispatch` trigger pressed by the owner — no workstream's checkpoint
-  executes or depends on the publish itself. Provisioning the npm organization
-  and its token is likewise a manual owner-owned setup step, documented but not
-  performed by any workstream.
-- **Performing or asserting the one-time GHCR visibility click inside any
-  workstream.** It is a manual, irreversible owner UI action with no API
-  equivalent, only possible after the first push creates the package
-  (decisions 5 and 6). Workstreams document it, ship the post-click
-  verification command, and authenticate for any in-program pull — no
-  checkpoint waits on the click or claims the anonymous pull succeeded.
-- **Adding a tool deadline to `ChatEvent`, `ToolContext`, or the runner
-  protocol.** Considered for Beat 2 and rejected on 2026-08-19: the timing budget
-  is demo-owned, which preserves the no-runtime-feature-work rule and keeps the
-  `@swiftagent/shared` semver surface frozen while it is being prepared for
-  publication.
-- Any change under `infra/` — the AWS Terraform stack, its environments, and its
-  deploy workflows are untouched.
-- **Horizontal scaling of any kind.** No shared session lock, no shared replay
-  buffer, no cross-instance fanout, no autoscaling configuration. Lighting up the
-  dormant Redis path is Phase 2 work per the realtime runbook §6.
-- **A CLA or copyright-assignment agreement.** Deliberately rejected in favour of
-  a DCO; no CLA-assistant bot or signing flow.
-- A docs site, code of conduct, or issue templates. `CONTRIBUTING.md` and the DCO
-  are now **in** scope because contribution terms are part of the licensing
-  posture; the rest of the community scaffolding is not.
-- The retention-modes feature (`retention: none | metadata | full`) discussed
-  during positioning. The playground's ephemeral handling is a deployment
-  configuration, not a runtime feature.
-- Runtime feature work of any kind: no new endpoints, no new SDK surface, no
-  new model providers, no durable execution.
-- A hosted multi-tenant service, billing, signup, or a dashboard app.
-- Removing `GATEWAY_PORT` or altering the standalone-gateway entry point.
-
 ---
 
 ## Risk Register
@@ -597,7 +477,7 @@ land.
 | A public image reference drifts, so "it works on my machine" diverges from what operators pull                                   | Medium — unreproducible bug reports; GHCR permits package versions to be removed and replaced, so even a version tag is mutable absent an enforcement mechanism GHCR does not provide                | WS-50 publishes version tags for humans but compose pins the **sha256 manifest-list digest** produced by the multi-arch push — the only intrinsically content-addressed reference — and the upgrade path (commit a new digest) is documented rather than implied                                                                                |
 | A contributor's pull request is merged before contribution terms exist                                                           | Medium — that contributor retains copyright with no recorded grant, permanently complicating any later relicensing                                                                                   | WS-44 lands `CONTRIBUTING.md`, the DCO, and the `Signed-off-by` CI check as part of going public, so the terms exist before the repository can accept its first external PR                                                                                                                                                                     |
 | Public playground abuse burns the owner's model API budget                                                                       | High — an uncapped demo is an open wallet                                                                                                                                                            | WS-49 is a dedicated workstream, not a checklist item: per-IP and per-session rate limits, hard message and token caps, short session TTLs, and a global daily spend ceiling                                                                                                                                                                    |
-| The application-level spend ceiling is itself the thing that fails — a bug, a bypass, or an in-memory counter reset by a restart | High — the limiter's failure mode is an invoice, and an in-memory daily counter is really a per-uptime-window counter (realtime runbook §1)                                                          | Defence in depth in WS-49: the ceiling is persisted in Postgres rather than memory; a **dedicated provider API key carries a provider-side budget cap** enforced by the provider rather than by our code; a deliberately cheap default model shrinks the blast radius before any limiter fires; an alert fires at a fraction of the ceiling; and terminal runs with null usage (failed/cancelled/timed_out never persist `tokenUsage`) settle conservatively at the full reserved estimate rather than being refunded on missing data |
+| The application-level spend ceiling is itself the thing that fails — a bug, a bypass, or an in-memory counter reset by a restart | High — the limiter's failure mode is an invoice, and an in-memory daily counter is really a per-uptime-window counter (realtime runbook §1)                                                          | Defence in depth in WS-49: the ceiling is persisted in Postgres rather than memory; a **dedicated provider API key carries a provider-side budget cap** enforced by the provider rather than by our code; a deliberately cheap default model shrinks the blast radius before any limiter fires; an alert fires at a fraction of the ceiling; and every reservation settles at its full reserved amount — `RunRecord.tokenUsage` is observability-only and never reduces a charge, since it under-reports every multi-round run (runtime overwrites `lastUsage` per provider round), so the ledger can only over-count, never under-count |
 | The playground's limits are enforced where a visitor can remove them                                                             | **High — a limit implemented in the browser is a suggestion; the invoice is real**                                                                                                                   | SC-09 requires a trusted server-side mediator as the only enforcement point — the browser never holds the runtime API key or any provider credential, and the provider credential lives only in the playground runtime's own environment — with limits tested against a client that ignores the UI; browser-side controls are explicitly excluded from counting as enforcement                                                                                                                            |
 | Going public is applied to some surfaces but not others                                                                          | High — a half-public repo is worse than a private one: `UNLICENSED` code on a public registry, or a policy doc contradicting shipped metadata                                                        | WS-44 owns the complete active surface set as one atomic checkpoint — all twelve tabulated in _Architecture Changes_, closed by repository-wide search rather than by recollection, with historical records explicitly preserved rather than rewritten                                                                                          |
 | `.npmrc` keeps routing installs to GitHub Packages after the metadata flips                                                      | **High — `@swiftagent:registry` overrides package metadata, so consumers would be silently redirected to a registry they cannot read; this surface was missing from the original five-surface list** | The active surface set was closed by repository-wide search and is tabulated in _Architecture Changes_; SC-11 enumerates all twelve and WS-44 owns them as one checkpoint                                                                                                                                                                       |
@@ -615,25 +495,18 @@ land.
 
 ---
 
-## Success Criteria
+## Success Criteria, Workstreams, and Scope
 
-- **SC-01** — From a clean checkout, `docker compose up` starts Postgres, Redis, and the server AND self-provisions everything a real turn needs — a server-accepted model configuration, a usable raw dev API key whose stored hash matches, a workspace and a tool-bearing agent, runner signing/verification keys with a reachable runner, and a deterministic tool-calling fixture — after which an automated smoke check completes a streaming turn over WebSocket asserting BOTH tool_call_started and tool_call_completed, with no manual seeding and no pre-supplied SMOKE_API_KEY.
-- **SC-02** — docker-compose.yml contains no port or PUBLIC_WEBSOCKET_URL value that contradicts the single-listener behaviour in apps/server/src/main.ts.
-- **SC-03** — @swiftagent/{sdk,react,shared} declare publishConfig.registry = https://registry.npmjs.org with access: public, carry "license": "Apache-2.0" backed by a repository LICENSE file (no UNLICENSED remains), and `node scripts/verify-pack.mjs` passes with assertions updated to match.
-- **SC-04** — A `pnpm publish --dry-run` succeeds for all three packages — pnpm, not npm, because publication must go through pnpm to rewrite `workspace:*` dependency ranges to concrete versions, and the packed manifests are inspected to confirm that rewriting. The release workflow publishes to public npm ONLY from an explicit manual workflow_dispatch trigger — that trigger is the decided release path (decision 4), pressed once by the owner, and a release runbook documents it, including the owner-owned npm org/token provisioning. Demonstrated without the workstream itself publishing anything.
-- **SC-05** — The local registry harness is a real npm registry protocol endpoint (Verdaccio) — a directory of tarballs or file: dependencies does not satisfy this — and it installs all three packages into a throwaway consumer that imports and type-checks against them, run as a repeatable command in CI.
-- **SC-06** — create-swift-agent is packed and published INTO the WS-45 local registry (including its bin entry, verified from the packed tarball), and `npx create-swift-agent <name>` resolved against that registry produces a project that installs, type-checks, builds, and completes a streaming turn with a tool call — its generated-project test owning the same local runtime, API-key, and runner bootstrap that WS-43 defines. create-swift-agent is also included in the WS-44 release workflow, so the owner's single trigger releases it to public npm alongside the three packages (decision 4).
-- **SC-07** — The deploy template provisions the runtime with managed Postgres and Redis on the chosen host, applies forward-only migrations as an explicit release step, and passes a health check, reproducibly from the documented button or command. Until the owner's GHCR visibility click, the host pulls the image using documented registry credentials, so this criterion does not depend on package visibility (decision 6); once the package is public those credentials become unnecessary and the docs say so.
-- **SC-08** — The playground is reachable at a public URL and, in one session, streams tokens and surfaces at least one tool call in the event/trace panel with its start, completion, and duration.
-- **SC-09** — Playground guardrails are enforced SERVER-SIDE by a trusted mediator that is the sole enforcement point between the browser and the playground's runtime — browser-side controls do not count as enforcement, the browser never receives the runtime workspace API key or any model-provider credential, the mediator holds the runtime API key, and the dedicated provider key is configured only as environment on the playground's isolated runtime deployment (the standard apps/server config path — no provider proxy and no runtime feature is added). Per-IP and per-session limits, a message cap, and a token cap are enforced in the mediator and tested against a client that ignores the UI; a global daily spend ledger persisted in Postgres, whose schema and migration WS-49 owns, survives restarts and settles atomically via reserve-then-settle against terminal RunRecord usage read from the public GET /v1/runs/:runId surface — settling against actual tokenUsage when the run completed with persisted usage, and settling CONSERVATIVELY AT THE FULL RESERVED ESTIMATE for any terminal run whose tokenUsage is null (failed, cancelled, and timed_out never persist usage; completed/failed/cancelled/timed_out is the exhaustive terminal family), never releasing a reservation below its reserved amount without persisted usage and requiring no runtime change; every refusal is delivered as a defined refusal frame of the mediator's own protocol — not a new ChatEvent variant, an unhandled error, or a dropped socket; and the deployed instance uses a dedicated provider key carrying a provider-side budget cap, documented with its configured value.
-- **SC-10** — README.md links the live playground and the deploy button as working commands, and presents `npx create-swift-agent` and the `@swiftagent/*` package installs as the supported quickstart path for the released state (decision 4 authorizes writing documentation for that state, since release is the owner's single documented trigger away). A release runbook (or RELEASING section) documents exactly that trigger and the owner-owned npm org/token prerequisite, so the gap between merged docs and live packages is one visible, documented action — no surface invents a different install mechanism or claims a version already exists on the registry (no hardcoded version badges asserting a published version). docs/vision.md ladder statuses are consistent with that same released-state framing.
-- **SC-11** — Evaluated over the TERMINAL repository at program end: for the four public packages — @swiftagent/{sdk,react,shared} and create-swift-agent — and their public-consumer path, no ACTIVE repository surface asserts or enforces a private/restricted publishing posture, and every other workspace package is "private": true — the nine current ones (@swiftagent/{api,db,gateway,models,observability,runtime,server} and the two quickstart example packages) plus @swiftagent/playground, which the program creates. The currently-existing in-domain surface set WS-44 sweeps is exhaustive and enumerated in constraints.publishingSurfaces: package metadata, LICENSE, .changeset/config.json, docs/policies/versioning.md, scripts/verify-pack.mjs, .npmrc, AGENTS.md, docs/as-built.md, README.md, docs/quickstart.md, all three package READMEs, ci.yml, both publish-sdks workflows, and the acceptance install harness plus its vitest config. Packages created after that sweep are born with the correct posture by their creating workstreams (create-swift-agent public-postured in WS-46, apps/playground private in WS-48), and WS-49 — the sole terminal workstream — re-runs the repository-wide active posture search over the terminal tree to close the claim against the repository that actually exists. Historical program plans, task specifications, and as-built snapshots are preserved unchanged as historical record.
-- **SC-12** — Every deployment surface created by this program pins to exactly one running instance with autoscaling disabled, AND that is verified by observing a single serving instance across a rolling deployment and a restart rather than by configuration value alone; each ships documentation citing the single-instance rationale in docs/runbooks/realtime-operations.md §6.
-- **SC-13** — A CONTRIBUTING.md and DCO file adopt the Developer Certificate of Origin 1.1 and state that contributors retain copyright; a CI check rejects a pull-request commit lacking a Signed-off-by trailer and accepts one that has it, asserted by the check actually running.
-- **SC-14** — A multi-arch (linux/amd64 + linux/arm64) apps/server image builds and publishes to ghcr.io automatically from a workflow requiring no manual trigger, and a pulled image (pulled with documented registry credentials until the owner's visibility click; decision 6) starts, migrates, and serves REST + WebSocket identically to a locally built one.
-- **SC-15** — docker-compose.yml consumes the published ghcr.io image pinned at its sha256 MANIFEST-LIST DIGEST (`image: ghcr.io/…@sha256:…`) — no tag satisfies this, version tags included, because GHCR permits container package versions to be removed and replaced and defines no immutable-tag enforcement — adopted only after that digest exists via the WS-50 staged bootstrap; the ONE-TIME owner UI step that makes the package publicly readable (Package settings → Change visibility → Public — GitHub exposes no API operation for this, packages default private regardless of repository visibility, and the step is only possible after the first push creates the package) is DOCUMENTED as a repository-configuration prerequisite together with a ready-to-run logged-out `docker pull` verification command the owner runs immediately after clicking — per decision 6 the program does NOT claim the click happened or that an anonymous pull succeeded, and no checkpoint waits on it; every in-program consumer of the image before the click (the pulled-image equivalence check, CI compose pulls, the WS-47 deploy) authenticates to GHCR with documented credentials; a clean-checkout run pulls rather than builds (authenticated in-program, credential-free for strangers once the owner has clicked, stated as exactly that); and a documented override still lets contributors build locally.
-- **SC-16** — The playground delivers all four demo beats on the public surface with no runtime or SDK addition: raw ChatEvent JSON is viewable beside the rendered chat; a tool call shows callId, the demo-configured timing budget, and a duration measured from the real tool_call_started/tool_call_completed pair, and a deliberately failing tool can be triggered to show the failure path; a control drops the connection mid-stream and the session is recovered by constructing a new session client against the same session id, with on-page copy describing what actually happens; and the agent source plus the reproduce-locally command are shown on the page.
-- **SC-17** — pnpm build, pnpm typecheck, pnpm lint, and pnpm test all pass deterministically from a clean checkout, with the apps/server index-export import-graph test no longer able to fail on a timing margin under parallel load; demonstrated by repeated cache-bypassed full-suite runs rather than a single green run, TWICE: once at WS-51 (the root repair) and again at the end of WS-49 (the sole terminal workstream), after apps/playground, packages/create-swift-agent, and every other workstream's packages and tests are in the tree.
+Canonical in [`oss-direction-manifest.json`](oss-direction-manifest.json):
+success-criteria text (`successCriteria[]`), the workstream roster with
+dependencies, sizes, scope, and exclusions (`workstreams[]`), program
+constraints (`constraints`), and out-of-scope items (`outOfScope[]`) live
+there and only there. This document refers to them by id (`SC-xx`, `WS-xx`)
+and never restates their text. Earlier revisions restated them; audit round 5
+removed the duplicates (findings 2df6331d, 00e9ed93). The reconciliation
+histories below are preserved as historical record — where they cite
+since-removed program sections (Scope In/Out, the Success Criteria list, the
+Workstreams table), those dispositions were accurate when written.
 
 ---
 
@@ -853,3 +726,66 @@ Root cause: the completeness boundary was derived from the current workspace ros
 | manifest workstreams[WS-44].scope | fixed | sweep explicitly bounded to surfaces existing at WS-44 time |
 | manifest workstreams[WS-46].scope | fixed | born-public posture include added |
 | manifest workstreams[WS-49].scope final search | fixed | terminal repository-wide posture search added beside the final gate re-proof |
+
+---
+
+## Replan Reconciliation (2026-08-20, audit round 5)
+
+The fifth `plan-audit` pass (report generated 2026-08-20T04:34Z, outcome `requires-replan`) returned two blockers (SC-09, SC-15) and one major (SC-12), plus two minors mandating the removal of duplicated manifest data from this document. The pipeline's automatic replanner (`codex exec`) was rejected twice on output-contract grounds and rolled back, so all closure happened in this session against the osd14 artifacts. No finding required a user-intent decision (`criteriaPatches` empty; the SC-09 repair follows the audit's own "conservative settlement" direction from round 3, now applied universally). `planGeneration` advanced to `2026-08-20T05:30:00Z-osd15`; `tasks/oss-direction/` still contains no authored specs, so workstream IDs are retained. Per the updated planning template and minor findings 2df6331d and 00e9ed93, the Workstreams table, Critical Path, Scope (In), Scope (Out), and Success Criteria sections were **deleted** from this document — the manifest is their single source of truth — with the dependency graph retained as architectural explanation (explicitly permitted by finding 00e9ed93).
+
+### Finding 93d5fd3d — SC-09 tokenUsage under-counts multi-round runs (blocker, systemic)
+
+Root cause: the plan treated a final-model-round usage field as aggregate run usage. Verified: `packages/runtime/src/loop.ts:181` assigns `lastUsage = chunk.usage` on every provider round and only the final value is persisted (`loop.ts:412-414`), so every tool-calling run (model → tool → model) under-reports. Repair: every reservation settles at its full reserved amount for all terminal outcomes and for abandoned runs; `RunRecord.tokenUsage` is observability-only and never reduces a charge; no runtime change.
+
+| Checked subject | Disposition | Evidence |
+|---|---|---|
+| completed single-round runs | already-correct | full-reservation settlement covers them; the reservation is an upper bound on a single round by construction (caps × cheap-model pricing) |
+| completed multi-round runs | fixed | the affected class — no longer settled against the under-counting field; charged at full reservation |
+| failed runs | already-correct | were already full-reservation settled since round 3; rule unchanged, now uniform |
+| cancelled runs | already-correct | same |
+| timed_out runs | already-correct | same |
+| packages/shared/src/types/run.ts | already-correct (evidence) | nullable `tokenUsage` — now advisory-only in the plan |
+| packages/runtime/src/loop.ts | already-correct (evidence) | `lastUsage` overwrite at line 181; final-round persist at 412-414 — the fact the rule encodes; explicitly not modified |
+| packages/db/src/repositories/run-repo.ts | already-correct (evidence) | `complete()` persists the single TokenUsage argument |
+| packages/api/src/routes/runs.ts | already-correct (evidence) | returns the RunRecord unchanged; may still be read for observability |
+| packages/sdk/src/client.ts | already-correct (evidence) | `getRun` parses it unchanged |
+| completed runs with one or more successful tool iterations | fixed | member of the affected multi-round class; full-reservation settlement |
+| completed runs with failed or rejected tool calls followed by model recovery | fixed | same class, same rule |
+| all playground completed runs whose model is invoked more than once | fixed | same class, same rule |
+
+Copies reconciled: manifest `successCriteria[SC-09]`, manifest `workstreams[WS-49]` reserve-then-settle include, program Architecture Changes new "Spend accounting cannot trust RunRecord.tokenUsage" paragraph, program Risk Register spend-ceiling row. The former program Scope (In) abuse-controls bullet and program SC-09 copy were removed entirely by the de-duplication, eliminating two copies rather than synchronizing them.
+
+### Finding 4ab5c267 — SC-12 quantifies over a local artifact (major, isolated)
+
+Root cause: an unqualified deployment-surface quantifier included the WS-46 scaffold-generated compose file, which has no managed rolling-deploy or autoscaling operation to observe. Repair: SC-12's family is exactly the two managed, publicly-hosted surfaces; the generated compose is named, excluded, and given its own applicable rule.
+
+| Checked subject | Disposition | Evidence |
+|---|---|---|
+| WS-46 scaffold-generated compose file | fixed | SC-12 names it as outside the family with its own rule — single server service, no replica configuration, asserted by the WS-46 generated-project test; WS-46's template include carries the same rule |
+| WS-47 managed-host deploy template | already-correct | remains in the family; its observation-based verification include is unchanged |
+| WS-49 playground public deployment | already-correct | remains in the family; its observation-based verification include is unchanged |
+
+Copies reconciled: manifest `successCriteria[SC-12]`, manifest `workstreams[WS-46]` template include, program Architecture Changes single-instance paragraph (now names the two-member family and the excluded local artifact).
+
+### Finding 641a9982 — SC-15 WS-50 summary contradiction (blocker, isolated)
+
+Root cause: one unreconciled workstream summary ("makes that package anonymously pullable") still promised the outcome of the owner-only post-program click — a leftover the round-4 pass missed while fixing the includes, excludes, and criteria.
+
+| Checked subject | Disposition | Evidence |
+|---|---|---|
+| manifest successCriteria[SC-15] | already-correct | decision-6 wording from round 4 unchanged |
+| constraints.ghcrVisibility | already-correct | decision-6 wording unchanged |
+| constraints.artifactAudience | already-correct | authenticated in-program pull wording unchanged |
+| manifest workstreams[WS-50].scope.summary | fixed | now: publishes automatically, pins the digest, documents the click and ships the post-click verification command — "never performs, waits on, or asserts that click" |
+| all WS-50 includes | already-correct | round-4 wording unchanged |
+| all WS-50 excludes | already-correct | round-4 wording (including the no-wait/no-assert exclude) unchanged |
+| program decisions 5 and 6 | already-correct | unchanged |
+| program GHCR architecture prose | already-correct | round-4 wording unchanged |
+| program Scope In | fixed (removed) | section deleted in the de-duplication; its GHCR bullet no longer exists as a copy |
+| program Scope Out | fixed (removed) | same |
+| program SC-15 | fixed (removed) | the program-doc criteria copy was deleted; the manifest text is the only copy |
+| program GHCR risk mitigation | already-correct | round-4 wording unchanged |
+
+### Minor findings 2df6331d and 00e9ed93 — duplicated manifest data
+
+Both fixed by restructuring this document: the Success Criteria list, Workstreams table, Critical Path, Scope (In), and Scope (Out) sections were deleted and replaced by the canonical-reference section above; the dependency graph remains as architectural explanation, labeled as derived from the manifest.

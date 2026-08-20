@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 4,
+  "programId": "oss-direction",
+  "generatedAt": "2026-08-20T03:41:59.993Z",
+  "inputHash": "c12da2ae175cd7e94fe68614a8a5d093d5d0ebca874564fb0dec3a106aa5f9d1",
+  "outcome": "human-required",
+  "summary": "Plan audit requires a human requirements decision before authoring.",
+  "humanDecisionReason": "SC-15 requires a genuine intent choice. Either the program must wait for the owner visibility click and require the anonymous pull before SC-15, SC-07, and final clean-checkout claims are accepted, or the no-human-dependent-checkpoint decision must remain and SC-15 must be weakened to deliver the documented post-click verification command without claiming that it succeeded during the program. Wording alone cannot preserve both outcomes.",
+  "replanFindings": [
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-11",
+      "message": "The claimed exhaustive publishing/workspace disposition is closed over the current repository instead of the terminal repository. The program necessarily creates create-swift-agent, a fourth public npm package on the public-consumer path, and @swiftagent/playground, another private workspace package. Because neither appears in SC-11's complete roster or constraints.publishingSurfaces, the criterion cannot remain exhaustive after its own program executes.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "future workspace members omitted",
+          "detail": "pnpm-workspace.yaml includes packages/* and apps/*; manifest packages guarantees packages/create-swift-agent and apps/playground will become members."
+        },
+        {
+          "kind": "concern",
+          "named": "public package omitted from public-consumer posture",
+          "detail": "SC-06 and WS-46 require create-swift-agent to publish through the same public-npm workflow, but SC-11 and constraints.publishingSurfaces name only sdk/react/shared."
+        },
+        {
+          "kind": "concern",
+          "named": "private roster becomes non-exhaustive",
+          "detail": "The asserted nine-package private roster omits the planned private @swiftagent/playground package."
+        },
+        {
+          "kind": "concern",
+          "named": "ordering gap",
+          "detail": "WS-44 owns the exhaustive sweep but precedes WS-46, which creates the omitted public package and modifies the release workflow afterward."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "5b2ddc598faad8cc"
+    },
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "SC-15 requires successful anonymous-pull proof and a working clean-checkout pull, but the only operation that makes the package public is an owner UI action that the plan explicitly excludes from workstream checkpoints. The plan cannot simultaneously guarantee the proof and guarantee that no checkpoint depends on the prerequisite action.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "acceptance depends on excluded action",
+          "detail": "SC-15 says an anonymous docker pull succeeds; Decision 5, constraints.ghcrVisibility, and WS-50.scope say the checkpoint does not block on the owner's visibility click."
+        },
+        {
+          "kind": "concern",
+          "named": "private default",
+          "detail": "GitHub documents separately configurable granular package visibility and anonymous pulls only for public container packages: https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages"
+        },
+        {
+          "kind": "concern",
+          "named": "no automatable fallback",
+          "detail": "GitHub's complete REST Packages endpoint family has list/get/delete/restore/version operations but no visibility mutation: https://docs.github.com/en/rest/packages"
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    }
+  ],
+  "relatedFindings": [
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-11",
+      "message": "The claimed exhaustive publishing/workspace disposition is closed over the current repository instead of the terminal repository. The program necessarily creates create-swift-agent, a fourth public npm package on the public-consumer path, and @swiftagent/playground, another private workspace package. Because neither appears in SC-11's complete roster or constraints.publishingSurfaces, the criterion cannot remain exhaustive after its own program executes.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "future workspace members omitted",
+          "detail": "pnpm-workspace.yaml includes packages/* and apps/*; manifest packages guarantees packages/create-swift-agent and apps/playground will become members."
+        },
+        {
+          "kind": "concern",
+          "named": "public package omitted from public-consumer posture",
+          "detail": "SC-06 and WS-46 require create-swift-agent to publish through the same public-npm workflow, but SC-11 and constraints.publishingSurfaces name only sdk/react/shared."
+        },
+        {
+          "kind": "concern",
+          "named": "private roster becomes non-exhaustive",
+          "detail": "The asserted nine-package private roster omits the planned private @swiftagent/playground package."
+        },
+        {
+          "kind": "concern",
+          "named": "ordering gap",
+          "detail": "WS-44 owns the exhaustive sweep but precedes WS-46, which creates the omitted public package and modifies the release workflow afterward."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "5b2ddc598faad8cc"
+    },
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "SC-15 requires successful anonymous-pull proof and a working clean-checkout pull, but the only operation that makes the package public is an owner UI action that the plan explicitly excludes from workstream checkpoints. The plan cannot simultaneously guarantee the proof and guarantee that no checkpoint depends on the prerequisite action.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "acceptance depends on excluded action",
+          "detail": "SC-15 says an anonymous docker pull succeeds; Decision 5, constraints.ghcrVisibility, and WS-50.scope say the checkpoint does not block on the owner's visibility click."
+        },
+        {
+          "kind": "concern",
+          "named": "private default",
+          "detail": "GitHub documents separately configurable granular package visibility and anonymous pulls only for public container packages: https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages"
+        },
+        {
+          "kind": "concern",
+          "named": "no automatable fallback",
+          "detail": "GitHub's complete REST Packages endpoint family has list/get/delete/restore/version operations but no visibility mutation: https://docs.github.com/en/rest/packages"
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    }
+  ],
+  "classAnalyses": [
+    {
+      "subject": "SC-11",
+      "scope": "systemic",
+      "rootCause": "The completeness boundary was derived from the current workspace roster even though the program manifest guarantees two additional workspace members before the terminal checkpoint.",
+      "affectedSubjects": [
+        "program Architecture Changes publishing-posture roster",
+        "program twelve-surface publishing table",
+        "program Scope (In) public-npm surface sweep",
+        "program SC-11",
+        "manifest constraints.publishingSurfaces",
+        "manifest successCriteria[SC-11]",
+        "manifest workstreams[WS-44].scope",
+        "manifest workstreams[WS-46].scope",
+        "manifest workstreams[WS-49].scope final search"
+      ],
+      "checkedSubjects": [
+        "all affected canonical plan and manifest copies",
+        "manifest packages complete planned roster",
+        "manifest workstreams complete dependency roster",
+        "pnpm-workspace.yaml",
+        "all twelve current workspace package.json files",
+        "planned packages/create-swift-agent/package.json",
+        "planned apps/playground/package.json",
+        "AGENTS.md Delivery convention",
+        "all surfaces enumerated by constraints.publishingSurfaces",
+        "repository-wide active private/restricted posture search",
+        "program Architecture Changes publishing-posture roster",
+        "program twelve-surface publishing table",
+        "program Scope (In) public-npm surface sweep",
+        "program SC-11",
+        "manifest constraints.publishingSurfaces",
+        "manifest successCriteria[SC-11]",
+        "manifest workstreams[WS-44].scope",
+        "manifest workstreams[WS-46].scope",
+        "manifest workstreams[WS-49].scope final search"
+      ],
+      "completenessBasis": "pnpm-workspace.yaml closes workspace membership, the manifest packages array resolves guaranteed future members, and constraints.publishingSurfaces supplies the plan's claimed exhaustive active-copy list."
+    },
+    {
+      "subject": "SC-15",
+      "scope": "systemic",
+      "rootCause": "One manual prerequisite is simultaneously declared non-blocking and required to have completed for acceptance evidence that cannot exist before it.",
+      "affectedSubjects": [
+        "Requirements Decision 5",
+        "program Architecture Changes GHCR visibility section",
+        "program Scope (In) anonymous image claim",
+        "program Scope (Out) manual visibility action",
+        "program Risk Register first-GHCR-push mitigation",
+        "program SC-15",
+        "manifest constraints.ghcrVisibility",
+        "manifest constraints.artifactAudience",
+        "manifest successCriteria[SC-15]",
+        "manifest workstreams[WS-50].scope"
+      ],
+      "checkedSubjects": [
+        "all affected canonical plan and manifest copies",
+        "docker-compose.yml",
+        "apps/server/Dockerfile",
+        "GitHub package permissions documentation",
+        "GitHub package visibility documentation",
+        "complete GitHub REST Packages endpoint roster",
+        "Requirements Decision 5",
+        "program Architecture Changes GHCR visibility section",
+        "program Scope (In) anonymous image claim",
+        "program Scope (Out) manual visibility action",
+        "program Risk Register first-GHCR-push mitigation",
+        "program SC-15",
+        "manifest constraints.ghcrVisibility",
+        "manifest constraints.artifactAudience",
+        "manifest successCriteria[SC-15]",
+        "manifest workstreams[WS-50].scope"
+      ],
+      "completenessBasis": "Decision 5 enumerates every repeated disposition copy, while GitHub's official visibility and REST documentation closes the external mechanism family and confirms that no automated alternative was omitted."
+    }
+  ],
+  "criteriaPatches": [],
+  "checkpointAssessments": [],
+  "criticSummary": "SC-11: The asserted exhaustive roster closes over the current twelve workspaces but not the terminal repository. pnpm-workspace.yaml will also include packages/create-swift-agent and apps/playground. create-swift-agent is a fourth public npm artifact and part of the supported public-consumer path, while @swiftagent/playground must remain private under AGENTS.md. Neither planned member appears in the claimed exhaustive workspace disposition or publishing-surface set, and WS-44 runs before WS-46 creates the public package.; SC-15: The digest-pin portion is implementable, and GitHub's current documentation confirms that public container packages allow anonymous pulls and that the REST Packages API has no visibility mutation. The plan nevertheless requires a successful anonymous pull as acceptance proof while Decision 5, constraints.ghcrVisibility, and WS-50.scope state that the prerequisite owner UI click is outside the workstream and its checkpoint must not depend on it. If the owner has not clicked, the package remains private and the required proof and clean-checkout pull cannot succeed.",
+  "criticLogs": [
+    "build-logs/oss-direction-plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa-critic-attempt-1.log"
+  ],
+  "planningInstruction": "Run /plan-program oss-direction. This report requires a human requirements decision before any replanning. Present every decision in humanDecisionReason to the user as explicit choices, wait for their answers, and record each decision with its rationale in the program document. The user's recorded decisions are the only authorization for changing success criteria or user intent. Then resolve every replanFindings and blocker/major relatedFindings entry, close every classAnalyses root-cause class by reconciling every checkedSubjects member with an explicit fixed or already-correct disposition and concrete evidence, and re-check every workstreams[].scope copy affected by a criterion or interface repair.",
+  "supersedes": "docs/programs/oss-direction-replan-history/2026-08-20T03-41-59-979Z-29d1b24d.json"
+}
