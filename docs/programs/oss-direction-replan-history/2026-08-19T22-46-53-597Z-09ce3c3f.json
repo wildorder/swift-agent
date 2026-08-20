@@ -1,0 +1,439 @@
+{
+  "schemaVersion": 3,
+  "programId": "oss-direction",
+  "generatedAt": "2026-08-19T22:00:37.020Z",
+  "inputHash": "a0469149e726c8e23b3640a6a54e307ac2bc9aa19884e83ae412a72014a556c4",
+  "outcome": "requires-replan",
+  "summary": "Plan audit found 5 blocker/major finding(s) before authoring.",
+  "replanFindings": [
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-09",
+      "message": "The plan assigns the model-provider credential to the playground mediator, but the existing runtime exclusively loads and consumes that credential. Satisfying the wording would require forbidden runtime/provider-proxy work or use of the private server package from the public-surface-only playground.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "credential ownership mismatch",
+          "detail": "apps/server/src/config.ts validates OPENAI_API_KEY/ANTHROPIC_API_KEY/GOOGLE_API_KEY and apps/server/src/container.ts passes those keys directly to ProviderRegistry factories."
+        },
+        {
+          "kind": "concern",
+          "named": "public-surface restriction",
+          "detail": "WS-48 requires apps/playground to consume only @swiftagent/sdk/react public surfaces and forbids runtime or SDK additions."
+        },
+        {
+          "kind": "concern",
+          "named": "missing proxy configuration",
+          "detail": "ProviderConfig supports baseUrl, but buildContainer exposes no server configuration that routes provider traffic through a playground mediator."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "93d5fd3d6fb041db"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-10",
+      "message": "The workstream that publishes the built-and-verified scaffold claim does not depend on the workstream that builds and verifies the scaffold.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "missing dependency",
+          "detail": "WS-49 owns the SC-10 documentation pass and depends only on WS-47 and WS-48; WS-46 is absent."
+        },
+        {
+          "kind": "concern",
+          "named": "currently false claim",
+          "detail": "README.md and docs/vision.md currently mark create-swift-agent Planned, and packages/create-swift-agent does not exist."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "4603aa14c2c287c0"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-11",
+      "message": "The unqualified ban on every active private publishing posture contradicts nine intentionally private existing workspace packages. The intended domain must be stated as the three public packages and their public-consumer path.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "canonical roster contradiction",
+          "detail": "pnpm-workspace.yaml expands to private manifests for @swiftagent/api, db, gateway, models, observability, runtime, server, example-backend, and example-frontend."
+        },
+        {
+          "kind": "concern",
+          "named": "intended exception",
+          "detail": "AGENTS.md and WS-44 both intend non-publishable packages to remain private."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "5b2ddc598faad8cc"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-05",
+      "message": "WS-45 permits a tarball-backed substitute even though SC-06 requires publishing the CLI into a registry and resolving it through npx. A directory of tarballs or file dependencies is not an npm registry endpoint.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "incompatible implementation alternatives",
+          "detail": "WS-45 includes 'Verdaccio-backed (or tarball-backed) local registry'; WS-46 requires publishing create-swift-agent into that registry and exercising real npx resolution."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "69a24ecf97f67bd8"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "The plan treats a version tag as immutable without defining any GHCR enforcement. Compose should pin the manifest-list digest so the multi-architecture image reference cannot drift.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "tag mutability",
+          "detail": "WS-50 accepts an 'immutable version tag or digest', while GitHub's package lifecycle permits container package versions to be removed/replaced and no immutable-tag policy is specified."
+        },
+        {
+          "kind": "concern",
+          "named": "available exact identity",
+          "detail": "A sha256 manifest-list digest is produced after the multi-arch push and directly satisfies SC-15."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    }
+  ],
+  "relatedFindings": [
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-09",
+      "message": "The plan assigns the model-provider credential to the playground mediator, but the existing runtime exclusively loads and consumes that credential. Satisfying the wording would require forbidden runtime/provider-proxy work or use of the private server package from the public-surface-only playground.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "credential ownership mismatch",
+          "detail": "apps/server/src/config.ts validates OPENAI_API_KEY/ANTHROPIC_API_KEY/GOOGLE_API_KEY and apps/server/src/container.ts passes those keys directly to ProviderRegistry factories."
+        },
+        {
+          "kind": "concern",
+          "named": "public-surface restriction",
+          "detail": "WS-48 requires apps/playground to consume only @swiftagent/sdk/react public surfaces and forbids runtime or SDK additions."
+        },
+        {
+          "kind": "concern",
+          "named": "missing proxy configuration",
+          "detail": "ProviderConfig supports baseUrl, but buildContainer exposes no server configuration that routes provider traffic through a playground mediator."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "93d5fd3d6fb041db"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-10",
+      "message": "The workstream that publishes the built-and-verified scaffold claim does not depend on the workstream that builds and verifies the scaffold.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "missing dependency",
+          "detail": "WS-49 owns the SC-10 documentation pass and depends only on WS-47 and WS-48; WS-46 is absent."
+        },
+        {
+          "kind": "concern",
+          "named": "currently false claim",
+          "detail": "README.md and docs/vision.md currently mark create-swift-agent Planned, and packages/create-swift-agent does not exist."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "4603aa14c2c287c0"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-11",
+      "message": "The unqualified ban on every active private publishing posture contradicts nine intentionally private existing workspace packages. The intended domain must be stated as the three public packages and their public-consumer path.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "canonical roster contradiction",
+          "detail": "pnpm-workspace.yaml expands to private manifests for @swiftagent/api, db, gateway, models, observability, runtime, server, example-backend, and example-frontend."
+        },
+        {
+          "kind": "concern",
+          "named": "intended exception",
+          "detail": "AGENTS.md and WS-44 both intend non-publishable packages to remain private."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "5b2ddc598faad8cc"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-05",
+      "message": "WS-45 permits a tarball-backed substitute even though SC-06 requires publishing the CLI into a registry and resolving it through npx. A directory of tarballs or file dependencies is not an npm registry endpoint.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "incompatible implementation alternatives",
+          "detail": "WS-45 includes 'Verdaccio-backed (or tarball-backed) local registry'; WS-46 requires publishing create-swift-agent into that registry and exercising real npx resolution."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "69a24ecf97f67bd8"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "The plan treats a version tag as immutable without defining any GHCR enforcement. Compose should pin the manifest-list digest so the multi-architecture image reference cannot drift.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "tag mutability",
+          "detail": "WS-50 accepts an 'immutable version tag or digest', while GitHub's package lifecycle permits container package versions to be removed/replaced and no immutable-tag policy is specified."
+        },
+        {
+          "kind": "concern",
+          "named": "available exact identity",
+          "detail": "A sha256 manifest-list digest is produced after the multi-arch push and directly satisfies SC-15."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    },
+    {
+      "severity": "minor",
+      "category": "acceptance-criteria",
+      "subject": "SC-04",
+      "message": "WS-44 says `npm publish --dry-run`, but the actual workspace publication path is pnpm/Changesets and depends on pnpm rewriting workspace:* dependencies. Name the exact pnpm dry-run command and inspect its packed manifests.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "package-manager mismatch",
+          "detail": "packages/sdk and packages/react depend on @swiftagent/shared via workspace:*; scripts/verify-pack.mjs deliberately uses pnpm pack to verify concrete rewriting."
+        }
+      ],
+      "id": "40e0e5df76887fc1"
+    },
+    {
+      "severity": "minor",
+      "category": "acceptance-criteria",
+      "subject": "SC-13",
+      "message": "The architecture prose says there is no pull-request template, but .github/pull_request_template.md already exists. WS-44 should amend the existing template with the DCO prompt.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "incorrect baseline fact",
+          "detail": ".github/pull_request_template.md contains Description, Linked Workstream, and Checklist sections."
+        }
+      ],
+      "id": "bed07bcd1e510900"
+    },
+    {
+      "severity": "minor",
+      "category": "acceptance-criteria",
+      "subject": "SC-17",
+      "message": "WS-51 proves repeated full-suite stability before eight later workstreams add packages and tests. The program needs a final cache-bypassed repetition after all workstreams, in addition to the root repair checkpoint.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "proof timing",
+          "detail": "WS-51 is the graph root; no final workstream explicitly owns the repeated four-command proof after apps/playground and packages/create-swift-agent are added."
+        }
+      ],
+      "id": "2252af90ece1af61"
+    }
+  ],
+  "classAnalyses": [
+    {
+      "subject": "SC-09",
+      "scope": "systemic",
+      "rootCause": "One credential-ownership rule is repeated across architecture, risks, the criterion, and WS-49, but it is incompatible with the repository's runtime-owned provider construction.",
+      "affectedSubjects": [
+        "program Scope (In): mediator owns provider credential",
+        "program Risk Register provider-side backstop entries",
+        "program SC-09",
+        "manifest successCriteria[SC-09]",
+        "manifest workstreams[WS-49].scope"
+      ],
+      "checkedSubjects": [
+        "program Scope (In): mediator owns provider credential",
+        "program Risk Register provider-side backstop entries",
+        "program SC-09",
+        "manifest successCriteria[SC-09]",
+        "program Scope (In): playground abuse controls",
+        "program Risk Register guardrail entries",
+        "manifest workstreams[WS-48].scope",
+        "manifest workstreams[WS-49].scope",
+        "apps/server/src/config.ts",
+        "apps/server/src/container.ts",
+        "packages/models/src/registry.ts",
+        "packages/models/src/types.ts",
+        "packages/models/src/providers/openai.ts",
+        "packages/models/src/providers/anthropic.ts",
+        "packages/models/src/providers/google.ts",
+        "packages/runtime/src/loop.ts",
+        "packages/shared/src/types/events.ts",
+        "packages/shared/src/types/run.ts",
+        "packages/db/src/repositories/run-repo.ts",
+        "packages/api/src/routes/runs.ts",
+        "packages/sdk/src/client.ts",
+        "packages/react/src/client.ts"
+      ],
+      "completenessBasis": "All canonical plan copies of the mediator rule were checked, and all runtime provider factories registered by buildContainer plus the complete public event/run observation path were inspected."
+    },
+    {
+      "subject": "SC-10",
+      "scope": "isolated",
+      "rootCause": "The dependency graph omits the sole producer of the state that WS-49 is required to claim.",
+      "affectedSubjects": [
+        "manifest workstreams[WS-49].dependencies",
+        "program dependency graph",
+        "program critical-path description"
+      ],
+      "checkedSubjects": [
+        "manifest workstreams[WS-49].dependencies",
+        "program dependency graph",
+        "program critical-path description",
+        "program SC-10",
+        "manifest successCriteria[SC-10]",
+        "manifest constraints.npmGate",
+        "manifest workstreams[WS-46].scope",
+        "manifest workstreams[WS-49].scope",
+        "manifest complete workstreams dependency roster",
+        "README.md",
+        "docs/vision.md",
+        "docs/quickstart.md",
+        "three package READMEs"
+      ],
+      "completenessBasis": "The manifest is the canonical dependency registry; documentation copies were closed by the criterion's explicit paths and a repository search for npx/create-swift-agent."
+    },
+    {
+      "subject": "SC-11",
+      "scope": "systemic",
+      "rootCause": "A rule intended for three public packages is written as a repository-wide prohibition, while the canonical workspace roster intentionally contains private packages.",
+      "affectedSubjects": [
+        "program SC-11 opening sentence",
+        "manifest successCriteria[SC-11] opening sentence",
+        "program Architecture Changes claim that publishing posture inverts across every surface"
+      ],
+      "checkedSubjects": [
+        "program SC-11 opening sentence",
+        "manifest successCriteria[SC-11] opening sentence",
+        "program Architecture Changes claim that publishing posture inverts across every surface",
+        "all SC-11 canonical plan and manifest copies",
+        "manifest constraints.publishingSurfaces",
+        "manifest workstreams[WS-44].scope",
+        "pnpm-workspace.yaml",
+        "all 12 existing workspace package.json files",
+        "all twelve grouped active publishing surfaces",
+        "repository-wide active posture search",
+        "historical exclusion directories"
+      ],
+      "completenessBasis": "pnpm-workspace.yaml is the canonical package roster; the active posture set was independently closed by repository-wide token search with only the criterion's named historical exclusions."
+    },
+    {
+      "subject": "SC-05",
+      "scope": "systemic",
+      "rootCause": "The harness definition conflates installing tarballs with operating an npm registry, while downstream publication and npx criteria require registry protocol semantics.",
+      "affectedSubjects": [
+        "manifest workstreams[WS-45].scope.includes[0]",
+        "program Architecture Changes: New local registry harness",
+        "SC-05 implementation path",
+        "SC-06 registry publication and npx path"
+      ],
+      "checkedSubjects": [
+        "manifest workstreams[WS-45].scope.includes[0]",
+        "program Architecture Changes: New local registry harness",
+        "SC-05 implementation path",
+        "SC-06 registry publication and npx path",
+        "program SC-05",
+        "program SC-06",
+        "manifest successCriteria[SC-05]",
+        "manifest successCriteria[SC-06]",
+        "manifest technology.localRegistry",
+        "manifest workstreams[WS-45].scope",
+        "manifest workstreams[WS-46].scope",
+        "current acceptance install harness",
+        "scripts/verify-pack.mjs"
+      ],
+      "completenessBasis": "Every canonical local-consumption copy was checked; the downstream consumer set is closed by WS-45's sole dependent requiring package publication, WS-46."
+    },
+    {
+      "subject": "SC-15",
+      "scope": "systemic",
+      "rootCause": "The plan repeatedly uses 'immutable version tag' as though immutability were a tag property, but only a digest is intrinsically content-addressed in the selected registry absent an explicit protection mechanism.",
+      "affectedSubjects": [
+        "program Architecture Changes: compose pin",
+        "program Risk Register: public image tag drift",
+        "program SC-15",
+        "manifest constraints.artifactAudience",
+        "manifest successCriteria[SC-15]",
+        "manifest workstreams[WS-50].scope"
+      ],
+      "checkedSubjects": [
+        "program Architecture Changes: compose pin",
+        "program Risk Register: public image tag drift",
+        "program SC-15",
+        "manifest constraints.artifactAudience",
+        "manifest successCriteria[SC-15]",
+        "manifest workstreams[WS-50].scope",
+        "all SC-15 program and manifest copies",
+        "docker-compose.yml",
+        "apps/server/Dockerfile",
+        "official GHCR container and package-version documentation"
+      ],
+      "completenessBasis": "All repeated image-reference rules and the complete tag-or-digest alternative set were inspected."
+    }
+  ],
+  "criteriaPatches": [],
+  "checkpointAssessments": [],
+  "criticSummary": "SC-09: The mandated mediator cannot literally own the provider credential in the existing architecture. apps/server/src/config.ts reads provider keys, apps/server/src/container.ts constructs the model providers inside the runtime, and the provider registry supplies them directly to the runtime loop. The playground backend is separately constrained to public SDK use and is described as sitting between the browser and that runtime. Moving the credential into the mediator would therefore require a provider-proxy/runtime configuration feature or embedding the private server package, both excluded as runtime/public-surface work. The limit and ledger portions are otherwise expressible: RunRecord exposes terminal tokenUsage through GET /v1/runs/:runId, and an app-specific mediator protocol can define refusal frames without adding ChatEvent variants.; SC-10: WS-49 owns the documentation change that declares create-swift-agent built and locally verified, but WS-49 depends only on WS-47 and WS-48. WS-46, which actually builds and verifies the scaffold, is on a separate tail and is not a dependency. The orchestrator can therefore execute and green WS-49 while the claimed artifact does not exist. README.md and docs/vision.md currently both say the scaffold is planned, so this is a real ordering defect rather than an already-reconciled disposition.; SC-11: The literal rule 'No ACTIVE repository surface still asserts or enforces a private/restricted publishing posture' conflicts with the canonical workspace roster: @swiftagent/api, db, gateway, models, observability, runtime, server, example-backend, and example-frontend are intentionally private and must remain so. The enumerated surface set clearly intends only the three public packages and their consumer path, but that qualifier is absent from both criterion copies. For the intended three-package domain, the twelve grouped surfaces are complete: a repository-wide active-file search found no additional private-registry assertion.",
+  "criticLogs": [
+    "build-logs/oss-direction-plan-audit-2026-08-19T21-51-06-572Z-d05c6966-critic-attempt-1.log",
+    "build-logs/oss-direction-plan-audit-2026-08-19T21-51-06-572Z-d05c6966-critic-attempt-2.log"
+  ],
+  "planningInstruction": "Run /plan-program oss-direction. Read lastAttempt first when present and prioritize every failedSubjects entry. Resolve every replanFindings and blocker/major relatedFindings entry. For each classAnalyses entry, close the root-cause class by reconciling every checkedSubjects member with an explicit fixed or already-correct disposition and concrete evidence; naming a member in narrative prose is not proof. Re-check every workstreams[].scope copy affected by a criterion or interface repair. Apply only the explicitly listed intent-preserving criteriaPatches; any other requirements change needs a human decision.",
+  "lastAttempt": {
+    "attemptedAt": "2026-08-19T22:07:22.874Z",
+    "attempt": 2,
+    "agent": "codex exec",
+    "outcome": "rejected",
+    "reason": "Replanner did not return the required REPLAN_COMPLETE contract.",
+    "failedSubjects": [],
+    "artifactsLeftOnDisk": false
+  },
+  "attemptHistory": [
+    {
+      "attemptedAt": "2026-08-19T22:03:33.970Z",
+      "attempt": 1,
+      "agent": "codex exec",
+      "outcome": "rejected",
+      "reason": "Replanner returned no resolutionProofs contract for: SC-09, SC-10, SC-11, SC-05, SC-15.",
+      "failedSubjects": [
+        "SC-09",
+        "SC-10",
+        "SC-11",
+        "SC-05",
+        "SC-15"
+      ],
+      "artifactsLeftOnDisk": false
+    },
+    {
+      "attemptedAt": "2026-08-19T22:07:22.874Z",
+      "attempt": 2,
+      "agent": "codex exec",
+      "outcome": "rejected",
+      "reason": "Replanner did not return the required REPLAN_COMPLETE contract.",
+      "failedSubjects": [],
+      "artifactsLeftOnDisk": false
+    }
+  ]
+}
