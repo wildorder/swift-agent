@@ -10,35 +10,54 @@ who use it. See [`docs/vision.md`](../vision.md).
 in _Vision ▸ Distribution & Deployment_ — the **hosted playground** (rung 1) and
 **one-click setup** (rung 2, delivered as both a `create-swift-agent` scaffold
 and a managed-host deploy template) — and repair the rung-3 local stack they both
-inherit. Also prepares the three publishable packages for public npm **without
-publishing them** — that release is gated behind a separate audit — while the
-container image **does** publish automatically, since it commits to no API
-surface.
+inherit. Also takes the three publishable packages **and** `create-swift-agent`
+all the way to a real public-npm release, fired by a single manual
+`workflow_dispatch` trigger the owner presses, while the container image
+publishes automatically, since it commits to no API surface.
 
 **Anchor outcome:** A stranger can go from a link, to a running agent on their
 machine, to a runtime deployed in their own account, without reading the
-monorepo — with one honest qualification recorded below: the scaffold half of
-rung 2 is _built and verified_ this program, but not _released_, because npm
-publication stays gated.
+monorepo. The one manual moment is the owner pressing the release trigger once
+the program lands — everything up to and including that button is delivered and
+verified by the program.
 
-**Three requirements decisions, taken 2026-08-19.** `plan-audit` halted this
-plan on three conflicts that wording could not repair. Each was resolved by the
-user rather than assumed:
+**Requirements decisions.** `plan-audit` has halted this plan on conflicts that
+wording could not repair; each was resolved by the user rather than assumed.
+Decisions 1 and 2 (taken 2026-08-19, audit round 1) were **superseded on
+2026-08-19 (audit round 3)** by decisions 4 and 5. Decision 3 stands.
 
-1. **The npm gate stays; the claims come down to meet it.** `npx
-create-swift-agent` cannot work for a stranger while the scaffold _and_
-   `@swiftagent/{sdk,react,shared}` are unpublished — the generated project
-   installs the latter. Rather than authorise publication, SC-06 asserts
-   local-registry verification and SC-10 forbids presenting the bare command as
-   runnable today.
-2. **GHCR package visibility is set once, directly.** A newly published GHCR
-   package inherits repository visibility, so an anonymous `docker pull` fails
-   until the package is made public. WS-50 performs that change once via
-   `gh api` as a documented repository-configuration step — not a per-run
-   approval gate, and not a dependency on repository visibility.
+1. ~~**The npm gate stays; the claims come down to meet it.**~~ Superseded by
+   decision 4: the gate is removed and publication is real.
+2. ~~**GHCR package visibility is set once via `gh api`.**~~ Superseded by
+   decision 5: no such API operation exists; the step is the documented one-time
+   UI action. (This decision also rested on a false premise — that a new GHCR
+   package inherits repository visibility. It does not: linked packages inherit
+   access _permissions_, and newly published packages default to private.)
 3. **Beat 2's deadline is demo-owned.** No deadline reaches the public event
    surface, so the playground displays the budget _it_ configured rather than
    the program adding a field to `ChatEvent`.
+4. **Go directly to public npm (decided 2026-08-19, audit round 3).** The
+   separate-audit gate on npm publication is removed. `@swiftagent/{sdk,react,shared}`
+   and `create-swift-agent` are released to public npm via a release workflow
+   fired by an explicit manual `workflow_dispatch` trigger, pressed once by the
+   owner when the program lands. The program delivers everything up to that
+   button — public packaging metadata, the armed workflow, a verified
+   `pnpm publish --dry-run`, the local-registry end-to-end proof, and a release
+   runbook — and documentation is written for the released state. Provisioning
+   the npm organization and token remains a manual owner-owned setup step. No
+   workstream's checkpoint depends on the trigger being pressed.
+5. **GHCR package visibility is a one-time manual UI step (decided 2026-08-19,
+   audit round 3).** GitHub's REST packages API has no visibility-mutation
+   endpoint — list, get, delete, restore, and version operations only — so the
+   `gh api` mechanism of superseded decision 2 is impossible. The supported
+   procedure is _Package settings → Danger Zone → Change visibility → Public_,
+   which is manual and irreversible once public. The owner performs it once
+   after the first image publish, as a documented repository-configuration
+   prerequisite. The repository itself was made public by the owner on
+   2026-08-19, but that does not make the package public: packages default to
+   private on first publish regardless. WS-50 documents the UI step and proves
+   the outcome with an anonymous logged-out `docker pull`; its checkpoint does
+   not depend on the owner having pressed anything.
 
 ---
 
@@ -77,11 +96,13 @@ decomposition.
 3. **Repair the local rung before building on it.** `docker compose up` must
    yield a genuinely working end-to-end stack, since both new rungs reuse its
    URL and env wiring.
-4. **Be publish-ready on npm; actually shipping the image.** Every packaging,
-   licensing, workflow, and _policy_ change required for public npm lands and is
-   verified by dry run, with the upload itself left gated for a later audit. The
-   container image is different — no API commitment, replaceable tags — so it
-   publishes automatically and the operator gets something real to pull.
+4. **Ship both artifacts for real.** Every packaging, licensing, workflow, and
+   _policy_ change required for public npm lands and is verified by dry run and
+   a local-registry end-to-end proof, and the release itself fires from a manual
+   `workflow_dispatch` trigger the owner presses once (decision 4). The
+   container image needs no button at all — no API commitment, replaceable
+   references — so it publishes automatically and the operator gets something
+   real to pull.
 5. **Keep the runtime's size honest.** Nothing in this program expands the
    runtime's feature surface. It is distribution work, and it must respect the
    runtime's documented single-instance posture rather than quietly outgrow it.
@@ -230,28 +251,35 @@ targets the operator, so WS-50 publishes `apps/server` to GHCR, compose pulls it
 and the deploy template deploys it rather than building on the host. The ECR path
 for AWS deploys is untouched.
 
-**The two release surfaces are gated differently, on purpose.** npm publishing
-commits to a semver API surface and is effectively permanent once released, so it
-stays armed-but-unfired pending the user's audit — asserted as a _workflow
-property_ plus a dry run, so WS-44 still completes without anyone pressing
-anything. The container image commits to no API surface and its tags are
-replaceable, so **it is authorized to publish automatically**. The licence
-concern is handled causally rather than procedurally: WS-50 depends on WS-44, so
-Apache-2.0 is always in the tree before any image is published. No workstream in
-this program completes on a human approval step, and no deliverable or criterion
-depends on GitHub repository visibility — GHCR package visibility is configured
-independently.
+**The two release surfaces are triggered differently, on purpose.** npm
+publishing commits to a semver API surface and is effectively permanent once
+released, so the release workflow fires only from an explicit manual
+`workflow_dispatch` trigger — the owner presses it once when the program lands
+(decision 4). That trigger is the **actual release path**, not an indefinite
+gate: WS-44 delivers the armed workflow, the dry-run proof, and the release
+runbook, and its checkpoint completes without anyone pressing anything. The
+container image commits to no API surface and its references are replaceable,
+so **it publishes automatically** with no trigger at all. The licence concern is
+handled causally rather than procedurally: WS-50 depends on WS-44, so Apache-2.0
+is always in the tree before any image is published. No workstream in this
+program completes on a human approval step.
 
-**That independence has to be _made_ true, once.** A newly published GHCR package
-inherits repository visibility, so the first push produces a package a stranger
-cannot pull anonymously — and `docker compose up` from a clean checkout is
-exactly an anonymous pull. A successful authenticated push proves nothing about
-public distribution. WS-50 therefore sets the package publicly readable once via
-`gh api`, as a documented repository-configuration step of the same kind as
-adding a repository secret, and then _proves_ it with a pull from a logged-out
-context. This is deliberately not a per-run approval gate, and it sets package
-visibility directly rather than making anything depend on whether the repository
-is public.
+**The GHCR package must be made public once, manually (decision 5).** A newly
+published GHCR package defaults to **private** — packages inherit repository
+access _permissions_, not visibility, so the repository being public (it is, as
+of 2026-08-19) changes nothing here. The first push therefore produces a package
+a stranger cannot pull anonymously — and `docker compose up` from a clean
+checkout is exactly an anonymous pull; a successful authenticated push proves
+nothing about public distribution. GitHub exposes **no API operation** to change
+package visibility (the REST packages API offers list, get, delete, restore, and
+version operations only), so the one supported mechanism is the manual UI step
+_Package settings → Danger Zone → Change visibility → Public_, which is
+irreversible once public. WS-50 documents that step as a one-time
+repository-configuration prerequisite performed by the owner after the first
+publish, and _proves_ the outcome with a pull from a logged-out context. The
+workstream's checkpoint asserts the workflow, the publish, the digest pin, the
+documentation, and the verification command — it does not block on the owner's
+click.
 
 **The compose pin is a digest, and it has to be bootstrapped in two steps.**
 "Immutable tag" is not a thing GHCR provides: GitHub's package lifecycle permits
@@ -430,9 +458,11 @@ land.
   `docs/policies/versioning.md`, the `verify-pack.mjs` assertions, `.npmrc`
   registry routing, `AGENTS.md`, `docs/as-built.md`, entry and per-package
   READMEs, CI and both publish workflows, and the executable acceptance install
-  harness — with publish workflows behind a manual gate and a verified
-  `pnpm publish --dry-run` whose packed manifests are inspected to confirm
-  `workspace:*` ranges rewrite to concrete versions.
+  harness — with the release workflow firing only from an explicit manual
+  `workflow_dispatch` trigger (the actual release path, pressed once by the
+  owner per decision 4), a release runbook documenting that trigger, and a
+  verified `pnpm publish --dry-run` whose packed manifests are inspected to
+  confirm `workspace:*` ranges rewrite to concrete versions.
 - Contribution terms for a public repository: a `CONTRIBUTING.md` and `DCO`
   adopting Developer Certificate of Origin 1.1, a `Signed-off-by` CI check, and a
   DCO prompt amended into the existing `.github/pull_request_template.md`.
@@ -441,8 +471,9 @@ land.
   real npm dependencies into a throwaway consumer.
 - `create-swift-agent`: a scaffold CLI producing a runnable backend, frontend,
   and compose file, with a model-key prompt, published into the local registry so
-  real `npx` resolution is exercised, and an end-to-end generated-project test.
-  Verified, **not** released.
+  real `npx` resolution is exercised before release, an end-to-end
+  generated-project test, and inclusion in the WS-44 release workflow so the
+  owner's single trigger releases it to public npm alongside the three packages.
 - A one-click deploy template for the chosen managed host, covering the runtime,
   managed Postgres and Redis, forward-only migrations, secrets, a single pinned
   instance, and a README deploy button.
@@ -457,11 +488,15 @@ land.
   standard `apps/server` environment, and the browser holds no credential of
   either kind — covering per-IP and per-session limits, message and token
   caps, a restart-surviving daily spend ledger with reserve-then-settle
-  accounting and its own schema and migration, typed refusal frames in the
-  mediator's own protocol, a cheap default model, and ephemeral session
+  accounting and its own schema and migration — settling against actual terminal
+  usage when the run completes with persisted `tokenUsage`, and settling
+  conservatively at the full reserved estimate for terminal runs whose
+  `tokenUsage` is null (failed, cancelled, timed_out) — typed refusal frames in
+  the mediator's own protocol, a cheap default model, and ephemeral session
   retention; plus public deployment and a smoke test against the live URL.
 - A multi-arch `apps/server` container image published to GHCR automatically,
-  made anonymously pullable by a one-time package-visibility step and proven so
+  made anonymously pullable by the documented one-time owner UI step (decision
+  5 — no API exists for it) and proven so
   from a logged-out context, consumed by compose pinned at its sha256
   manifest-list digest adopted through a staged bootstrap, and by the deploy
   template — with a documented build-from-source override for contributors.
@@ -473,12 +508,12 @@ land.
 
 ## Scope (Out)
 
-- **Actually publishing to npm** — including `create-swift-agent` itself.
-  Explicitly deferred to a separate audit pass at the user's direction and
-  re-confirmed on 2026-08-19 when `plan-audit` surfaced the conflict. This
-  program leaves the pipeline armed and unfired, and pays for that by _not_
-  claiming the bare `npx create-swift-agent` command works: SC-10 requires every
-  documentation surface to present that rung as built-pending-release.
+- **Pressing the release trigger inside a workstream.** Publication to public
+  npm is decided and real (decision 4), but it fires from the delivered
+  `workflow_dispatch` trigger pressed by the owner — no workstream's checkpoint
+  executes or depends on the publish itself. Provisioning the npm organization
+  and its token is likewise a manual owner-owned setup step, documented but not
+  performed by any workstream.
 - **Adding a tool deadline to `ChatEvent`, `ToolContext`, or the runner
   protocol.** Considered for Beat 2 and rejected on 2026-08-19: the timing budget
   is demo-owned, which preserves the no-runtime-feature-work rule and keeps the
@@ -515,11 +550,12 @@ land.
 | A public image reference drifts, so "it works on my machine" diverges from what operators pull                                   | Medium — unreproducible bug reports; GHCR permits package versions to be removed and replaced, so even a version tag is mutable absent an enforcement mechanism GHCR does not provide                | WS-50 publishes version tags for humans but compose pins the **sha256 manifest-list digest** produced by the multi-arch push — the only intrinsically content-addressed reference — and the upgrade path (commit a new digest) is documented rather than implied                                                                                |
 | A contributor's pull request is merged before contribution terms exist                                                           | Medium — that contributor retains copyright with no recorded grant, permanently complicating any later relicensing                                                                                   | WS-44 lands `CONTRIBUTING.md`, the DCO, and the `Signed-off-by` CI check as part of going public, so the terms exist before the repository can accept its first external PR                                                                                                                                                                     |
 | Public playground abuse burns the owner's model API budget                                                                       | High — an uncapped demo is an open wallet                                                                                                                                                            | WS-49 is a dedicated workstream, not a checklist item: per-IP and per-session rate limits, hard message and token caps, short session TTLs, and a global daily spend ceiling                                                                                                                                                                    |
-| The application-level spend ceiling is itself the thing that fails — a bug, a bypass, or an in-memory counter reset by a restart | High — the limiter's failure mode is an invoice, and an in-memory daily counter is really a per-uptime-window counter (realtime runbook §1)                                                          | Defence in depth in WS-49: the ceiling is persisted in Postgres rather than memory; a **dedicated provider API key carries a provider-side budget cap** enforced by the provider rather than by our code; a deliberately cheap default model shrinks the blast radius before any limiter fires; and an alert fires at a fraction of the ceiling |
+| The application-level spend ceiling is itself the thing that fails — a bug, a bypass, or an in-memory counter reset by a restart | High — the limiter's failure mode is an invoice, and an in-memory daily counter is really a per-uptime-window counter (realtime runbook §1)                                                          | Defence in depth in WS-49: the ceiling is persisted in Postgres rather than memory; a **dedicated provider API key carries a provider-side budget cap** enforced by the provider rather than by our code; a deliberately cheap default model shrinks the blast radius before any limiter fires; an alert fires at a fraction of the ceiling; and terminal runs with null usage (failed/cancelled/timed_out never persist `tokenUsage`) settle conservatively at the full reserved estimate rather than being refunded on missing data |
 | The playground's limits are enforced where a visitor can remove them                                                             | **High — a limit implemented in the browser is a suggestion; the invoice is real**                                                                                                                   | SC-09 requires a trusted server-side mediator as the only enforcement point — the browser never holds the runtime API key or any provider credential, and the provider credential lives only in the playground runtime's own environment — with limits tested against a client that ignores the UI; browser-side controls are explicitly excluded from counting as enforcement                                                                                                                            |
 | Going public is applied to some surfaces but not others                                                                          | High — a half-public repo is worse than a private one: `UNLICENSED` code on a public registry, or a policy doc contradicting shipped metadata                                                        | WS-44 owns the complete active surface set as one atomic checkpoint — all twelve tabulated in _Architecture Changes_, closed by repository-wide search rather than by recollection, with historical records explicitly preserved rather than rewritten                                                                                          |
 | `.npmrc` keeps routing installs to GitHub Packages after the metadata flips                                                      | **High — `@swiftagent:registry` overrides package metadata, so consumers would be silently redirected to a registry they cannot read; this surface was missing from the original five-surface list** | The active surface set was closed by repository-wide search and is tabulated in _Architecture Changes_; SC-11 enumerates all twelve and WS-44 owns them as one checkpoint                                                                                                                                                                       |
-| The first GHCR push produces a package nobody can pull                                                                           | Medium — an authenticated push succeeds and looks like success, while a clean-checkout `docker compose up` fails for every stranger                                                                  | WS-50 sets package visibility once via `gh api` and proves anonymous reachability with a logged-out `docker pull`; SC-15 requires that proof rather than a successful push                                                                                                                                                                      |
+| The first GHCR push produces a package nobody can pull                                                                           | Medium — an authenticated push succeeds and looks like success, while a clean-checkout `docker compose up` fails for every stranger                                                                  | The one-time owner UI step (Package settings → Change visibility → Public — no API operation exists, and packages default private regardless of repository visibility) is documented by WS-50 as a repository-configuration prerequisite, and anonymous reachability is proven with a logged-out `docker pull`; SC-15 requires that proof rather than a successful push |
+| The repository is already public while the packages are still `UNLICENSED` and no `LICENSE` file exists                          | High — publicly visible source with no licence grants readers no rights and contradicts the OSS intent; every day it persists is exposure                                                            | The owner made the repository public on 2026-08-19; WS-44 (which lands Apache-2.0, `LICENSE`, and contribution terms) sits directly behind the WS-51 root and should be scheduled at the earliest opportunity — nothing else in the graph gates it                                                                                              |
 | `scripts/verify-pack.mjs` asserts the GitHub Packages registry and will fail the moment `publishConfig` changes                  | Medium — a red build blocking WS-44                                                                                                                                                                  | Named explicitly in WS-44's scope; the assertion and the metadata move in the same workstream                                                                                                                                                                                                                                                   |
 | The scaffold cannot install unpublished packages                                                                                 | High — WS-46 is unverifiable without a solution                                                                                                                                                      | WS-45 delivers the local registry harness first and is a hard dependency of WS-46                                                                                                                                                                                                                                                               |
 | Managed-host choice (Fly vs Railway) proves wrong after the template is written                                                  | Medium — rework in WS-47 and WS-49                                                                                                                                                                   | WS-47 begins with a documented comparison against fixed criteria (managed Postgres + Redis, WebSocket support, single-instance guarantee, idle cost, template format) and records the decision before implementation                                                                                                                            |
@@ -537,18 +573,18 @@ land.
 - **SC-01** — From a clean checkout, `docker compose up` starts Postgres, Redis, and the server AND self-provisions everything a real turn needs — a server-accepted model configuration, a usable raw dev API key whose stored hash matches, a workspace and a tool-bearing agent, runner signing/verification keys with a reachable runner, and a deterministic tool-calling fixture — after which an automated smoke check completes a streaming turn over WebSocket asserting BOTH tool_call_started and tool_call_completed, with no manual seeding and no pre-supplied SMOKE_API_KEY.
 - **SC-02** — docker-compose.yml contains no port or PUBLIC_WEBSOCKET_URL value that contradicts the single-listener behaviour in apps/server/src/main.ts.
 - **SC-03** — @swiftagent/{sdk,react,shared} declare publishConfig.registry = https://registry.npmjs.org with access: public, carry "license": "Apache-2.0" backed by a repository LICENSE file (no UNLICENSED remains), and `node scripts/verify-pack.mjs` passes with assertions updated to match.
-- **SC-04** — A `pnpm publish --dry-run` succeeds for all three packages — pnpm, not npm, because publication must go through pnpm to rewrite `workspace:*` dependency ranges to concrete versions, and the packed manifests are inspected to confirm that rewriting — and no workflow can upload to npm without an explicit manual trigger; demonstrated without publishing anything.
+- **SC-04** — A `pnpm publish --dry-run` succeeds for all three packages — pnpm, not npm, because publication must go through pnpm to rewrite `workspace:*` dependency ranges to concrete versions, and the packed manifests are inspected to confirm that rewriting. The release workflow publishes to public npm ONLY from an explicit manual workflow_dispatch trigger — that trigger is the decided release path (decision 4), pressed once by the owner, and a release runbook documents it, including the owner-owned npm org/token provisioning. Demonstrated without the workstream itself publishing anything.
 - **SC-05** — The local registry harness is a real npm registry protocol endpoint (Verdaccio) — a directory of tarballs or file: dependencies does not satisfy this — and it installs all three packages into a throwaway consumer that imports and type-checks against them, run as a repeatable command in CI.
-- **SC-06** — create-swift-agent is packed and published INTO the WS-45 local registry (including its bin entry, verified from the packed tarball), and `npx create-swift-agent <name>` resolved against that registry produces a project that installs, type-checks, builds, and completes a streaming turn with a tool call — its generated-project test owning the same local runtime, API-key, and runner bootstrap that WS-43 defines. This asserts the scaffold works; it does NOT assert that a stranger can run it from public npm. See SC-10.
+- **SC-06** — create-swift-agent is packed and published INTO the WS-45 local registry (including its bin entry, verified from the packed tarball), and `npx create-swift-agent <name>` resolved against that registry produces a project that installs, type-checks, builds, and completes a streaming turn with a tool call — its generated-project test owning the same local runtime, API-key, and runner bootstrap that WS-43 defines. create-swift-agent is also included in the WS-44 release workflow, so the owner's single trigger releases it to public npm alongside the three packages (decision 4).
 - **SC-07** — The deploy template provisions the runtime with managed Postgres and Redis on the chosen host, applies forward-only migrations as an explicit release step, and passes a health check, reproducibly from the documented button or command.
 - **SC-08** — The playground is reachable at a public URL and, in one session, streams tokens and surfaces at least one tool call in the event/trace panel with its start, completion, and duration.
-- **SC-09** — Playground guardrails are enforced SERVER-SIDE by a trusted mediator that is the sole enforcement point between the browser and the playground's runtime — browser-side controls do not count as enforcement, the browser never receives the runtime workspace API key or any model-provider credential, the mediator holds the runtime API key, and the dedicated provider key is configured only as environment on the playground's isolated runtime deployment (the standard apps/server config path — no provider proxy and no runtime feature is added). Per-IP and per-session limits, a message cap, and a token cap are enforced in the mediator and tested against a client that ignores the UI; a global daily spend ledger persisted in Postgres, whose schema and migration WS-49 owns, survives restarts and settles atomically via reserve-then-settle against terminal RunRecord usage read from the public GET /v1/runs/:runId surface; every refusal is delivered as a defined refusal frame of the mediator's own protocol — not a new ChatEvent variant, an unhandled error, or a dropped socket; and the deployed instance uses a dedicated provider key carrying a provider-side budget cap, documented with its configured value.
-- **SC-10** — README.md links the live playground and the deploy button as working commands, and presents `npx create-swift-agent` as built and verified against a local registry but NOT yet released — never as a command a reader can run today. docs/vision.md ladder statuses match that distinction exactly: rungs whose artifacts are publicly reachable read as built, and the scaffold rung reads as built-pending-release. No surface claims a bare `npx create-swift-agent` works while the packages are unpublished.
+- **SC-09** — Playground guardrails are enforced SERVER-SIDE by a trusted mediator that is the sole enforcement point between the browser and the playground's runtime — browser-side controls do not count as enforcement, the browser never receives the runtime workspace API key or any model-provider credential, the mediator holds the runtime API key, and the dedicated provider key is configured only as environment on the playground's isolated runtime deployment (the standard apps/server config path — no provider proxy and no runtime feature is added). Per-IP and per-session limits, a message cap, and a token cap are enforced in the mediator and tested against a client that ignores the UI; a global daily spend ledger persisted in Postgres, whose schema and migration WS-49 owns, survives restarts and settles atomically via reserve-then-settle against terminal RunRecord usage read from the public GET /v1/runs/:runId surface — settling against actual tokenUsage when the run completed with persisted usage, and settling CONSERVATIVELY AT THE FULL RESERVED ESTIMATE for any terminal run whose tokenUsage is null (failed, cancelled, and timed_out never persist usage; completed/failed/cancelled/timed_out is the exhaustive terminal family), never releasing a reservation below its reserved amount without persisted usage and requiring no runtime change; every refusal is delivered as a defined refusal frame of the mediator's own protocol — not a new ChatEvent variant, an unhandled error, or a dropped socket; and the deployed instance uses a dedicated provider key carrying a provider-side budget cap, documented with its configured value.
+- **SC-10** — README.md links the live playground and the deploy button as working commands, and presents `npx create-swift-agent` and the `@swiftagent/*` package installs as the supported quickstart path for the released state (decision 4 authorizes writing documentation for that state, since release is the owner's single documented trigger away). A release runbook (or RELEASING section) documents exactly that trigger and the owner-owned npm org/token prerequisite, so the gap between merged docs and live packages is one visible, documented action — no surface invents a different install mechanism or claims a version already exists on the registry (no hardcoded version badges asserting a published version). docs/vision.md ladder statuses are consistent with that same released-state framing.
 - **SC-11** — For the three publishable packages @swiftagent/{sdk,react,shared} and their public-consumer path, no ACTIVE repository surface still asserts or enforces a private/restricted publishing posture. The nine other workspace packages (@swiftagent/{api,db,gateway,models,observability,runtime,server} and the two quickstart example packages) intentionally remain "private": true and are out of this criterion's domain. The in-domain set is exhaustive and enumerated in constraints.publishingSurfaces: package metadata, LICENSE, .changeset/config.json, docs/policies/versioning.md, scripts/verify-pack.mjs, .npmrc, AGENTS.md, docs/as-built.md, README.md, docs/quickstart.md, all three package READMEs, ci.yml, both publish-sdks workflows, and the acceptance install harness plus its vitest config. Historical program plans, task specifications, and as-built snapshots are preserved unchanged as historical record.
 - **SC-12** — Every deployment surface created by this program pins to exactly one running instance with autoscaling disabled, AND that is verified by observing a single serving instance across a rolling deployment and a restart rather than by configuration value alone; each ships documentation citing the single-instance rationale in docs/runbooks/realtime-operations.md §6.
 - **SC-13** — A CONTRIBUTING.md and DCO file adopt the Developer Certificate of Origin 1.1 and state that contributors retain copyright; a CI check rejects a pull-request commit lacking a Signed-off-by trailer and accepts one that has it, asserted by the check actually running.
 - **SC-14** — A multi-arch (linux/amd64 + linux/arm64) apps/server image builds and publishes to ghcr.io automatically from a workflow requiring no manual trigger, and a pulled image starts, migrates, and serves REST + WebSocket identically to a locally built one.
-- **SC-15** — docker-compose.yml consumes the published ghcr.io image pinned at its sha256 MANIFEST-LIST DIGEST (`image: ghcr.io/…@sha256:…`) — no tag satisfies this, version tags included, because GHCR permits container package versions to be removed and replaced and defines no immutable-tag enforcement — adopted only after that digest exists via the WS-50 staged bootstrap; the GHCR package is publicly readable and an ANONYMOUS `docker pull` from a logged-out context succeeds; a clean-checkout run pulls rather than builds; and a documented override still lets contributors build locally.
+- **SC-15** — docker-compose.yml consumes the published ghcr.io image pinned at its sha256 MANIFEST-LIST DIGEST (`image: ghcr.io/…@sha256:…`) — no tag satisfies this, version tags included, because GHCR permits container package versions to be removed and replaced and defines no immutable-tag enforcement — adopted only after that digest exists via the WS-50 staged bootstrap; the GHCR package is made publicly readable by the documented one-time owner UI step (Package settings → Change visibility → Public — GitHub exposes no API operation for this, and packages default private regardless of repository visibility; decision 5) and an ANONYMOUS `docker pull` from a logged-out context succeeds as the proof that step happened; a clean-checkout run pulls rather than builds; and a documented override still lets contributors build locally.
 - **SC-16** — The playground delivers all four demo beats on the public surface with no runtime or SDK addition: raw ChatEvent JSON is viewable beside the rendered chat; a tool call shows callId, the demo-configured timing budget, and a duration measured from the real tool_call_started/tool_call_completed pair, and a deliberately failing tool can be triggered to show the failure path; a control drops the connection mid-stream and the session is recovered by constructing a new session client against the same session id, with on-page copy describing what actually happens; and the agent source plus the reproduce-locally command are shown on the page.
 - **SC-17** — pnpm build, pnpm typecheck, pnpm lint, and pnpm test all pass deterministically from a clean checkout, with the apps/server index-export import-graph test no longer able to fail on a timing margin under parallel load; demonstrated by repeated cache-bypassed full-suite runs rather than a single green run, TWICE: once at WS-51 (the root repair) and again at the end of WS-49 (the sole terminal workstream), after apps/playground, packages/create-swift-agent, and every other workstream's packages and tests are in the tree.
 
@@ -669,3 +705,49 @@ Root cause: "immutable version tag" treated immutability as a tag property; only
 | 40e0e5df | SC-04 pnpm vs npm dry run | fixed | SC-04 (both copies) and WS-44's include name `pnpm publish --dry-run` with packed-manifest inspection of `workspace:*` rewriting |
 | bed07bcd | SC-13 pull-request template baseline | fixed | Architecture Changes prose corrected — `.github/pull_request_template.md` exists (verified on disk) — and WS-44 amends it rather than creating one |
 | 2252af90 | SC-17 proof timing | fixed | SC-17 (both copies) requires the repeated cache-bypassed proof twice — at WS-51 and at the end of terminal WS-49 — and WS-49 gains that include; WS-49's new WS-46 dependency makes it the sole terminal workstream |
+
+---
+
+## Replan Reconciliation (2026-08-19, audit round 3 — human-required)
+
+The third `plan-audit` pass (report generated 2026-08-19T22:46Z, outcome `human-required`) returned one blocker (SC-15: the `gh api` visibility mechanism does not exist) and one major (SC-09: no settlement rule for null-usage terminal runs). Per the human-required protocol the decisions were put to the user before any artifact edit; the user's answers are recorded above as **decisions 4 and 5** and are the sole authorization for the user-intent changes in this round. The user additionally chose, unprompted, to remove the npm publication gate entirely ("go directly to npm"), superseding decision 1 — that reversal is decision 4 and its consequences (SC-04, SC-06, SC-10, WS-44/45/46/49 scopes, Scope In/Out) are applied in this round. Ground truth verified during the round: `wildorder/swift-agent` is now a PUBLIC repository, and an anonymous GHCR tags request for `wildorder/swift-agent` returns DENIED — confirming the audit's premise that repository visibility does not make the (not-yet-existing) package pullable. `planGeneration` advanced to `2026-08-20T00:30:00Z-osd13`; no task specs exist yet, so workstream IDs are again retained.
+
+### Finding 641a9982 — SC-15 impossible `gh api` visibility mechanism (blocker, systemic)
+
+Root cause: a factual platform assumption (visibility mutable via API; packages inherit repo visibility) was copied across the plan. Repair per decision 5: the one-time step is the documented manual UI action, performed by the owner after first publish, proven by anonymous pull.
+
+| Checked subject | Disposition | Evidence |
+|---|---|---|
+| program SC-15 | fixed | names the UI step, states no API exists and packages default private, keeps the anonymous-pull proof and digest pin |
+| manifest successCriteria[SC-15] | fixed | same text |
+| program Requirements Decision 2 | fixed | struck through and superseded by decision 5, with the false inheritance premise called out |
+| program Architecture Changes GHCR visibility section | fixed | rewritten as "The GHCR package must be made public once, manually (decision 5)" — API absence, permissions-not-visibility inheritance, irreversibility, and repo-already-public all stated |
+| program Risk Register first-GHCR-push mitigation | fixed | mitigation now cites the documented UI step + logged-out pull, not `gh api` |
+| manifest constraints.ghcrVisibility | fixed | rewritten for decision 5 |
+| manifest constraints.artifactAudience | fixed | GHCR bootstrap wording retained (digest); npm gate wording replaced by the manual-trigger release path of decision 4 |
+| manifest workstreams[WS-50].scope | fixed | one-time visibility include rewritten; excludes updated to match |
+| GitHub REST API endpoints for packages | already-correct (evidence) | list/get/delete/restore/version only — the basis the repair encodes |
+| GitHub package visibility configuration guide | already-correct (evidence) | UI-only procedure, irreversible once public |
+| GitHub package permissions guide | already-correct (evidence) | packages inherit access permissions, not visibility |
+| manifest workstreams[WS-50].scope one-time visibility include | fixed | same include as above (listed separately by the report) |
+
+### Finding 93d5fd3d — SC-09 null-usage terminal settlement (major, systemic)
+
+Root cause: the accounting rule treated terminal `RunRecord.tokenUsage` as universally present, but only `complete()` persists usage; `fail()`, `cancel()`, and `timeout()` leave it null, and the terminal family {completed, failed, cancelled, timed_out} is exhaustive. Repair (intent-preserving, no decision needed): settle against actual usage when persisted; settle conservatively at the full reserved estimate when a terminal run's usage is null; never release a reservation below its reserved amount without persisted usage; no runtime change.
+
+| Checked subject | Disposition | Evidence |
+|---|---|---|
+| completed | already-correct | `complete(runId, tokenUsage)` persists usage — actual-usage settlement applies |
+| failed | fixed | covered by the conservative full-reservation settlement rule in SC-09 and WS-49 |
+| cancelled | fixed | same rule |
+| timed_out | fixed | same rule |
+| program SC-09 | fixed | settlement rule for the exhaustive terminal family added |
+| manifest successCriteria[SC-09] | fixed | same text |
+| program Scope (In) abuse-controls rule | fixed | bullet states actual-usage vs conservative-null settlement |
+| program Risk Register spend-ledger rule | fixed | spend-ceiling row's mitigation adds the null-usage conservative settlement |
+| manifest workstreams[WS-49].scope | fixed | reserve-then-settle include carries the null-usage rule |
+| packages/shared/src/types/run.ts | already-correct (evidence) | `RunRecord.tokenUsage` nullable — the fact the rule encodes |
+| packages/db/src/schema/runs.ts | already-correct (evidence) | nullable usage column |
+| packages/db/src/repositories/run-repo.ts | already-correct (evidence) | `complete()` writes usage; `fail()`/`cancel()`/`timeout()` write status only |
+| packages/api/src/routes/runs.ts | already-correct (evidence) | returns the nullable RunRecord unchanged |
+| packages/sdk/src/client.ts | already-correct (evidence) | `getRun` parses the nullable RunRecord unchanged |
