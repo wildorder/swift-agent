@@ -259,3 +259,48 @@ jobs:
 
       - name: Pack & verify tarballs
         run: node scripts/verify-pack.mjs
+
+  # ── Job 6: Local registry harness (WS-45, SC-05) ─────────────────────
+  # Boots an ephemeral loopback Verdaccio registry (scripts/local-registry.mjs),
+  # publishes @swiftagent/{sdk,react,shared} INTO it with `pnpm publish
+  # --registry`, installs them FROM it into a throwaway consumer via the WS-44
+  # install harness (SWIFTAGENT_INSTALL_REGISTRY + SWIFTAGENT_RUN_INSTALL_PROOF),
+  # and asserts resolved-URL provenance (every @swiftagent/* tarball served by
+  # http://127.0.0.1:<port>/). The whole flow is loopback HTTP: no Docker, no
+  # registry secrets, no packages:read. Kept separate from acceptance-tests so
+  # a registry-harness failure is legible on its own. NOTE: the root test/ and
+  # scripts/ trees are excluded from typecheck/lint by convention — this run IS
+  # their validation.
+  local-registry:
+    name: Local registry harness
+    runs-on: ubuntu-latest
+    needs: build-lint
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      - name: Verify local registry end-to-end
+        run: pnpm verify:local-registry

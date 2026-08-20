@@ -15,6 +15,7 @@
     "test:integration": "vitest run --config test/vitest.integration.config.ts",
     "test:acceptance": "vitest run --config test/vitest.acceptance.config.ts",
     "test:acceptance:install": "tsx test/acceptance/install-published.ts",
+    "verify:local-registry": "node scripts/local-registry.mjs verify",
     "smoke:realtime": "tsx test/smoke/realtime-smoke.ts",
     "smoke:local": "tsx test/smoke/local-smoke-entry.ts",
     "smoke:typecheck": "tsc --noEmit -p test/smoke/tsconfig.json",
@@ -49,6 +50,7 @@
     "turbo": "^2.0.0",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.0.0",
+    "verdaccio": "6",
     "vitest": "^3.0.0",
     "ws": "^8.20.0",
     "zod": "^3.24"

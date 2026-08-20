@@ -211,6 +211,12 @@ export async function installPublishedPackages(): Promise<InstalledConsumer> {
 
   const consumerDir = await mkdtemp(join(tmpdir(), 'swiftagent-consumer-'));
 
+  // WS-45 hook: when set, report the consumer dir path to the orchestrator so
+  // it can assert resolved-URL provenance from the consumer's lockfile after
+  // the proof. No-op (byte-compatible behavior) when the env var is unset.
+  const consumerDirFile = process.env['SWIFTAGENT_CONSUMER_DIR_FILE'];
+  if (consumerDirFile) await writeFile(consumerDirFile, consumerDir, 'utf-8');
+
   // Consumer package.json: install each package at the resolved dist-tag. Plain
   // npm (below) fetches the real registry tarball. `typescript` powers the
   // shipped-.d.ts typecheck.
