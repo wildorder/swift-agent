@@ -120,6 +120,25 @@ export async function registerStreamRoute(
           return;
         }
 
+        // Attach the message listener SYNCHRONOUSLY, before the async auth
+        // below yields. A client that sends immediately after `open` (fast
+        // localhost links: tests, CI, local dev) would otherwise race the
+        // await-points in the auth block and have its first frames silently
+        // dropped — the handler used to be installed only after token
+        // validation and the Redis subscribe completed. Frames arriving in
+        // that window are buffered and flushed once auth succeeds; on auth
+        // failure the socket closes and the buffer is discarded unread.
+        const preAuthBuffer: string[] = [];
+        let inboundHandler: ((data: string) => void) | null = null;
+        socket.on('message', (raw: Buffer | string) => {
+          const data = typeof raw === 'string' ? raw : raw.toString('utf-8');
+          if (inboundHandler) {
+            inboundHandler(data);
+          } else {
+            preAuthBuffer.push(data);
+          }
+        });
+
         // Authenticate asynchronously
         void (async () => {
           try {
@@ -144,10 +163,9 @@ export async function registerStreamRoute(
               await channels.acquire(sessionId);
             }
 
-            // Handle inbound messages
-            socket.on('message', (raw: Buffer | string) => {
-              const data = typeof raw === 'string' ? raw : raw.toString('utf-8');
-
+            // Handle inbound messages (installed into the synchronous
+            // listener above; buffered pre-auth frames are flushed below).
+            const handleInbound = (data: string): void => {
               try {
                 const msg = parseInboundMessage(data);
 
@@ -178,7 +196,11 @@ export async function registerStreamRoute(
                   connectionManager.sendError(sessionId, socket, errorEvent);
                 }
               }
-            });
+            };
+            inboundHandler = handleInbound;
+            for (const data of preAuthBuffer.splice(0)) {
+              handleInbound(data);
+            }
 
             // Handle close.
             //

@@ -282,6 +282,24 @@ describe('Gateway Integration', () => {
       expect(pong.type).toBe('pong');
     });
 
+    it('does not drop a frame sent immediately on open (pre-auth buffer)', async () => {
+      // Regression: the inbound handler used to be attached only after the
+      // async auth + subscribe steps completed, so a frame sent the moment
+      // `open` fired (fast localhost links) was silently dropped. The
+      // synchronous pre-auth buffer must capture and replay it. Note: no
+      // settle delay here, unlike the tests above — the race IS the test.
+      const token = await signToken(validClaims());
+      const ws = createWs(`/v1/stream?token=${token}`);
+
+      const messagesPromise = collectMessages(ws, 1);
+      await waitForOpen(ws);
+      ws.send(JSON.stringify({ type: 'ping' }));
+
+      const messages = await messagesPromise;
+      const pong = JSON.parse(messages[0]);
+      expect(pong.type).toBe('pong');
+    });
+
     it('returns error for invalid inbound message', async () => {
       const token = await signToken(validClaims());
       const ws = createWs(`/v1/stream?token=${token}`);
