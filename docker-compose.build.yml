@@ -1,0 +1,20 @@
+# Contributor override: build the server image from source instead of pulling
+# the published, digest-pinned GHCR image (WS-50, SC-15).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+#
+# The base docker-compose.yml pins `image: ghcr.io/…@sha256:<digest>` so a
+# clean checkout pulls the operator artifact; this override restores the
+# source build for local development on the server itself.
+# See docs/runbooks/container-image.md.
+services:
+  swift-agent:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+  bootstrap:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
