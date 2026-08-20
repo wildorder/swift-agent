@@ -1,0 +1,45 @@
+{
+  "name": "create-swift-agent",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Scaffold a runnable Swift Agent project: SDK backend with one Zod-schema tool, a Vite/React chat frontend, and a single-server local docker-compose stack.",
+  "license": "Apache-2.0",
+  "author": "Swift Agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wildorder/swift-agent.git",
+    "directory": "packages/create-swift-agent"
+  },
+  "bin": {
+    "create-swift-agent": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts.map",
+    "!dist/**/__tests__"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0",
+    "yaml": "^2.6.0"
+  }
+}

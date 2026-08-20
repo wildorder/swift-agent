@@ -20,9 +20,15 @@
 //
 // Knobs:
 //   SWIFTAGENT_LOCAL_REGISTRY_PORT   listen port (default 4873)
+//   SWIFTAGENT_LOCAL_REGISTRY_HOST   listen address (default 127.0.0.1).
+//                                    WS-46's e2e sets 0.0.0.0 ON CI/E2E RUNS
+//                                    ONLY, so the generated project's backend
+//                                    container can npm-install through the
+//                                    docker host-gateway. Never set this on a
+//                                    machine exposed beyond localhost.
 //
-// SECURITY: listens on 127.0.0.1 ONLY. Never expose beyond localhost/CI.
-// See test/local-registry/README.md.
+// SECURITY: listens on 127.0.0.1 ONLY by default. Never expose beyond
+// localhost/CI. See test/local-registry/README.md.
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
@@ -47,6 +53,9 @@ const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 const PORT = Number(process.env['SWIFTAGENT_LOCAL_REGISTRY_PORT'] ?? 4873);
+// Bind address only — clients (and every URL below) still reach the registry
+// as 127.0.0.1. 0.0.0.0 is a CI/e2e-only opt-in (see the knob note above).
+const LISTEN_HOST = process.env['SWIFTAGENT_LOCAL_REGISTRY_HOST'] ?? '127.0.0.1';
 const REGISTRY_URL = `http://127.0.0.1:${PORT}`;
 // Stable per-port location so `stop` finds what `start` recorded across processes.
 const STATE_FILE = join(tmpdir(), `swiftagent-local-registry-${PORT}.json`);
@@ -135,7 +144,7 @@ async function startRegistry() {
   log(`starting verdaccio on ${REGISTRY_URL} (storage: ${storage})`);
   // Invoke the JS bin through the current node — Windows-safe (no .cmd shim,
   // real PID for kill), same interpreter everywhere.
-  const child = spawn(process.execPath, [VERDACCIO_BIN, '--config', derivedConfig, '--listen', `http://127.0.0.1:${PORT}`], {
+  const child = spawn(process.execPath, [VERDACCIO_BIN, '--config', derivedConfig, '--listen', `http://${LISTEN_HOST}:${PORT}`], {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', logFd, logFd],

@@ -1,0 +1,28 @@
+{
+  "name": "__PROJECT_NAME__-backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "__PROJECT_NAME__ — Swift Agent backend (one agent, one tool, /api/session route).",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@swiftagent/sdk": "^0.0.1",
+    "@swiftagent/shared": "^0.0.1",
+    "fastify": "^5",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

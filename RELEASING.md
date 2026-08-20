@@ -21,9 +21,9 @@ The dispatched run:
 3. Applies accumulated changesets (`pnpm changeset version`).
 4. Runs `pnpm changeset publish` — which publishes **every non-`private`
    workspace package** whose version is not yet on the registry. Today that is
-   `@swiftagent/sdk`, `@swiftagent/react`, and `@swiftagent/shared`; when
-   WS-46 adds `create-swift-agent` (public posture, non-private), the same
-   dispatch releases it with **no workflow edit**.
+   `@swiftagent/sdk`, `@swiftagent/react`, `@swiftagent/shared`, and (since
+   WS-46) the unscoped `create-swift-agent` scaffold CLI — all four from the
+   same single dispatch, with **no per-package workflow edits**.
 5. Commits the version bumps back to the branch.
 
 `workspace:*` dependency ranges are rewritten to concrete semver versions by
@@ -57,9 +57,11 @@ real, publicly visible versions on every PR is not acceptable.
 
 ## Pre-release verification (what runs before anyone publishes)
 
-- **`node scripts/verify-pack.mjs`** (every CI run): packs all three packages
-  and asserts tarball contents, `workspace:*` rewriting, public-npm/Apache-2.0
-  metadata, and LICENSE/NOTICE presence + byte-identity with the root files.
+- **`node scripts/verify-pack.mjs`** (every CI run): packs all four publishable
+  packages and asserts tarball contents, `workspace:*` rewriting,
+  public-npm/Apache-2.0 metadata, LICENSE/NOTICE presence + byte-identity with
+  the root files, and (for `create-swift-agent`) the bin mapping, shebanged bin
+  target, and complete `templates/` tree.
 - **`pnpm publish --dry-run --no-git-checks`** (run per package directory):
   exercises the full pnpm publish path minus the upload.
 - **WS-45 local registry (planned hand-off):** a local Verdaccio registry will

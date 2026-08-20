@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Publish dry-run gate for the three publishable packages (WS-38).
+// Publish dry-run gate for the publishable packages (WS-38; WS-46 added the
+// unscoped create-swift-agent scaffold CLI to the roster).
 //
-// Runs `pnpm pack` for @swiftagent/{sdk,react,shared}, then asserts on each
+// Runs `pnpm pack` for @swiftagent/{sdk,react,shared} + create-swift-agent
+// (bin mapping, shebanged bin target, and templates/ tree additionally
+// asserted for the CLI), then asserts on each
 // produced tarball WITHOUT touching a live registry — this exercises everything
 // up to the actual upload. Kept as a single committed command so the CI gate
 // (.github/workflows/ci.yml) and the local check never diverge:
@@ -41,6 +44,30 @@ const PACKAGES = [
   { name: '@swiftagent/sdk', dir: 'packages/sdk' },
   { name: '@swiftagent/react', dir: 'packages/react' },
   { name: '@swiftagent/shared', dir: 'packages/shared' },
+  // WS-46: the scaffold CLI — unscoped (npx requires it), bin-shipping, and
+  // carrying a templates/ tree that MUST land in the tarball (the files
+  // allowlist is exactly where a missing entry would break `npx` for real
+  // users while workspace tests stay green).
+  { name: 'create-swift-agent', dir: 'packages/create-swift-agent', cli: true },
+];
+
+/** Template files that must ship for `npx create-swift-agent` to work at all. */
+const REQUIRED_TEMPLATE_FILES = [
+  'package/templates/README.md',
+  'package/templates/_gitignore',
+  'package/templates/env.example',
+  'package/templates/docker-compose.yml',
+  'package/templates/backend/package.json',
+  'package/templates/backend/tsconfig.json',
+  'package/templates/backend/eslint.config.js',
+  'package/templates/backend/src/server.ts',
+  'package/templates/frontend/package.json',
+  'package/templates/frontend/tsconfig.json',
+  'package/templates/frontend/eslint.config.js',
+  'package/templates/frontend/vite.config.ts',
+  'package/templates/frontend/index.html',
+  'package/templates/frontend/src/main.tsx',
+  'package/templates/frontend/src/App.tsx',
 ];
 
 /** @type {string[]} */
@@ -92,15 +119,19 @@ function verifyTarball(pkg, tarball, tmp) {
   if (!list.includes('package/package.json')) fail(pkg.name, 'missing package.json');
 
   // ── §1/§3: forbidden content must NOT leak into the tarball ──
-  const forbidden = list.filter(
-    (f) =>
-      f.startsWith('package/src/') ||
-      /\.test\.(js|d\.ts)$/.test(f) ||
-      /(^|\/)__tests__\//.test(f) ||
-      /tsconfig.*\.json$/.test(f) ||
-      f.includes('/.turbo/') ||
-      f.endsWith('.cjs'),
-  );
+  // (templates/ is exempt for the CLI package: template projects legitimately
+  // carry tsconfigs, src/ trees, and eslint configs — they are DATA it ships.)
+  const forbidden = list
+    .filter((f) => !(pkg.cli && f.startsWith('package/templates/')))
+    .filter(
+      (f) =>
+        f.startsWith('package/src/') ||
+        /\.test\.(js|d\.ts)$/.test(f) ||
+        /(^|\/)__tests__\//.test(f) ||
+        /tsconfig.*\.json$/.test(f) ||
+        f.includes('/.turbo/') ||
+        f.endsWith('.cjs'),
+    );
   if (forbidden.length) fail(pkg.name, `forbidden files in tarball: ${forbidden.join(', ')}`);
   else ok(pkg.name, 'no src/tests/tsconfig/.turbo/CJS leaked');
 
@@ -147,6 +178,29 @@ function verifyTarball(pkg, tarball, tmp) {
       fail(pkg.name, `packed "${field}" differs from on-disk source (WS-36 surface perturbed)`);
   }
   ok(pkg.name, 'metadata + surface correct');
+
+  // ── WS-46 (CLI package only): bin mapping + shebanged target + templates ──
+  if (pkg.cli) {
+    const binTarget = packedJson.bin?.['create-swift-agent'];
+    if (binTarget !== './dist/cli.js') {
+      fail(pkg.name, `bin mapping missing/wrong: ${JSON.stringify(packedJson.bin)}`);
+    } else {
+      ok(pkg.name, 'bin maps create-swift-agent → ./dist/cli.js');
+      const binPath = `package/${binTarget.replace(/^\.\//, '')}`;
+      if (!list.includes(binPath)) {
+        fail(pkg.name, `bin target ${binPath} missing from tarball`);
+      } else {
+        const binContent = run('tar', ['--force-local', '-xzOf', tarball, binPath]);
+        if (binContent.startsWith('#!/usr/bin/env node')) ok(pkg.name, 'bin target carries the shebang');
+        else fail(pkg.name, `bin target ${binPath} lacks the #!/usr/bin/env node shebang`);
+      }
+    }
+    for (const f of REQUIRED_TEMPLATE_FILES) {
+      if (!list.includes(f)) fail(pkg.name, `templates file missing from tarball: ${f}`);
+    }
+    if (REQUIRED_TEMPLATE_FILES.every((f) => list.includes(f)))
+      ok(pkg.name, `templates/ tree complete (${REQUIRED_TEMPLATE_FILES.length} required files)`);
+  }
 }
 
 function main() {
@@ -160,7 +214,7 @@ function main() {
     const tarball = readdirSync(tmp)
       .filter((f) => f.endsWith('.tgz'))
       .map((f) => join(tmp, f))
-      .find((f) => f.includes(pkg.name.split('/')[1]));
+      .find((f) => f.includes(pkg.name.split('/').at(-1)));
     if (!tarball) {
       fail(pkg.name, 'no tarball produced by pnpm pack');
       continue;

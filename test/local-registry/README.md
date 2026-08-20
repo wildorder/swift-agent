@@ -36,6 +36,7 @@ lockfile resolves from `http://127.0.0.1:<port>/`) → stop.
 | Env var | Default | Meaning |
 | --- | --- | --- |
 | `SWIFTAGENT_LOCAL_REGISTRY_PORT` | `4873` | Listen port (dodge collisions) |
+| `SWIFTAGENT_LOCAL_REGISTRY_HOST` | `127.0.0.1` | Bind address. WS-46's e2e (`scripts/create-swift-agent-e2e.mjs`) sets `0.0.0.0` **on CI/e2e runs only** so the generated project's backend container can npm-install through the docker host-gateway. Never set this on a machine exposed beyond localhost. |
 
 State (PID, port, storage path, publish-side npmrc) is written to a per-port
 file in the OS temp dir, so `stop` works from a different process than `start`.

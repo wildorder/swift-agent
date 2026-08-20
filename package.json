@@ -16,6 +16,7 @@
     "test:acceptance": "vitest run --config test/vitest.acceptance.config.ts",
     "test:acceptance:install": "tsx test/acceptance/install-published.ts",
     "verify:local-registry": "node scripts/local-registry.mjs verify",
+    "e2e:create-swift-agent": "node scripts/create-swift-agent-e2e.mjs",
     "smoke:realtime": "tsx test/smoke/realtime-smoke.ts",
     "smoke:local": "tsx test/smoke/local-smoke-entry.ts",
     "smoke:typecheck": "tsc --noEmit -p test/smoke/tsconfig.json",

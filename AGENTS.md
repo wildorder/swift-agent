@@ -76,7 +76,8 @@ Open-source real-time agent runtime — the self-hostable transport and tool-exe
 
 **Layout.** Library packages live under `packages/` scoped `@swiftagent/*`
 (`shared`, `db`, `models`, `runtime`, `gateway`, `api`, `observability`, `sdk`,
-`react`); the deployable app is `apps/server`. Runnable examples live under
+`react`), plus the deliberately unscoped `create-swift-agent` scaffold CLI (see
+Delivery below); the deployable app is `apps/server`. Runnable examples live under
 `examples/`. Cross-package suites live in the root `test/` tree
 (`integration/`, `acceptance/`, `smoke/`, `support/`).
 
@@ -115,9 +116,12 @@ Docker) and acceptance tests use `pnpm test:acceptance`. Note that the root
 `test/` tree is excluded from `pnpm typecheck` and `pnpm lint` — changes there
 are only validated by actually running those suites.
 
-**Delivery.** `@swiftagent/sdk`, `@swiftagent/react`, and `@swiftagent/shared`
-publish to public npm (`registry.npmjs.org`, Apache-2.0); every other package
-is `private`. Releases go through Changesets (`pnpm changeset`).
+**Delivery.** `@swiftagent/sdk`, `@swiftagent/react`, `@swiftagent/shared`, and
+`create-swift-agent` publish to public npm (`registry.npmjs.org`, Apache-2.0);
+every other package is `private`. `create-swift-agent` is deliberately unscoped
+— `npx create-swift-agent` only resolves an unscoped bin name — and is the
+single documented exception to the `@swiftagent/*` naming convention. Releases
+go through Changesets (`pnpm changeset`).
 
 ### Dependency Versions (pin these)
 

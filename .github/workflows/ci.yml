@@ -252,7 +252,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build publishable packages
-        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... build
+        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... --filter create-swift-agent build
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -304,3 +304,49 @@ jobs:
 
       - name: Verify local registry end-to-end
         run: pnpm verify:local-registry
+
+  # ── Job 7: create-swift-agent e2e (WS-46, SC-06) ─────────────────────
+  # The scaffold proof, end to end through REAL npm-registry protocol: publish
+  # @swiftagent/{shared,sdk,react} + create-swift-agent into the WS-45
+  # Verdaccio registry, resolve `npx create-swift-agent` AGAINST that registry
+  # (fresh npm cache — no file paths, no stale-cache masking), install the
+  # generated project from it (lockfile provenance asserted), typecheck/build/
+  # lint it (the no-restricted-imports deep-import guard runs on generated
+  # code), then `docker compose up` the GENERATED project's single-server
+  # WS-43-wired stack, let its bootstrap self-provision the dev API key, and
+  # drive one streaming turn asserting tool_call_started AND
+  # tool_call_completed. Teardown (compose down -v + registry stop) is
+  # guaranteed by the script. Same committed command locally and here:
+  # `pnpm e2e:create-swift-agent`. Needs Docker (present on ubuntu runners).
+  # NOTE: scripts/ is excluded from typecheck/lint by convention — this run IS
+  # its validation.
+  create-swift-agent-e2e:
+    name: create-swift-agent e2e
+    runs-on: ubuntu-latest
+    needs: build-lint
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run the scaffold end-to-end proof
+        run: pnpm e2e:create-swift-agent
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

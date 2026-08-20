@@ -66,7 +66,7 @@ See `docs/vision.md` for full product vision (`swift-agent.md` is now just a poi
 
 ### Conventions
 
-- All packages scoped `@swiftagent/*` under `packages/`, deployable app under `apps/server`
+- All packages scoped `@swiftagent/*` under `packages/` (sole documented exception: the unscoped `create-swift-agent` scaffold CLI, so `npx create-swift-agent` resolves), deployable app under `apps/server`
 - Zod schemas are source of truth — derive TypeScript types via `z.infer<>`, not the reverse
 - IDs are prefixed: `ses_`, `msg_`, `run_`, `tc_`, `agt_`, `ws_`, `ak_`, `usr_`
 - Repositories are factory functions: `createXxxRepo(db: Db)`, not classes
