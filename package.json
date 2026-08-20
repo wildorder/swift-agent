@@ -35,7 +35,7 @@
     "@testcontainers/postgresql": "^10.0.0",
     "@types/node": "^25.5.2",
     "@types/ws": "^8.18.1",
-    "@wildorder/program-pipeline": "^0.16.0",
+    "@wildorder/program-pipeline": "^0.16.1",
     "drizzle-orm": "^0.36",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
