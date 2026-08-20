@@ -1,14 +1,19 @@
 name: Publish SDKs
 
+# WS-44 / program decision 4: the manual workflow_dispatch below IS the release
+# path — a human (the repo owner) presses it exactly once per release. There is
+# deliberately NO automatic trigger (no push, no pull_request): publishing to
+# PUBLIC npm must never happen as a side effect of a merge. Prerequisites
+# (owner-owned, see RELEASING.md): the npm org for the @swiftagent scope and an
+# automation token stored as the NPM_TOKEN repository secret.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
-# GitHub Packages publish needs packages:write; commit-back of the
-# Changesets version bump needs contents:write.
+# Commit-back of the Changesets version bump needs contents:write. No
+# packages:write — the private GitHub-hosted registry is no longer the target;
+# npm auth comes from the NPM_TOKEN secret instead.
 permissions:
   contents: write
-  packages: write
 
 concurrency:
   group: publish-sdks
@@ -20,7 +25,7 @@ env:
 
 jobs:
   publish:
-    name: Version & Publish (GitHub Packages)
+    name: Version & Publish (public npm)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,24 +33,37 @@ jobs:
         with:
           fetch-depth: 0 # Changesets needs full history to diff versions
 
+      # Fail fast, with a clear message, if the owner has not provisioned the
+      # npm automation token yet (see RELEASING.md).
+      - name: Assert NPM_TOKEN is provisioned
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN secret is not set. Provision an npm automation token for the @swiftagent scope and store it as the NPM_TOKEN repository secret (see RELEASING.md) before dispatching this workflow."
+            exit 1
+          fi
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - name: Setup Node.js (GitHub Packages)
+      - name: Setup Node.js (public npm)
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          registry-url: https://npm.pkg.github.com
-          scope: '@swiftagent'
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build publishable packages
-        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... build
+      # Build EVERY workspace package, not just the current three publishable
+      # ones: `pnpm changeset publish` releases every non-private package with
+      # an unpublished version, so when WS-46 adds `create-swift-agent` (and any
+      # later publishable package) this same dispatch releases it with NO
+      # workflow edit — the generic build already covers it.
+      - name: Build all packages
+        run: pnpm build
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -56,11 +74,12 @@ jobs:
 
       # changeset publish is idempotent: only versions not already on the
       # registry are published; workspace:* is rewritten to concrete versions
-      # by pnpm at publish time. Registry resolves from publishConfig/.npmrc.
-      - name: Publish to GitHub Packages
+      # by pnpm at publish time. Registry resolves from each package's
+      # publishConfig (registry.npmjs.org) + the setup-node registry-url above.
+      - name: Publish to public npm
         run: pnpm changeset publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Commit the version bumps back so git stays the source of truth.
       - name: Commit version bumps

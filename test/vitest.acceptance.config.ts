@@ -8,8 +8,9 @@ import { defineConfig } from 'vitest/config';
  * migrations) so the acceptance stack runs against exactly the CI/deploy schema.
  *
  * Timeouts are far more generous than the integration config's 30s/60s because
- * the install-from-registry scenario shells out to a bounded `npm install`
- * against GitHub Packages and boots a consumer typecheck + drive.
+ * the install-from-registry scenario (opt-in via SWIFTAGENT_RUN_INSTALL_PROOF,
+ * registry parameterized via SWIFTAGENT_INSTALL_REGISTRY — default public npm)
+ * shells out to a bounded `npm install` and boots a consumer typecheck + drive.
  *
  * Redis is intentionally OFF: `createRuntimeHarness()` builds the gateway with
  * `redisEnabled: false` (single-node), so no fanout bus is needed and the run is

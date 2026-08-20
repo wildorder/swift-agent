@@ -11,10 +11,8 @@ browser sessions, and a **frontend** React app that renders the streaming chat.
 
 ## 1. Install
 
-`@swiftagent/*` packages publish to **GitHub Packages** (the `@swiftagent`
-scope's private registry). Point your `.npmrc` at
-`@swiftagent:registry=https://npm.pkg.github.com` with a `read:packages` token,
-then:
+`@swiftagent/*` packages install from public npm — no registry configuration
+or token needed:
 
 ```
 pnpm add @swiftagent/sdk @swiftagent/react

@@ -6,34 +6,38 @@ import {
   installPublishedPackages,
   importAndDrive,
   typecheckConsumer,
-  hasRegistryAuth,
+  installProofEnabled,
   resolveInstallTarget,
 } from './install-published.js';
 
 /**
- * WS-42 · Install-from-registry proof (SC-09) — the ONLY path that satisfies the
+ * WS-42/WS-44 · Install-from-registry proof — the ONLY path that satisfies the
  * "installs the published packages" criterion; there is NO local-tarball
  * fallback.
  *
- * Installs `@swiftagent/{sdk,react,shared}` from GitHub Packages
- * (`npm.pkg.github.com`) into a throwaway consumer — WS-38's `pr` snapshot on
- * PRs, the stable `latest` on `main` — asserts they resolve, typechecks the
- * consumer against the SHIPPED `.d.ts`, imports the public symbols, and runs the
- * consumer's one happy-path drive (via the INSTALLED `@swiftagent/react`
- * client) against the in-process server. The resolved tag/version is logged
- * loudly. A missing publish / unreachable registry FAILS the test.
+ * Installs `@swiftagent/{sdk,react,shared}` from the parameterized registry
+ * (`SWIFTAGENT_INSTALL_REGISTRY`, default public npm `registry.npmjs.org`)
+ * into a throwaway consumer — the `pr` snapshot on PRs, the stable `latest`
+ * otherwise — asserts they resolve, typechecks the consumer against the
+ * SHIPPED `.d.ts`, imports the public symbols, and runs the consumer's one
+ * happy-path drive (via the INSTALLED `@swiftagent/react` client) against the
+ * in-process server. The resolved tag/version is logged loudly. A missing
+ * publish / unreachable registry FAILS the test.
  *
- * CREDENTIAL GATE (not a fallback): installing from a PRIVATE registry is
- * impossible without a `read:packages` credential. When `NODE_AUTH_TOKEN` is
- * absent (typical local dev without a PAT) this scenario SKIPS with a loud note
- * so `pnpm test:acceptance` stays green locally; in CI the token is
- * `secrets.GITHUB_TOKEN`, so it RUNS and fails loud on any real install failure.
- * This is distinct from "degrading to a local build" — which never happens.
+ * OPT-IN GATE (not a fallback): after the WS-44 public-posture flip and before
+ * the owner fires the release trigger (see RELEASING.md), NOTHING exists under
+ * `@swiftagent/*` on `registry.npmjs.org` — a default-on run would fail every
+ * CI run while asserting a published version exists (which no surface may
+ * claim). The proof therefore runs ONLY when `SWIFTAGENT_RUN_INSTALL_PROOF=1`
+ * is set, and loud-skips otherwise. WS-45 re-enables it per PR against its
+ * local Verdaccio registry via `SWIFTAGENT_INSTALL_REGISTRY` (+ its dummy
+ * `NODE_AUTH_TOKEN`) + `SWIFTAGENT_RUN_INSTALL_PROOF=1`. This is distinct from
+ * "degrading to a local build" — which never happens.
  */
 
-const AUTH = hasRegistryAuth();
+const RUN_PROOF = installProofEnabled();
 
-describe.skipIf(!AUTH)('WS-42 install-from-registry proof', () => {
+describe.skipIf(!RUN_PROOF)('install-from-registry proof', () => {
   let server: AcceptanceServer;
 
   beforeAll(async () => {
@@ -50,7 +54,7 @@ describe.skipIf(!AUTH)('WS-42 install-from-registry proof', () => {
       const { tag } = resolveInstallTarget();
       console.log(`[install-registry] install proof running against dist-tag "${tag}"`);
 
-      // (1) Real GitHub Packages install into a throwaway consumer.
+      // (1) Real registry install into a throwaway consumer.
       const { consumerDir, versions } = await installPublishedPackages();
       for (const [pkg, version] of Object.entries(versions)) {
         expect(version, `${pkg} must resolve to a concrete version`).toBeTruthy();
@@ -95,14 +99,15 @@ describe.skipIf(!AUTH)('WS-42 install-from-registry proof', () => {
   });
 });
 
-// A loud breadcrumb when the whole proof is skipped, so a green local run never
+// A loud breadcrumb when the whole proof is skipped, so a green run never
 // silently implies the registry install was exercised.
-describe.runIf(!AUTH)('WS-42 install-from-registry proof (skipped)', () => {
-  it('is SKIPPED because NODE_AUTH_TOKEN is absent (set a read:packages PAT to run)', () => {
+describe.runIf(!RUN_PROOF)('install-from-registry proof (skipped)', () => {
+  it('is SKIPPED because SWIFTAGENT_RUN_INSTALL_PROOF is not set to 1 (explicit opt-in)', () => {
     console.warn(
-      '[install-registry] SKIPPED — NODE_AUTH_TOKEN not set; the registry install proof ' +
-        'requires a read:packages credential. It runs in CI (secrets.GITHUB_TOKEN).',
+      '[install-registry] SKIPPED — SWIFTAGENT_RUN_INSTALL_PROOF is not "1". The registry ' +
+        'install proof is opt-in until a published version exists (public npm after the ' +
+        'RELEASING.md trigger, or WS-45\'s local registry via SWIFTAGENT_INSTALL_REGISTRY).',
     );
-    expect(AUTH).toBe(false);
+    expect(RUN_PROOF).toBe(false);
   });
 });

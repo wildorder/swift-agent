@@ -43,12 +43,14 @@ which wires an agent end to end using the canonical, CI-maintained example in
 [`examples/quickstart/`](./examples/quickstart). Run instructions live in
 [`examples/quickstart/README.md`](./examples/quickstart/README.md).
 
-> **Distribution is mid-migration.** `@swiftagent/*` currently publishes to
-> GitHub Packages (the `@swiftagent` scope's private registry): configure
-> `@swiftagent:registry=https://npm.pkg.github.com` with a `read:packages`
-> token, then `pnpm add @swiftagent/sdk @swiftagent/react`. Public npm publishing
-> is planned as part of the open-source release; until it lands, the private
-> registry is the only install path.
+Install the SDKs from public npm — no registry configuration or token needed:
+
+```sh
+pnpm add @swiftagent/sdk @swiftagent/react
+```
+
+`@swiftagent/shared` comes in transitively with both SDKs. Releases fire from
+the documented manual trigger — see [`RELEASING.md`](./RELEASING.md).
 
 ## Self-hosting
 
@@ -73,3 +75,10 @@ pnpm typecheck    # type-check every package
 pnpm lint         # lint every package
 pnpm test         # run unit tests
 ```
+
+## License
+
+Swift Agent is licensed under the [Apache License 2.0](./LICENSE). See
+[`NOTICE`](./NOTICE) for attribution and [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+for how to contribute (contributions are accepted under the
+[Developer Certificate of Origin](./DCO)).

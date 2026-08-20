@@ -14,9 +14,14 @@
 //      tsconfig, .turbo/, CommonJS *.cjs).
 //   2. `workspace:*` deps were rewritten to a concrete version at pack time.
 //   3. Dual ESM JS + type-declaration outputs are present for every entry point.
-//   4. Publish metadata is correct: no `private`, GitHub Packages registry,
-//      `files` allowlist, non-empty repository/license/description; and the
-//      exports/main/types block is byte-identical to the on-disk source.
+//   4. Publish metadata is correct: no `private`, public npm registry
+//      (registry.npmjs.org) with `access: public` and `license: Apache-2.0`
+//      (WS-44 public posture), `files` allowlist, non-empty
+//      repository/license/description; and the exports/main/types block is
+//      byte-identical to the on-disk source.
+//   5. Each tarball ships `package/LICENSE` and `package/NOTICE`, byte-identical
+//      to the repository-root files (Apache-2.0 §4(a) requires the license to
+//      travel with every distributed copy; identity prevents silent drift).
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
@@ -25,7 +30,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const REGISTRY = 'https://npm.pkg.github.com';
+const REGISTRY = 'https://registry.npmjs.org';
+const ACCESS = 'public';
+const LICENSE_ID = 'Apache-2.0';
 // pnpm is a `.cmd` shim on Windows; name it explicitly so execFileSync resolves
 // it without a shell (CI runs on Linux where the bare name is correct).
 const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -111,8 +118,24 @@ function verifyTarball(pkg, tarball, tmp) {
   if ('private' in packedJson) fail(pkg.name, 'packed manifest still has "private"');
   if (packedJson.publishConfig?.registry !== REGISTRY)
     fail(pkg.name, `publishConfig.registry is "${packedJson.publishConfig?.registry}", expected ${REGISTRY}`);
+  if (packedJson.publishConfig?.access !== ACCESS)
+    fail(pkg.name, `publishConfig.access is "${packedJson.publishConfig?.access}", expected "${ACCESS}"`);
+  if (packedJson.license !== LICENSE_ID)
+    fail(pkg.name, `license is "${packedJson.license}", expected "${LICENSE_ID}"`);
   if (!Array.isArray(packedJson.files) || !packedJson.files.includes('dist') || !packedJson.files.includes('README.md'))
     fail(pkg.name, 'files allowlist must contain "dist" and "README.md"');
+
+  // ── §5: LICENSE + NOTICE ship in the tarball, byte-identical to the root ──
+  for (const legal of ['LICENSE', 'NOTICE']) {
+    if (!list.includes(`package/${legal}`)) {
+      fail(pkg.name, `missing ${legal} in tarball`);
+      continue;
+    }
+    const packed = run('tar', ['--force-local', '-xzOf', tarball, `package/${legal}`]);
+    const root = readFileSync(join(ROOT, legal), 'utf8');
+    if (packed === root) ok(pkg.name, `${legal} byte-identical to root ${legal}`);
+    else fail(pkg.name, `${legal} in tarball differs from root ${legal} (copies drifted)`);
+  }
   for (const field of ['repository', 'license', 'description', 'author']) {
     const v = packedJson[field];
     if (!v || (typeof v === 'object' && Object.keys(v).length === 0)) fail(pkg.name, `empty/missing "${field}"`);

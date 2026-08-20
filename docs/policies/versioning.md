@@ -31,11 +31,15 @@ the machinery that enforces the publish half.
   others. When a package bumps, workspace dependents that reference it receive a
   **patch** bump (`updateInternalDependencies: "patch"`) to keep the linked
   versions consistent, but the packages otherwise move on their own cadence.
-- **Packages are currently private.** Every package is `"private": true` and
-  publishes to a **restricted** (private) registry once WS-38 turns publishing
-  on. Until then, Changesets still *records* intended bumps; it just does not
-  publish. Do not remove `"private": true` as part of a feature change — flipping
-  it is a release concern owned by WS-38.
+- **The publishable packages are public.** `@swiftagent/sdk`,
+  `@swiftagent/react`, and `@swiftagent/shared` are Apache-2.0 licensed and
+  declare `publishConfig.registry = https://registry.npmjs.org` with
+  `access: public`; they carry **no** `private` field. Every **other**
+  workspace package is `"private": true` and is never published. Changesets
+  still records intended bumps between releases; publication happens only via
+  the manual release trigger (see §6 and `RELEASING.md`). Do not add or remove
+  a `private` field as part of a feature change — package posture is a release
+  concern.
 
 ---
 
@@ -232,7 +236,9 @@ The day-to-day author workflow:
 4. `pnpm version-packages` (`changeset version`) consumes accumulated changesets
    into version bumps + `CHANGELOG.md` entries when it is time to cut a release.
 
-**The publish/release workflow — building, tagging, and pushing to the private
-registry — is owned by WS-38.** This document defines *what* the versions mean
-and *when* to bump; WS-38 owns *how* they ship. Do not duplicate the publish
-steps here.
+**The publish/release workflow — building, tagging, and publishing to public
+npm (`registry.npmjs.org`) — is documented in [`RELEASING.md`](../../RELEASING.md)
+and fires ONLY from a manual `workflow_dispatch` of the `Publish SDKs` workflow.**
+(The publish machinery was originally wired by WS-38 and retargeted to public
+npm by WS-44.) This document defines *what* the versions mean and *when* to
+bump; the runbook owns *how* they ship. Do not duplicate the publish steps here.

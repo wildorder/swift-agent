@@ -116,8 +116,8 @@ Docker) and acceptance tests use `pnpm test:acceptance`. Note that the root
 are only validated by actually running those suites.
 
 **Delivery.** `@swiftagent/sdk`, `@swiftagent/react`, and `@swiftagent/shared`
-publish to GitHub Packages; every other package is `private`. Releases go
-through Changesets (`pnpm changeset`).
+publish to public npm (`registry.npmjs.org`, Apache-2.0); every other package
+is `private`. Releases go through Changesets (`pnpm changeset`).
 
 ### Dependency Versions (pin these)
 

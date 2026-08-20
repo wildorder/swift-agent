@@ -4,19 +4,30 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * WS-42 · GitHub Packages install harness — the SC-09 install PROOF.
+ * WS-42/WS-44 · Registry install harness — the published-artifact install PROOF.
  *
- * A REAL GitHub Packages install is the SOLE path that satisfies SC-09: there is
- * NO local-tarball stand-in. This harness (a) makes a throwaway consumer dir
+ * A REAL registry install is the SOLE path this proof accepts: there is NO
+ * local-tarball stand-in. This harness (a) makes a throwaway consumer dir
  * OUTSIDE the workspace (so `workspace:*` is not short-circuited and the real
  * registry tarball is fetched by plain `npm`), (b) discovers which dist-tag to
- * install — WS-38's `pr` snapshot (`0.0.0-pr-<sha>`) on a PR, the stable
- * `latest` on `main` — (c) writes a consumer `package.json` + `.npmrc`
- * (`@swiftagent:registry=https://npm.pkg.github.com` +
- * `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}`, the token from env,
- * NEVER committed), (d) runs a bounded `npm install`, (e) asserts the packages
- * resolve, imports them, typechecks the consumer against the shipped `.d.ts`,
- * and runs a one-shot happy-path drive.
+ * install — the `pr` snapshot (`0.0.0-pr-<sha>`) on a PR, the stable `latest`
+ * otherwise — (c) writes a consumer `package.json` + `.npmrc` mapping the
+ * `@swiftagent` scope to the target registry (an `_authToken` line is added
+ * ONLY when `NODE_AUTH_TOKEN` is set — public npm needs none; the token stays
+ * an npm env reference, NEVER written to disk), (d) runs a bounded
+ * `npm install`, (e) asserts the packages resolve, imports them, typechecks the
+ * consumer against the shipped `.d.ts`, and runs a one-shot happy-path drive.
+ *
+ * REGISTRY PARAMETERIZATION (WS-44 → WS-45 hand-off): the target registry comes
+ * from `SWIFTAGENT_INSTALL_REGISTRY` (default `https://registry.npmjs.org`,
+ * the public posture). Nothing is published under `@swiftagent/*` on public npm
+ * until the owner fires the release trigger (see RELEASING.md), so the
+ * acceptance test gates this proof behind an explicit opt-in
+ * (`SWIFTAGENT_RUN_INSTALL_PROOF=1`) and loud-skips otherwise. WS-45 re-enables
+ * the per-PR proof against its local Verdaccio registry by setting BOTH
+ * `SWIFTAGENT_INSTALL_REGISTRY=<local registry URL>` (plus its dummy
+ * `NODE_AUTH_TOKEN`) and `SWIFTAGENT_RUN_INSTALL_PROOF=1` — the identical
+ * harness, no fork.
  *
  * The resolved tag/version is logged LOUDLY so a CI reader knows exactly which
  * published artifact was exercised. If the registry is unreachable or nothing is
@@ -24,7 +35,7 @@ import { join } from 'node:path';
  * local build.
  */
 
-const REGISTRY = 'https://npm.pkg.github.com';
+const REGISTRY = process.env['SWIFTAGENT_INSTALL_REGISTRY'] ?? 'https://registry.npmjs.org';
 const PACKAGES = ['@swiftagent/sdk', '@swiftagent/react', '@swiftagent/shared'] as const;
 const INSTALL_TIMEOUT_MS = 120_000;
 const STEP_TIMEOUT_MS = 60_000;
@@ -94,9 +105,24 @@ export function resolveInstallTarget(): InstallTarget {
   return { tag: isPr ? 'pr' : 'latest', isPr };
 }
 
-/** True when a `read:packages` credential is present (CI or a local PAT). */
+/**
+ * True when a registry credential is present. Public npm needs NO token;
+ * private/local registries (e.g. WS-45's Verdaccio) supply one via env. Used
+ * only to decide whether the consumer `.npmrc` gets an `_authToken` line.
+ */
 export function hasRegistryAuth(): boolean {
   return Boolean(process.env['NODE_AUTH_TOKEN']);
+}
+
+/**
+ * Explicit opt-in for the install-from-registry proof. Until a version exists
+ * on the target registry (public npm pre-release, or WS-45's local registry),
+ * a default-on run would fail every CI run while implying a published version
+ * exists — which no surface may claim. Set SWIFTAGENT_RUN_INSTALL_PROOF=1 to
+ * run the proof.
+ */
+export function installProofEnabled(): boolean {
+  return process.env['SWIFTAGENT_RUN_INSTALL_PROOF'] === '1';
 }
 
 const CONSUMER_ENTRY = `import assert from 'node:assert/strict';
@@ -173,16 +199,10 @@ const CONSUMER_TSCONFIG = JSON.stringify(
 
 /**
  * Create the throwaway consumer dir and install the published packages from
- * GitHub Packages at the resolved dist-tag. Throws LOUD on any failure — never
+ * the target registry at the resolved dist-tag. Throws LOUD on any failure — never
  * degrades to a local build.
  */
 export async function installPublishedPackages(): Promise<InstalledConsumer> {
-  if (!hasRegistryAuth()) {
-    throw new Error(
-      'NODE_AUTH_TOKEN is not set — a read:packages token is REQUIRED to install from ' +
-        `${REGISTRY}. This install proof does NOT fall back to a local build.`,
-    );
-  }
   const { tag, isPr } = resolveInstallTarget();
   console.log(
     `[install-published] resolving @swiftagent/* from ${REGISTRY} at dist-tag "${tag}" ` +
@@ -204,13 +224,15 @@ export async function installPublishedPackages(): Promise<InstalledConsumer> {
   };
   await writeFile(join(consumerDir, 'package.json'), JSON.stringify(pkg, null, 2), 'utf-8');
 
-  // Consumer .npmrc: scope map + token from env. The `${NODE_AUTH_TOKEN}` is a
-  // literal npm variable reference — npm expands it at install time; the token
-  // is NEVER written to disk.
-  const npmrc =
-    `@swiftagent:registry=${REGISTRY}\n` +
-    `//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}\n` +
-    'audit=false\nfund=false\n';
+  // Consumer .npmrc: map the @swiftagent scope to the parameterized registry.
+  // The `_authToken` line is added ONLY when NODE_AUTH_TOKEN is set (public npm
+  // needs none; WS-45's local registry supplies a dummy token via env). The
+  // `${NODE_AUTH_TOKEN}` is a literal npm variable reference — npm expands it
+  // at install time; the token is NEVER written to disk.
+  const registryHostPath = REGISTRY.replace(/^https?:/, '').replace(/\/$/, '');
+  let npmrc = `@swiftagent:registry=${REGISTRY}\n`;
+  if (hasRegistryAuth()) npmrc += `${registryHostPath}/:_authToken=\${NODE_AUTH_TOKEN}\n`;
+  npmrc += 'audit=false\nfund=false\n';
   await writeFile(join(consumerDir, '.npmrc'), npmrc, 'utf-8');
 
   await writeFile(join(consumerDir, 'consumer-entry.mjs'), CONSUMER_ENTRY, 'utf-8');

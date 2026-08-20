@@ -174,13 +174,16 @@ jobs:
   # ── Job 4: Acceptance Tests (after Jobs 1 + 2 + 3) — REQUIRED GATE ────
   # The quickstart acceptance flow (WS-42): boots the stub-agent stack on a
   # Testcontainers Postgres (migrations via test/setup-db.ts; Redis OFF), drives
-  # the documented quickstart through the PUBLIC SDK, asserts the full
+  # the documented quickstart through the PUBLIC SDK, and asserts the full
   # message_started → token → tool_call_* → message_completed sequence with a
-  # real tool round-trip, and — the SC-09 install proof — installs the published
-  # @swiftagent/* from GitHub Packages (the `pr` snapshot on PRs, `latest` on
-  # main) into a throwaway consumer. `packages: read` + NODE_AUTH_TOKEN wire that
-  # registry install; Testcontainers uses the runner's Docker daemon, so no
+  # real tool round-trip. Testcontainers uses the runner's Docker daemon, so no
   # `services:` block is needed. A non-zero exit BLOCKS the pipeline.
+  #
+  # WS-44: no registry auth here anymore. The install-from-registry proof is an
+  # explicit opt-in (SWIFTAGENT_RUN_INSTALL_PROOF=1) that LOUD-SKIPS until a
+  # version exists on public npm; WS-45's local Verdaccio registry re-enables it
+  # per PR via SWIFTAGENT_INSTALL_REGISTRY. Public npm needs no token, so the
+  # former private-registry permissions/registry-url/scope/NODE_AUTH_TOKEN are gone.
   #
   # NOTE: the root `test/` tree is excluded from typecheck/lint by convention, so
   # the acceptance suite is validated by RUNNING it here, not by build-lint.
@@ -190,7 +193,6 @@ jobs:
     needs: [build-lint, unit-tests, integration-tests]
     permissions:
       contents: read
-      packages: read
 
     steps:
       - name: Checkout
@@ -201,16 +203,11 @@ jobs:
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      # `registry-url` + `scope` make setup-node write the GitHub Packages auth
-      # line keyed to NODE_AUTH_TOKEN, so the throwaway consumer's `npm install`
-      # authenticates against npm.pkg.github.com (never a committed token).
-      - name: Setup Node.js (GitHub Packages)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          registry-url: https://npm.pkg.github.com
-          scope: '@swiftagent'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -223,13 +220,8 @@ jobs:
 
       - name: Run acceptance tests
         run: pnpm test:acceptance
-        env:
-          # read:packages credential for the registry install proof. Same-repo
-          # GITHUB_TOKEN carries `packages: read` (granted above) — sufficient to
-          # install the @swiftagent/* snapshot/stable published by WS-38.
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # DATABASE_URL is provisioned per-suite by test/setup-db.ts
-          # (Testcontainers). Redis is OFF by default (single-node gateway).
+        # DATABASE_URL is provisioned per-suite by test/setup-db.ts
+        # (Testcontainers). Redis is OFF by default (single-node gateway).
 
   # ── Job 5: Publish dry-run (pack gate) ───────────────────────────────
   # Packs @swiftagent/{sdk,react,shared} and asserts each tarball ships only

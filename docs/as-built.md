@@ -6,8 +6,8 @@
 pnpm/Turborepo TypeScript monorepo (Node 22, TS strict, ESM-only) with nine
 library packages, one deployable server app, and a maintained example app under
 `examples/`. `@swiftagent/sdk`, `@swiftagent/react`, and `@swiftagent/shared`
-are now **publishable** to GitHub Packages (`npm.pkg.github.com`); the rest stay
-`private`.
+are **publishable** to public npm (`registry.npmjs.org`, Apache-2.0); the rest
+stay `private`.
 
 ### @swiftagent/shared (`packages/shared`)
 
@@ -189,26 +189,35 @@ executor, and finalizes tool calls/trace/terminal run state on every exit path.
 Merged `AbortSignal` for model/per-tool/total-run deadlines; terminal
 transitions conditional (`WHERE status='running'`). Unchanged by sdk-dev-ux.
 
-## Versioning & Publishing (WS-37/WS-38)
+## Versioning & Publishing (WS-37/WS-38, public posture WS-44)
 
 - **Changesets** is the version source of truth: root `@changesets/cli` devDep,
-  `.changeset/config.json` (`access: restricted`, `baseBranch: main`), scripts
+  `.changeset/config.json` (`access: public`, `baseBranch: main`), scripts
   `changeset` / `version-packages`. A pending changeset for the SDK surface
   exists; packages are still at `0.0.1` until the first release runs.
 - **`docs/policies/versioning.md`** documents semver, deprecation/removal, and
   the SDK↔server compatibility policy + support matrix.
 - Publishable packages (`sdk`, `react`, `shared`) declare
-  `publishConfig` (`registry: npm.pkg.github.com`, `access: restricted`),
-  `files` allowlist (dist + README, tests excluded), `repository`/`license`
-  (`UNLICENSED`)/`author`, and `exports` maps (`.` + `./internal` for sdk).
-  `private` removed. `.npmrc` maps `@swiftagent:registry=…github.com` (scope
-  only; token injected in CI). `workspace:*` resolves to concrete versions at
-  publish; `scripts/verify-pack.mjs` is the pack/dry-run verification gate.
-- **`publish-sdks.yml`** (push to `main`): Changesets `version` + `publish` to
-  GitHub Packages on `latest` (`contents: write` + `packages: write`).
-- **`publish-sdks-prerelease.yml`** (`pull_request`): snapshot
-  `0.0.0-pr-<sha>` published under the `pr` dist-tag (`packages: write` only,
-  no git writes) so the acceptance test can install a real registry artifact.
+  `publishConfig` (`registry: registry.npmjs.org`, `access: public`),
+  `files` allowlist (dist + README + LICENSE + NOTICE, tests excluded),
+  `repository`/`license` (`Apache-2.0`, backed by the root `LICENSE`/`NOTICE`
+  with byte-identical per-package copies)/`author`, and `exports` maps
+  (`.` + `./internal` for sdk). No `private` field. `.npmrc` carries only
+  behavioral flags (no scope-registry routing; the default public registry
+  applies). `workspace:*` resolves to concrete versions at publish;
+  `scripts/verify-pack.mjs` is the pack/dry-run verification gate.
+- **`publish-sdks.yml`** (manual `workflow_dispatch` ONLY — the release
+  trigger, see `RELEASING.md`): Changesets `version` + `publish` to public npm
+  on `latest` (`contents: write`; auth via the owner-provisioned `NPM_TOKEN`
+  secret).
+- **`publish-sdks-prerelease.yml`** (manual `workflow_dispatch` ONLY): snapshot
+  `0.0.0-pr-<sha>` published under the `pr` dist-tag (no git writes). The
+  former per-PR auto-snapshot is retired; per-PR install proof returns with
+  WS-45's local registry.
+- Contribution terms: `CONTRIBUTING.md` + `DCO` (Developer Certificate of
+  Origin 1.1, `Signed-off-by` required on every commit, enforced by
+  `scripts/check-dco.mjs` via `.github/workflows/dco.yml`); contributors
+  retain copyright.
 
 ## Documentation
 
@@ -223,8 +232,8 @@ and `useAgentChat` threading `websocketUrl`. as-built snapshots remain canonical
 - `docker-compose.yml`: Postgres 16, Redis 7, server. `apps/server/Dockerfile`:
   multi-stage Node 22, exposes only port 3000.
 - **CI (`.github/workflows/ci.yml`):** build/lint, unit tests, integration tests
-  (Testcontainers Postgres) + drift guard, plus the new **acceptance gate**
-  (`pnpm test:acceptance`, Docker + `read:packages` token).
+  (Testcontainers Postgres) + drift guard, plus the **acceptance gate**
+  (`pnpm test:acceptance`, Docker; no registry credential needed).
 - Deploy workflows (`deploy-dev`/`staging`/`prod`): GitHub OIDC → ECR →
   Terraform → migrate; `/health` + realtime WS smoke (`pnpm smoke:realtime`,
   deploy-blocking). Terraform composes networking, RDS, ElastiCache, ECR, SSM
@@ -233,8 +242,10 @@ and `useAgentChat` threading `websocketUrl`. as-built snapshots remain canonical
 - **Acceptance suite (`test/acceptance/`, `pnpm test:acceptance`):** Testcontainers
   Postgres via `setup-db.ts`, Redis off (single-node harness), deterministic fake
   provider + echo runner. `install-published.ts` / `install-registry.acceptance.test.ts`
-  install `@swiftagent/*` from GitHub Packages (PR → `pr` tag, main → `latest`)
-  into a throwaway consumer; `quickstart.acceptance.test.ts` drives register →
+  install `@swiftagent/*` from a parameterizable registry
+  (`SWIFTAGENT_INSTALL_REGISTRY`, default public npm) into a throwaway
+  consumer, opt-in via `SWIFTAGENT_RUN_INSTALL_PROOF=1` (loud-skips until a
+  published version exists); `quickstart.acceptance.test.ts` drives register →
   session → connect → stream and asserts
   `message_started → token → tool_call_* → message_completed` via `ChatEventSchema`.
   Config `test/vitest.acceptance.config.ts` (serial, 120s timeouts).
@@ -243,10 +254,10 @@ and `useAgentChat` threading `websocketUrl`. as-built snapshots remain canonical
 
 ## Known Limitations / Tech Debt
 
-- **Packages unreleased:** still `0.0.1`; the first `changeset publish` to
-  GitHub Packages has not run, so no consumable version exists yet.
-- **Private registry only:** GitHub Packages; public-npm publishing deferred.
-  Installing `@swiftagent/*` (CI or local dev) needs a `read:packages` token.
+- **Packages unreleased (release armed, not fired):** still `0.0.1`; no version
+  exists on `registry.npmjs.org` yet. The public-npm release pipeline is one
+  documented manual `workflow_dispatch` away (see `RELEASING.md`); the owner
+  must first provision the npm org + `NPM_TOKEN` secret.
 - **Connect-time compat is client-side** via the session-create header; the
   WebSocket stream carries no version field, so a true stream-handshake version
   check is a follow-up.
@@ -288,8 +299,9 @@ and `useAgentChat` threading `websocketUrl`. as-built snapshots remain canonical
   public surfaces (locked `exports`, `/internal` subpath, `useConnection`
   internalized, export-snapshot guards); protocol versioning + compatibility
   policy (`API_PROTOCOL_VERSION`, `assertProtocolCompatible`, register/connect
-  assertions, `x-swiftagent-protocol` header); Changesets + GitHub Packages
-  publishing with PR snapshot prereleases and a pack verification gate; a
+  assertions, `x-swiftagent-protocol` header); Changesets + registry
+  publishing (to the then-private GitHub-hosted registry; retargeted to public
+  npm by WS-44) with PR snapshot prereleases and a pack verification gate; a
   maintained `examples/quickstart` app; README/quickstart/vision doc alignment;
   typed `SwiftAgentError` setup/runtime messages; and a Testcontainers quickstart
   acceptance suite that installs the published packages.

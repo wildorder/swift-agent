@@ -4,12 +4,7 @@ The TypeScript SDK for building, defining, and running Swift Agent agents. It ex
 
 ## Install
 
-`@swiftagent/*` packages are published to the org's private GitHub Packages registry, not public npm. Add the scope mapping to your `.npmrc` (already committed at the repo root here) and authenticate with a token that has `read:packages`:
-
-```ini
-@swiftagent:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PKG_TOKEN}
-```
+Install from public npm — no registry configuration or token needed:
 
 ```sh
 pnpm add @swiftagent/sdk

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "description": "TypeScript SDK for building, defining, and running Swift Agent agents.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "Swift Agent",
   "repository": {
     "type": "git",
@@ -25,6 +25,8 @@
   "files": [
     "dist",
     "README.md",
+    "LICENSE",
+    "NOTICE",
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
     "!dist/**/*.test.js.map",
@@ -32,8 +34,8 @@
     "!dist/**/__tests__"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
