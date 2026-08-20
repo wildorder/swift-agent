@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "programId": "oss-direction",
+  "updatedAt": "2026-08-20T03:41:59.995Z",
+  "runs": [
+    {
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "stage": "plan-audit",
+      "startedAt": "2026-08-20T03:41:59.973Z",
+      "outcome": "human-required",
+      "result": "HUMAN_REQUIRED",
+      "reason": "SC-15 requires a genuine intent choice. Either the program must wait for the owner visibility click and require the anonymous pull before SC-15, SC-07, and final clean-checkout claims are accepted, or the no-human-dependent-checkpoint decision must remain and SC-15 must be weakened to deliver the documented post-click verification command without claiming that it succeeded during the program. Wording alone cannot preserve both outcomes."
+    }
+  ],
+  "findings": {},
+  "checkpoints": {},
+  "attempts": {},
+  "diagnoses": [
+    {
+      "stage": "plan-audit",
+      "outcome": "execution-mode-appropriate",
+      "reason": "The plan contains real independent delivery boundaries and a staged migration rather than cosmetic task slicing. After WS-51, WS-43 and WS-44 are independent roots; packaging/scaffold and hosting/playground chains can proceed concurrently, while GHCR publication followed by digest adoption is an unavoidable expand-then-migrate sequence. Each chain has its own deployable or publishable artifact and rejoins only at the terminal documentation/guardrail gate.",
+      "detail": "WS-51 branches independently to WS-43 and WS-44; WS-44 -> WS-45 -> WS-46 is a package-consumption and scaffold chain; WS-43 -> WS-48 is an independently testable playground-application chain; WS-43 + WS-44 -> WS-50 -> WS-47 is a container and deployment-template chain; WS-50 must publish before docker-compose.yml can adopt the generated manifest-list digest; WS-49 is the sole terminal join and depends on WS-46, WS-47, and WS-48; AGENTS.md requires parallelization for large tasks spanning independent files",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    }
+  ],
+  "criteria": {
+    "SC-01": {
+      "status": "satisfiable",
+      "reason": "The existing repositories can provision the workspace, hashed API key, tool-bearing agent, and runner URL without a public API addition. The production server already registers the deterministic echo provider and the ModelProvider contract supports tool_call chunks; WS-43 includes packages/models, so the existing development-only fixture can be extended to script a tool round trip without introducing a new provider. The smoke test currently requires SMOKE_API_KEY and checks only message/token completion, but both are explicitly assigned to WS-43 for replacement.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-02": {
+      "status": "satisfiable",
+      "reason": "apps/server/src/main.ts binds REST and WebSocket to API_PORT only. The two contradictory compose values are the 3001 port publication and ws://localhost:3001; WS-43 explicitly owns both while preserving GATEWAY_PORT for the standalone gateway.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-03": {
+      "status": "satisfiable",
+      "reason": "All three named package manifests currently share the same GitHub Packages/restricted/UNLICENSED posture, and verify-pack has one canonical PACKAGES array containing exactly those three. WS-44 owns those manifests, the repository license, and the verifier assertion.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-04": {
+      "status": "satisfiable",
+      "reason": "pnpm packing already demonstrates workspace:* rewriting, while the current stable and prerelease workflows expose the exact registry/auth and trigger surfaces WS-44 must replace. A workflow_dispatch-only release plus non-publishing dry runs can express the criterion without pressing the trigger.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-05": {
+      "status": "satisfiable",
+      "reason": "Verdaccio can replace the current authenticated GitHub-registry acceptance path while preserving the existing throwaway-consumer import and typecheck shape. WS-45 explicitly requires an npm protocol endpoint, publication of all three packages, teardown, and CI wiring.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-06": {
+      "status": "satisfiable",
+      "reason": "The workspace globs admit the new package, the SDK already exposes all registration/session/runner operations needed by the generated project, and WS-46 follows both WS-43 and WS-45. WS-46 is also authorized to amend the release workflow after the package exists.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-07": {
+      "status": "satisfiable",
+      "reason": "The server image contains the built migration entry point and committed Drizzle migrations, and both candidate hosts provide a pre-deploy or release-command mechanism. Fly currently offers managed Postgres and managed Upstash Redis, so at least one permitted target can meet the complete resource set.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-08": {
+      "status": "satisfiable",
+      "reason": "The public ChatEvent union exposes token, tool_call_started, and tool_call_completed with run and call identity. Duration can be measured at the mediator or UI from the observed event pair without adding a protocol field, and WS-49 owns deployment and live smoke verification.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-09": {
+      "status": "satisfiable",
+      "reason": "The mediator can authenticate with its workspace API key, obtain runId from streamed events, and poll the existing authenticated GET /v1/runs/:runId route. RunStatusSchema proves the terminal family is exactly completed, failed, cancelled, and timed_out; only complete() persists tokenUsage, matching the conservative null-usage rule. A separate Postgres ledger and mediator refusal protocol require no runtime change. A qualifying provider can be selected during WS-49; Google's current Gemini project spend caps provide a provider-side backstop for a dedicated project/key, although the documented accounting latency must be reflected in the chosen cap.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-10": {
+      "status": "satisfiable",
+      "reason": "The current README, quickstart, vision ladder, and package READMEs consistently describe the pre-release state and are all assigned to later workstreams. WS-49 now depends on WS-46, WS-47, and WS-48, so the final documentation pass cannot precede the scaffold, deploy button, or live playground. Decision 4 explicitly defines the released-state framing and forbids invented version claims.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-11": {
+      "status": "conflict",
+      "reason": "The asserted exhaustive roster closes over the current twelve workspaces but not the terminal repository. pnpm-workspace.yaml will also include packages/create-swift-agent and apps/playground. create-swift-agent is a fourth public npm artifact and part of the supported public-consumer path, while @swiftagent/playground must remain private under AGENTS.md. Neither planned member appears in the claimed exhaustive workspace disposition or publishing-surface set, and WS-44 runs before WS-46 creates the public package.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-12": {
+      "status": "satisfiable",
+      "reason": "The repository confirms all relevant realtime state is process-local. The complete new deployment-surface family is the WS-47 adopter template and the WS-49 playground deployment. Fly can be configured for one Machine, disabled auto-stop/autoscaling, and a rolling replacement with max_unavailable=1; Railway's default overlap would fail the observation requirement, so WS-47's mandated comparison must select/configure the qualifying host.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-13": {
+      "status": "satisfiable",
+      "reason": "The repository currently has one canonical pull-request template and no CONTRIBUTING.md or DCO. The existing CI is pull-request triggered, so WS-44 can add one trailer-validation implementation, test its positive and negative cases, and amend the existing template without creating a competing copy.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-14": {
+      "status": "satisfiable",
+      "reason": "apps/server/Dockerfile already builds the complete production dependency graph, includes migrations, runs as a non-root user, and exposes the unified listener. WS-50 can add a buildx workflow for both named architectures and validate the pulled image against the same REST, WebSocket, and migration surfaces.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-15": {
+      "status": "conflict",
+      "reason": "The digest-pin portion is implementable, and GitHub's current documentation confirms that public container packages allow anonymous pulls and that the REST Packages API has no visibility mutation. The plan nevertheless requires a successful anonymous pull as acceptance proof while Decision 5, constraints.ghcrVisibility, and WS-50.scope state that the prerequisite owner UI click is outside the workstream and its checkpoint must not depend on it. If the owner has not clicked, the package remains private and the required proof and clean-checkout pull cannot succeed.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-16": {
+      "status": "satisfiable",
+      "reason": "Every required event datum exists except the deadline, which the criterion correctly makes demo-owned. The runtime emits tool_call_completed for both completed and failed calls, and createChatSession.disconnect intentionally suppresses reconnect, so constructing a fresh client with the same session token/URL is the available recovery path.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    "SC-17": {
+      "status": "satisfiable",
+      "reason": "The four named commands exist at the root and map to the Turborepo workspace tasks. The observed index test performs the heavy dynamic import inside a default-timeout test and its Vitest config supplies no override, so WS-51 can remove the timing margin without changing assertions. WS-49 is now the sole terminal workstream and explicitly repeats the cache-bypassed proof after both new workspaces exist.",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    }
+  }
+}

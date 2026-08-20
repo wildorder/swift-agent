@@ -1,67 +1,62 @@
 {
   "schemaVersion": 4,
   "programId": "oss-direction",
-  "generatedAt": "2026-08-19T22:46:53.606Z",
-  "inputHash": "5dafa445665e940268e4899bed75f8bb47566e3485891d24e04f68c2c42706b9",
+  "generatedAt": "2026-08-20T03:41:59.993Z",
+  "inputHash": "c12da2ae175cd7e94fe68614a8a5d093d5d0ebca874564fb0dec3a106aa5f9d1",
   "outcome": "human-required",
   "summary": "Plan audit requires a human requirements decision before authoring.",
-  "humanDecisionReason": "The user explicitly decided that GHCR visibility must be changed once through gh api and that no deliverable should depend on a human approval/configuration step. GitHub does not expose a documented API operation for that mutation, while its supported UI change is manual and irreversible. The user must choose between accepting that one-time UI configuration, choosing a registry/publication design with automatable visibility, or changing repository visibility before publication.",
+  "humanDecisionReason": "SC-15 requires a genuine intent choice. Either the program must wait for the owner visibility click and require the anonymous pull before SC-15, SC-07, and final clean-checkout claims are accepted, or the no-human-dependent-checkpoint decision must remain and SC-15 must be weakened to deliver the documented post-click verification command without claiming that it succeeded during the program. Wording alone cannot preserve both outcomes.",
   "replanFindings": [
     {
       "severity": "major",
       "category": "acceptance-criteria",
-      "subject": "SC-09",
-      "message": "SC-09 requires every reserved run to settle against terminal RunRecord usage, but actual tokenUsage exists only for completed runs. The exhaustive terminal family is completed, failed, cancelled, and timed_out; fail(), cancel(), and timeout() all persist tokenUsage as null. Because runtime feature changes are excluded, the plan must define an intent-preserving conservative settlement rule for null-usage terminal runs instead of claiming actual-usage settlement.",
+      "subject": "SC-11",
+      "message": "The claimed exhaustive publishing/workspace disposition is closed over the current repository instead of the terminal repository. The program necessarily creates create-swift-agent, a fourth public npm package on the public-consumer path, and @swiftagent/playground, another private workspace package. Because neither appears in SC-11's complete roster or constraints.publishingSurfaces, the criterion cannot remain exhaustive after its own program executes.",
       "evidence": [
         {
           "kind": "concern",
-          "named": "nullable terminal usage",
-          "detail": "packages/shared/src/types/run.ts defines RunRecord.tokenUsage as nullable."
+          "named": "future workspace members omitted",
+          "detail": "pnpm-workspace.yaml includes packages/* and apps/*; manifest packages guarantees packages/create-swift-agent and apps/playground will become members."
         },
         {
           "kind": "concern",
-          "named": "completed transition",
-          "detail": "packages/db/src/repositories/run-repo.ts complete(runId, tokenUsage) persists usage."
+          "named": "public package omitted from public-consumer posture",
+          "detail": "SC-06 and WS-46 require create-swift-agent to publish through the same public-npm workflow, but SC-11 and constraints.publishingSurfaces name only sdk/react/shared."
         },
         {
           "kind": "concern",
-          "named": "three unsupported terminal transitions",
-          "detail": "The same repository's fail(), cancel(), and timeout() methods set only status and updatedAt, leaving tokenUsage null."
+          "named": "private roster becomes non-exhaustive",
+          "detail": "The asserted nine-package private roster omits the planned private @swiftagent/playground package."
         },
         {
           "kind": "concern",
-          "named": "public API preserves null",
-          "detail": "GET /v1/runs/:runId and packages/sdk/src/client.ts getRun return/parse the nullable RunRecord unchanged."
+          "named": "ordering gap",
+          "detail": "WS-44 owns the exhaustive sweep but precedes WS-46, which creates the omitted public package and modifies the release workflow afterward."
         }
       ],
       "requiresReplan": true,
-      "id": "93d5fd3d6fb041db"
+      "id": "5b2ddc598faad8cc"
     },
     {
       "severity": "blocker",
       "category": "acceptance-criteria",
       "subject": "SC-15",
-      "message": "The public-GHCR bootstrap is assigned to a nonexistent documented gh api operation. GitHub exposes package visibility in GET/list responses but no REST PATCH/update-visibility endpoint; its supported procedure is the package-settings UI and is irreversible once public. The plan's claim that the package inherits repository visibility is also false: linked packages inherit access permissions, not visibility. SC-15 cannot be reached through the user-decided mechanism.",
+      "message": "SC-15 requires successful anonymous-pull proof and a working clean-checkout pull, but the only operation that makes the package public is an owner UI action that the plan explicitly excludes from workstream checkpoints. The plan cannot simultaneously guarantee the proof and guarantee that no checkpoint depends on the prerequisite action.",
       "evidence": [
         {
           "kind": "concern",
-          "named": "missing API operation",
-          "detail": "GitHub's REST package endpoint registry documents list, get, delete, restore, and version operations; it contains no PATCH or update-package-visibility operation: https://docs.github.com/en/rest/packages/packages"
+          "named": "acceptance depends on excluded action",
+          "detail": "SC-15 says an anonymous docker pull succeeds; Decision 5, constraints.ghcrVisibility, and WS-50.scope say the checkpoint does not block on the owner's visibility click."
         },
         {
           "kind": "concern",
-          "named": "UI-only documented procedure",
-          "detail": "GitHub documents Package settings → Danger Zone → Change visibility and warns that a public package cannot be made private again: https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility"
+          "named": "private default",
+          "detail": "GitHub documents separately configurable granular package visibility and anonymous pulls only for public container packages: https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages"
         },
         {
           "kind": "concern",
-          "named": "incorrect inheritance premise",
-          "detail": "GitHub states that linked packages inherit repository access permissions but not visibility; newly published packages default private."
-        },
-        {
-          "kind": "concern",
-          "named": "repeated impossible mechanism",
-          "detail": "The gh api mechanism appears in Requirements Decision 2, the architecture visibility section, constraints.ghcrVisibility, and workstreams[WS-50].scope."
+          "named": "no automatable fallback",
+          "detail": "GitHub's complete REST Packages endpoint family has list/get/delete/restore/version operations but no visibility mutation: https://docs.github.com/en/rest/packages"
         }
       ],
       "requiresReplan": true,
@@ -72,58 +67,53 @@
     {
       "severity": "major",
       "category": "acceptance-criteria",
-      "subject": "SC-09",
-      "message": "SC-09 requires every reserved run to settle against terminal RunRecord usage, but actual tokenUsage exists only for completed runs. The exhaustive terminal family is completed, failed, cancelled, and timed_out; fail(), cancel(), and timeout() all persist tokenUsage as null. Because runtime feature changes are excluded, the plan must define an intent-preserving conservative settlement rule for null-usage terminal runs instead of claiming actual-usage settlement.",
+      "subject": "SC-11",
+      "message": "The claimed exhaustive publishing/workspace disposition is closed over the current repository instead of the terminal repository. The program necessarily creates create-swift-agent, a fourth public npm package on the public-consumer path, and @swiftagent/playground, another private workspace package. Because neither appears in SC-11's complete roster or constraints.publishingSurfaces, the criterion cannot remain exhaustive after its own program executes.",
       "evidence": [
         {
           "kind": "concern",
-          "named": "nullable terminal usage",
-          "detail": "packages/shared/src/types/run.ts defines RunRecord.tokenUsage as nullable."
+          "named": "future workspace members omitted",
+          "detail": "pnpm-workspace.yaml includes packages/* and apps/*; manifest packages guarantees packages/create-swift-agent and apps/playground will become members."
         },
         {
           "kind": "concern",
-          "named": "completed transition",
-          "detail": "packages/db/src/repositories/run-repo.ts complete(runId, tokenUsage) persists usage."
+          "named": "public package omitted from public-consumer posture",
+          "detail": "SC-06 and WS-46 require create-swift-agent to publish through the same public-npm workflow, but SC-11 and constraints.publishingSurfaces name only sdk/react/shared."
         },
         {
           "kind": "concern",
-          "named": "three unsupported terminal transitions",
-          "detail": "The same repository's fail(), cancel(), and timeout() methods set only status and updatedAt, leaving tokenUsage null."
+          "named": "private roster becomes non-exhaustive",
+          "detail": "The asserted nine-package private roster omits the planned private @swiftagent/playground package."
         },
         {
           "kind": "concern",
-          "named": "public API preserves null",
-          "detail": "GET /v1/runs/:runId and packages/sdk/src/client.ts getRun return/parse the nullable RunRecord unchanged."
+          "named": "ordering gap",
+          "detail": "WS-44 owns the exhaustive sweep but precedes WS-46, which creates the omitted public package and modifies the release workflow afterward."
         }
       ],
       "requiresReplan": true,
-      "id": "93d5fd3d6fb041db"
+      "id": "5b2ddc598faad8cc"
     },
     {
       "severity": "blocker",
       "category": "acceptance-criteria",
       "subject": "SC-15",
-      "message": "The public-GHCR bootstrap is assigned to a nonexistent documented gh api operation. GitHub exposes package visibility in GET/list responses but no REST PATCH/update-visibility endpoint; its supported procedure is the package-settings UI and is irreversible once public. The plan's claim that the package inherits repository visibility is also false: linked packages inherit access permissions, not visibility. SC-15 cannot be reached through the user-decided mechanism.",
+      "message": "SC-15 requires successful anonymous-pull proof and a working clean-checkout pull, but the only operation that makes the package public is an owner UI action that the plan explicitly excludes from workstream checkpoints. The plan cannot simultaneously guarantee the proof and guarantee that no checkpoint depends on the prerequisite action.",
       "evidence": [
         {
           "kind": "concern",
-          "named": "missing API operation",
-          "detail": "GitHub's REST package endpoint registry documents list, get, delete, restore, and version operations; it contains no PATCH or update-package-visibility operation: https://docs.github.com/en/rest/packages/packages"
+          "named": "acceptance depends on excluded action",
+          "detail": "SC-15 says an anonymous docker pull succeeds; Decision 5, constraints.ghcrVisibility, and WS-50.scope say the checkpoint does not block on the owner's visibility click."
         },
         {
           "kind": "concern",
-          "named": "UI-only documented procedure",
-          "detail": "GitHub documents Package settings → Danger Zone → Change visibility and warns that a public package cannot be made private again: https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility"
+          "named": "private default",
+          "detail": "GitHub documents separately configurable granular package visibility and anonymous pulls only for public container packages: https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages"
         },
         {
           "kind": "concern",
-          "named": "incorrect inheritance premise",
-          "detail": "GitHub states that linked packages inherit repository access permissions but not visibility; newly published packages default private."
-        },
-        {
-          "kind": "concern",
-          "named": "repeated impossible mechanism",
-          "detail": "The gh api mechanism appears in Requirements Decision 2, the architecture visibility section, constraints.ghcrVisibility, and workstreams[WS-50].scope."
+          "named": "no automatable fallback",
+          "detail": "GitHub's complete REST Packages endpoint family has list/get/delete/restore/version operations but no visibility mutation: https://docs.github.com/en/rest/packages"
         }
       ],
       "requiresReplan": true,
@@ -132,66 +122,86 @@
   ],
   "classAnalyses": [
     {
-      "subject": "SC-09",
+      "subject": "SC-11",
       "scope": "systemic",
-      "rootCause": "The accounting rule treats terminal RunRecord usage as universally present even though the canonical schema makes it nullable and three of four terminal transitions never persist usage.",
+      "rootCause": "The completeness boundary was derived from the current workspace roster even though the program manifest guarantees two additional workspace members before the terminal checkpoint.",
       "affectedSubjects": [
-        "failed",
-        "cancelled",
-        "timed_out"
+        "program Architecture Changes publishing-posture roster",
+        "program twelve-surface publishing table",
+        "program Scope (In) public-npm surface sweep",
+        "program SC-11",
+        "manifest constraints.publishingSurfaces",
+        "manifest successCriteria[SC-11]",
+        "manifest workstreams[WS-44].scope",
+        "manifest workstreams[WS-46].scope",
+        "manifest workstreams[WS-49].scope final search"
       ],
       "checkedSubjects": [
-        "completed",
-        "failed",
-        "cancelled",
-        "timed_out",
-        "program SC-09",
-        "manifest successCriteria[SC-09]",
-        "program Scope (In) abuse-controls rule",
-        "program Risk Register spend-ledger rule",
-        "manifest workstreams[WS-49].scope",
-        "packages/shared/src/types/run.ts",
-        "packages/db/src/schema/runs.ts",
-        "packages/db/src/repositories/run-repo.ts",
-        "packages/api/src/routes/runs.ts",
-        "packages/sdk/src/client.ts"
+        "all affected canonical plan and manifest copies",
+        "manifest packages complete planned roster",
+        "manifest workstreams complete dependency roster",
+        "pnpm-workspace.yaml",
+        "all twelve current workspace package.json files",
+        "planned packages/create-swift-agent/package.json",
+        "planned apps/playground/package.json",
+        "AGENTS.md Delivery convention",
+        "all surfaces enumerated by constraints.publishingSurfaces",
+        "repository-wide active private/restricted posture search",
+        "program Architecture Changes publishing-posture roster",
+        "program twelve-surface publishing table",
+        "program Scope (In) public-npm surface sweep",
+        "program SC-11",
+        "manifest constraints.publishingSurfaces",
+        "manifest successCriteria[SC-11]",
+        "manifest workstreams[WS-44].scope",
+        "manifest workstreams[WS-46].scope",
+        "manifest workstreams[WS-49].scope final search"
       ],
-      "completenessBasis": "RunStatusSchema is the canonical status union. Excluding the sole nonterminal status running leaves exactly completed, failed, cancelled, and timed_out; every corresponding repository transition was inspected."
+      "completenessBasis": "pnpm-workspace.yaml closes workspace membership, the manifest packages array resolves guaranteed future members, and constraints.publishingSurfaces supplies the plan's claimed exhaustive active-copy list."
     },
     {
       "subject": "SC-15",
       "scope": "systemic",
-      "rootCause": "A factual platform assumption and its chosen implementation mechanism were copied across the plan even though GitHub provides no documented API mutation for package visibility.",
+      "rootCause": "One manual prerequisite is simultaneously declared non-blocking and required to have completed for acceptance evidence that cannot exist before it.",
       "affectedSubjects": [
-        "program Requirements Decision 2",
+        "Requirements Decision 5",
         "program Architecture Changes GHCR visibility section",
+        "program Scope (In) anonymous image claim",
+        "program Scope (Out) manual visibility action",
         "program Risk Register first-GHCR-push mitigation",
-        "manifest constraints.ghcrVisibility",
-        "manifest workstreams[WS-50].scope one-time visibility include"
-      ],
-      "checkedSubjects": [
         "program SC-15",
-        "manifest successCriteria[SC-15]",
-        "program Requirements Decision 2",
-        "program Architecture Changes GHCR visibility section",
-        "program Risk Register first-GHCR-push mitigation",
         "manifest constraints.ghcrVisibility",
         "manifest constraints.artifactAudience",
-        "manifest workstreams[WS-50].scope",
-        "GitHub REST API endpoints for packages",
-        "GitHub package visibility configuration guide",
-        "GitHub package permissions guide",
-        "manifest workstreams[WS-50].scope one-time visibility include"
+        "manifest successCriteria[SC-15]",
+        "manifest workstreams[WS-50].scope"
       ],
-      "completenessBasis": "A search of both canonical plan artifacts closed every active gh api/package-visibility copy. GitHub's official REST endpoint registry and official configuration guide close the available documented mutation mechanisms."
+      "checkedSubjects": [
+        "all affected canonical plan and manifest copies",
+        "docker-compose.yml",
+        "apps/server/Dockerfile",
+        "GitHub package permissions documentation",
+        "GitHub package visibility documentation",
+        "complete GitHub REST Packages endpoint roster",
+        "Requirements Decision 5",
+        "program Architecture Changes GHCR visibility section",
+        "program Scope (In) anonymous image claim",
+        "program Scope (Out) manual visibility action",
+        "program Risk Register first-GHCR-push mitigation",
+        "program SC-15",
+        "manifest constraints.ghcrVisibility",
+        "manifest constraints.artifactAudience",
+        "manifest successCriteria[SC-15]",
+        "manifest workstreams[WS-50].scope"
+      ],
+      "completenessBasis": "Decision 5 enumerates every repeated disposition copy, while GitHub's official visibility and REST documentation closes the external mechanism family and confirms that no automated alternative was omitted."
     }
   ],
   "criteriaPatches": [],
   "checkpointAssessments": [],
-  "criticSummary": "SC-09: The mediator and public GET /v1/runs/:runId path are viable, but the required settlement rule is not defined for the complete terminal RunStatus family. RunRecord.tokenUsage is nullable; createRunRepo.complete writes usage, while fail, cancel, and timeout write terminal statuses without usage. Because runtime changes are forbidden, the plan cannot settle those three terminal outcomes against actual terminal RunRecord usage as literally required.; SC-15: The digest pin and anonymous pull proof are expressible, but WS-50 mandates changing GHCR package visibility through gh api. GitHub's documented REST package API has no PATCH/update-visibility endpoint; visibility is only a list filter there, while GitHub's official visibility procedure requires Package settings → Change visibility and warns that public cannot be reverted to private. The plan also incorrectly says a linked package inherits repository visibility; GitHub documents inheritance of access permissions, not visibility. Therefore the selected one-time mechanism cannot create the public package state SC-15 requires.",
+  "criticSummary": "SC-11: The asserted exhaustive roster closes over the current twelve workspaces but not the terminal repository. pnpm-workspace.yaml will also include packages/create-swift-agent and apps/playground. create-swift-agent is a fourth public npm artifact and part of the supported public-consumer path, while @swiftagent/playground must remain private under AGENTS.md. Neither planned member appears in the claimed exhaustive workspace disposition or publishing-surface set, and WS-44 runs before WS-46 creates the public package.; SC-15: The digest-pin portion is implementable, and GitHub's current documentation confirms that public container packages allow anonymous pulls and that the REST Packages API has no visibility mutation. The plan nevertheless requires a successful anonymous pull as acceptance proof while Decision 5, constraints.ghcrVisibility, and WS-50.scope state that the prerequisite owner UI click is outside the workstream and its checkpoint must not depend on it. If the owner has not clicked, the package remains private and the required proof and clean-checkout pull cannot succeed.",
   "criticLogs": [
-    "build-logs/oss-direction-plan-audit-2026-08-19T22-41-23-043Z-439fb04a-critic-attempt-1.log"
+    "build-logs/oss-direction-plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa-critic-attempt-1.log"
   ],
   "planningInstruction": "Run /plan-program oss-direction. This report requires a human requirements decision before any replanning. Present every decision in humanDecisionReason to the user as explicit choices, wait for their answers, and record each decision with its rationale in the program document. The user's recorded decisions are the only authorization for changing success criteria or user intent. Then resolve every replanFindings and blocker/major relatedFindings entry, close every classAnalyses root-cause class by reconciling every checkedSubjects member with an explicit fixed or already-correct disposition and concrete evidence, and re-check every workstreams[].scope copy affected by a criterion or interface repair.",
-  "supersedes": "docs/programs/oss-direction-replan-history/2026-08-19T22-46-53-597Z-09ce3c3f.json"
+  "supersedes": "docs/programs/oss-direction-replan-history/2026-08-20T03-41-59-979Z-29d1b24d.json"
 }

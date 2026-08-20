@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 4,
+  "programId": "oss-direction",
+  "generatedAt": "2026-08-19T22:46:53.606Z",
+  "inputHash": "5dafa445665e940268e4899bed75f8bb47566e3485891d24e04f68c2c42706b9",
+  "outcome": "human-required",
+  "summary": "Plan audit requires a human requirements decision before authoring.",
+  "humanDecisionReason": "The user explicitly decided that GHCR visibility must be changed once through gh api and that no deliverable should depend on a human approval/configuration step. GitHub does not expose a documented API operation for that mutation, while its supported UI change is manual and irreversible. The user must choose between accepting that one-time UI configuration, choosing a registry/publication design with automatable visibility, or changing repository visibility before publication.",
+  "replanFindings": [
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-09",
+      "message": "SC-09 requires every reserved run to settle against terminal RunRecord usage, but actual tokenUsage exists only for completed runs. The exhaustive terminal family is completed, failed, cancelled, and timed_out; fail(), cancel(), and timeout() all persist tokenUsage as null. Because runtime feature changes are excluded, the plan must define an intent-preserving conservative settlement rule for null-usage terminal runs instead of claiming actual-usage settlement.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "nullable terminal usage",
+          "detail": "packages/shared/src/types/run.ts defines RunRecord.tokenUsage as nullable."
+        },
+        {
+          "kind": "concern",
+          "named": "completed transition",
+          "detail": "packages/db/src/repositories/run-repo.ts complete(runId, tokenUsage) persists usage."
+        },
+        {
+          "kind": "concern",
+          "named": "three unsupported terminal transitions",
+          "detail": "The same repository's fail(), cancel(), and timeout() methods set only status and updatedAt, leaving tokenUsage null."
+        },
+        {
+          "kind": "concern",
+          "named": "public API preserves null",
+          "detail": "GET /v1/runs/:runId and packages/sdk/src/client.ts getRun return/parse the nullable RunRecord unchanged."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "93d5fd3d6fb041db"
+    },
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "The public-GHCR bootstrap is assigned to a nonexistent documented gh api operation. GitHub exposes package visibility in GET/list responses but no REST PATCH/update-visibility endpoint; its supported procedure is the package-settings UI and is irreversible once public. The plan's claim that the package inherits repository visibility is also false: linked packages inherit access permissions, not visibility. SC-15 cannot be reached through the user-decided mechanism.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "missing API operation",
+          "detail": "GitHub's REST package endpoint registry documents list, get, delete, restore, and version operations; it contains no PATCH or update-package-visibility operation: https://docs.github.com/en/rest/packages/packages"
+        },
+        {
+          "kind": "concern",
+          "named": "UI-only documented procedure",
+          "detail": "GitHub documents Package settings → Danger Zone → Change visibility and warns that a public package cannot be made private again: https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility"
+        },
+        {
+          "kind": "concern",
+          "named": "incorrect inheritance premise",
+          "detail": "GitHub states that linked packages inherit repository access permissions but not visibility; newly published packages default private."
+        },
+        {
+          "kind": "concern",
+          "named": "repeated impossible mechanism",
+          "detail": "The gh api mechanism appears in Requirements Decision 2, the architecture visibility section, constraints.ghcrVisibility, and workstreams[WS-50].scope."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    }
+  ],
+  "relatedFindings": [
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-09",
+      "message": "SC-09 requires every reserved run to settle against terminal RunRecord usage, but actual tokenUsage exists only for completed runs. The exhaustive terminal family is completed, failed, cancelled, and timed_out; fail(), cancel(), and timeout() all persist tokenUsage as null. Because runtime feature changes are excluded, the plan must define an intent-preserving conservative settlement rule for null-usage terminal runs instead of claiming actual-usage settlement.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "nullable terminal usage",
+          "detail": "packages/shared/src/types/run.ts defines RunRecord.tokenUsage as nullable."
+        },
+        {
+          "kind": "concern",
+          "named": "completed transition",
+          "detail": "packages/db/src/repositories/run-repo.ts complete(runId, tokenUsage) persists usage."
+        },
+        {
+          "kind": "concern",
+          "named": "three unsupported terminal transitions",
+          "detail": "The same repository's fail(), cancel(), and timeout() methods set only status and updatedAt, leaving tokenUsage null."
+        },
+        {
+          "kind": "concern",
+          "named": "public API preserves null",
+          "detail": "GET /v1/runs/:runId and packages/sdk/src/client.ts getRun return/parse the nullable RunRecord unchanged."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "93d5fd3d6fb041db"
+    },
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "The public-GHCR bootstrap is assigned to a nonexistent documented gh api operation. GitHub exposes package visibility in GET/list responses but no REST PATCH/update-visibility endpoint; its supported procedure is the package-settings UI and is irreversible once public. The plan's claim that the package inherits repository visibility is also false: linked packages inherit access permissions, not visibility. SC-15 cannot be reached through the user-decided mechanism.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "missing API operation",
+          "detail": "GitHub's REST package endpoint registry documents list, get, delete, restore, and version operations; it contains no PATCH or update-package-visibility operation: https://docs.github.com/en/rest/packages/packages"
+        },
+        {
+          "kind": "concern",
+          "named": "UI-only documented procedure",
+          "detail": "GitHub documents Package settings → Danger Zone → Change visibility and warns that a public package cannot be made private again: https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility"
+        },
+        {
+          "kind": "concern",
+          "named": "incorrect inheritance premise",
+          "detail": "GitHub states that linked packages inherit repository access permissions but not visibility; newly published packages default private."
+        },
+        {
+          "kind": "concern",
+          "named": "repeated impossible mechanism",
+          "detail": "The gh api mechanism appears in Requirements Decision 2, the architecture visibility section, constraints.ghcrVisibility, and workstreams[WS-50].scope."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    }
+  ],
+  "classAnalyses": [
+    {
+      "subject": "SC-09",
+      "scope": "systemic",
+      "rootCause": "The accounting rule treats terminal RunRecord usage as universally present even though the canonical schema makes it nullable and three of four terminal transitions never persist usage.",
+      "affectedSubjects": [
+        "failed",
+        "cancelled",
+        "timed_out"
+      ],
+      "checkedSubjects": [
+        "completed",
+        "failed",
+        "cancelled",
+        "timed_out",
+        "program SC-09",
+        "manifest successCriteria[SC-09]",
+        "program Scope (In) abuse-controls rule",
+        "program Risk Register spend-ledger rule",
+        "manifest workstreams[WS-49].scope",
+        "packages/shared/src/types/run.ts",
+        "packages/db/src/schema/runs.ts",
+        "packages/db/src/repositories/run-repo.ts",
+        "packages/api/src/routes/runs.ts",
+        "packages/sdk/src/client.ts"
+      ],
+      "completenessBasis": "RunStatusSchema is the canonical status union. Excluding the sole nonterminal status running leaves exactly completed, failed, cancelled, and timed_out; every corresponding repository transition was inspected."
+    },
+    {
+      "subject": "SC-15",
+      "scope": "systemic",
+      "rootCause": "A factual platform assumption and its chosen implementation mechanism were copied across the plan even though GitHub provides no documented API mutation for package visibility.",
+      "affectedSubjects": [
+        "program Requirements Decision 2",
+        "program Architecture Changes GHCR visibility section",
+        "program Risk Register first-GHCR-push mitigation",
+        "manifest constraints.ghcrVisibility",
+        "manifest workstreams[WS-50].scope one-time visibility include"
+      ],
+      "checkedSubjects": [
+        "program SC-15",
+        "manifest successCriteria[SC-15]",
+        "program Requirements Decision 2",
+        "program Architecture Changes GHCR visibility section",
+        "program Risk Register first-GHCR-push mitigation",
+        "manifest constraints.ghcrVisibility",
+        "manifest constraints.artifactAudience",
+        "manifest workstreams[WS-50].scope",
+        "GitHub REST API endpoints for packages",
+        "GitHub package visibility configuration guide",
+        "GitHub package permissions guide",
+        "manifest workstreams[WS-50].scope one-time visibility include"
+      ],
+      "completenessBasis": "A search of both canonical plan artifacts closed every active gh api/package-visibility copy. GitHub's official REST endpoint registry and official configuration guide close the available documented mutation mechanisms."
+    }
+  ],
+  "criteriaPatches": [],
+  "checkpointAssessments": [],
+  "criticSummary": "SC-09: The mediator and public GET /v1/runs/:runId path are viable, but the required settlement rule is not defined for the complete terminal RunStatus family. RunRecord.tokenUsage is nullable; createRunRepo.complete writes usage, while fail, cancel, and timeout write terminal statuses without usage. Because runtime changes are forbidden, the plan cannot settle those three terminal outcomes against actual terminal RunRecord usage as literally required.; SC-15: The digest pin and anonymous pull proof are expressible, but WS-50 mandates changing GHCR package visibility through gh api. GitHub's documented REST package API has no PATCH/update-visibility endpoint; visibility is only a list filter there, while GitHub's official visibility procedure requires Package settings → Change visibility and warns that public cannot be reverted to private. The plan also incorrectly says a linked package inherits repository visibility; GitHub documents inheritance of access permissions, not visibility. Therefore the selected one-time mechanism cannot create the public package state SC-15 requires.",
+  "criticLogs": [
+    "build-logs/oss-direction-plan-audit-2026-08-19T22-41-23-043Z-439fb04a-critic-attempt-1.log"
+  ],
+  "planningInstruction": "Run /plan-program oss-direction. This report requires a human requirements decision before any replanning. Present every decision in humanDecisionReason to the user as explicit choices, wait for their answers, and record each decision with its rationale in the program document. The user's recorded decisions are the only authorization for changing success criteria or user intent. Then resolve every replanFindings and blocker/major relatedFindings entry, close every classAnalyses root-cause class by reconciling every checkedSubjects member with an explicit fixed or already-correct disposition and concrete evidence, and re-check every workstreams[].scope copy affected by a criterion or interface repair.",
+  "supersedes": "docs/programs/oss-direction-replan-history/2026-08-19T22-46-53-597Z-09ce3c3f.json"
+}
