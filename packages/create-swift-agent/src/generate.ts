@@ -140,6 +140,13 @@ export function generateProject(opts: GenerateOptions): GenerateResult {
       : envExample;
     writeFileSync(join(projectDir, '.env'), env, 'utf8');
     files.push('.env');
+
+    // Pre-create the compose bootstrap's output directory. If it doesn't
+    // exist when `docker compose up` runs, the Linux daemon creates the bind
+    // mount root-owned — then the bootstrap's ownership hand-off has no user
+    // to hand files to and the project owner can't remove them. Created here,
+    // it belongs to the user, and the bootstrap chowns its outputs to match.
+    mkdirSync(join(projectDir, '.swiftagent-local'), { recursive: true });
   } catch (err) {
     // Leave no half-written project behind on failure (best effort).
     try {

@@ -206,8 +206,15 @@ async function main() {
       }
       registryStarted = false;
     }
-    if (!KEEP) rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-    else log(`kept temp dir: ${work}`);
+    if (!KEEP) {
+      try {
+        rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (err) {
+        // Never fail a passed run over temp-dir cleanup (e.g. a root-owned
+        // bind-mount leftover on Linux). CI runners discard the workspace.
+        console.warn(`[csa-e2e] warning: temp cleanup incomplete (${err.message})`);
+      }
+    } else log(`kept temp dir: ${work}`);
   };
   const onSignal = () => {
     void teardown().finally(() => process.exit(130));
