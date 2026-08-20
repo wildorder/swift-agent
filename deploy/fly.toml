@@ -1,0 +1,76 @@
+# Swift Agent runtime — one-click(-ish) deploy template for Fly.io (WS-47).
+#
+# Host decision recorded in deploy/HOST-COMPARISON.md (Fly.io over Railway).
+# Full deploy procedure, secrets table, and verification: deploy/README.md.
+#
+# SINGLE INSTANCE, BY DESIGN (SC-12): all realtime state is process-local —
+# connections, replay buffers, session locks, in-flight runs — and Redis
+# pub/sub is wired but dormant. A second serving instance breaks session
+# invariants with no error. See docs/runbooks/realtime-operations.md §1/§6.
+# Horizontal scale is Phase 2 and out of scope. Every knob below that pins
+# one Machine and disables autoscaling is load-bearing; so is
+# strategy = "immediate", which replaces the single Machine without booting
+# a parallel one (bluegreen/canary would run two mid-deploy).
+
+# Set your app name (created by `fly launch --no-deploy` or `fly apps create`):
+app = "swift-agent-runtime"
+primary_region = "iad"
+
+[build]
+  # The published operator image, pinned at its sha256 MANIFEST-LIST digest —
+  # never a tag, never built on the host (WS-50). Take the digest from the
+  # latest "Publish Container Image" workflow run or from
+  # `docker buildx imagetools inspect ghcr.io/wildorder/swift-agent:latest`.
+  # Until the owner's one-time GHCR visibility click, the package is private:
+  # authenticate the pull per deploy/README.md §2 before `fly deploy`.
+  image = "ghcr.io/wildorder/swift-agent@sha256:REPLACE_WITH_MANIFEST_LIST_DIGEST"
+
+[deploy]
+  # Forward-only migrations as an explicit release step (docs/runbooks/
+  # migrations.md): runs before the new Machine serves traffic; the drift
+  # preflight refuses to apply on divergence, which blocks the deploy — the
+  # correct failure mode. AUTO_MIGRATE stays unset in this template.
+  release_command = "node packages/db/dist/migrate.js"
+  # Never two Machines mid-deploy (SC-12): replace in place.
+  strategy = "immediate"
+
+[env]
+  # The single REST + WebSocket listener (apps/server/src/main.ts).
+  API_PORT = "3000"
+  NODE_ENV = "production"
+  # The public WebSocket origin handed verbatim to clients in session
+  # responses. MUST be wss:// (Fly terminates TLS at the edge; the app
+  # listens on plain 3000 behind it) and MUST include the /v1/stream path —
+  # the API appends only `?token=…`. Derive from your app name:
+  PUBLIC_WEBSOCKET_URL = "wss://swift-agent-runtime.fly.dev/v1/stream"
+
+# Secrets (set with `fly secrets set`, never committed — deploy/README.md §4):
+#   DATABASE_URL          from Fly Managed Postgres
+#   REDIS_URL             from Upstash Redis
+#   CLIENT_JWT_SECRET     operator-generated (e.g. openssl rand -hex 32)
+#   ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY   at least one
+#   RUNNER_TOKEN_PRIVATE_KEY   only if you host remote tools (see README)
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Autoscaling fully disabled — exactly one Machine, always running:
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    # Mirrors the image HEALTHCHECK cadence (30s interval / 10s timeout /
+    # 15s start period) against the runtime's own /health endpoint.
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+# Exactly one machine in one region; no [http_service.concurrency] section —
+# concurrency-triggered scaling must never be configured for this app.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  count = 1
