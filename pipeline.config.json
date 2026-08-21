@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "0.8.0",
+  "visionPath": "docs/vision.md",
+  "requireApprovalBeforeBuild": false,
+  "verify": {
+    "build": "pnpm build",
+    "typecheck": "pnpm typecheck",
+    "lint": "pnpm lint",
+    "test": "pnpm test"
+  },
+  "contextDocs": [
+    "README.md",
+    "docs/quickstart.md",
+    "docs/policies/versioning.md",
+    "docs/runbooks/migrations.md",
+    "docs/runbooks/realtime-operations.md"
+  ],
+  "agent": {
+    "command": "claude",
+    "args": ["-p", "--model", "sonnet"]
+  },
+  "validatorAgent": {
+    "command": "codex",
+    "args": ["exec"]
+  },
+  "models": {
+    "author": "claude-code/opus",
+    "validator": "gpt-sol"
+  },
+  "build": {
+    "commit": true
+  }
+}

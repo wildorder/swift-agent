@@ -45,9 +45,12 @@ async function mintToken(overrides: {
   email?: string;
   exp?: number;
   signingKey?: CryptoKey;
+  /** Cognito token type — the Management API accepts `'id'` only (WS-19). */
+  token_use?: string;
 } = {}): Promise<string> {
   const key = overrides.signingKey ?? privateKey;
   let builder = new SignJWT({
+    token_use: overrides.token_use ?? 'id',
     email: overrides.email ?? EMAIL_USER_1,
   })
     .setProtectedHeader({ alg: 'RS256', kid: 'test-kid-1' })

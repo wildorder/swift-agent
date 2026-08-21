@@ -31,6 +31,21 @@ variable "desired_count" {
   default     = 1
 }
 
+variable "stop_timeout" {
+  description = <<-EOT
+    Seconds ECS waits after SIGTERM before SIGKILL, giving the app time to
+    close in-flight WebSockets with code 1001 (see WS-30). MUST be >= the
+    target group deregistration_delay so ECS does not kill the task while the
+    ALB is still draining it. Fargate hard max is 120s.
+  EOT
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.stop_timeout >= 1 && var.stop_timeout <= 120
+    error_message = "stop_timeout must be between 1 and 120 seconds (Fargate limit)."
+  }
+}
+
 variable "private_subnet_ids" {
   description = "List of private subnet IDs for the ECS service"
   type        = list(string)
@@ -59,6 +74,32 @@ variable "task_role_arn" {
 variable "ssm_parameter_arns" {
   description = "Map of environment variable name to SSM parameter ARN"
   type        = map(string)
+}
+
+variable "migrate_skip_drift_check" {
+  description = <<-EOT
+    Escape hatch for the operator-driven migration reconciliation path ONLY.
+    When set to "1", the migrate CLI bypasses its drift preflight (see WS-26).
+    Leave "" in normal operation. Injected as the MIGRATE_SKIP_DRIFT_CHECK
+    container env only when non-empty; the running server never migrates, so
+    it is inert for normal traffic. Prefer flipping it per-invocation via a
+    RunTask containerOverrides.environment entry over setting it here — see
+    docs/runbooks/migrations.md. NEVER leave it enabled.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "public_ws_allow_insecure" {
+  description = <<-EOT
+    When true, injects PUBLIC_WS_ALLOW_INSECURE=true so the server's startup
+    guard accepts a non-localhost ws:// PUBLIC_WEBSOCKET_URL (see
+    apps/server/src/config.ts). Intended ONLY for a domainless environment
+    whose ALB has no TLS listener (dev). Leave false for staging/prod, which
+    keep the strict wss://-only policy. Injected only when true.
+  EOT
+  type        = bool
+  default     = false
 }
 
 variable "log_group_name" {

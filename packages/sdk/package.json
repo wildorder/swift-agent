@@ -1,15 +1,41 @@
 {
   "name": "@swiftagent/sdk",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
+  "description": "TypeScript SDK for building, defining, and running Swift Agent agents.",
+  "license": "Apache-2.0",
+  "author": "Swift Agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wildorder/swift-agent.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts.map",
+    "!dist/**/__tests__"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
@@ -21,6 +47,7 @@
   "dependencies": {
     "@swiftagent/shared": "workspace:*",
     "fastify": "^5",
+    "jose": "^6",
     "zod": "^3.24",
     "zod-to-json-schema": "^3.24"
   },

@@ -1,7 +1,19 @@
 import { createHash } from 'node:crypto';
 import type { AgentRecord, ApiKeyRecord, SessionRecord, RunRecord, MessageRecord, ToolCallRecord, UserRecord, UserWorkspaceRecord, WorkspaceRecord } from '@swiftagent/shared';
 import type { AgentRepo, ApiKeyRepo, SessionRepo, MessageRepo, RunRepo, ToolCallRepo, TraceRepo, TraceRecordRow, SpanRecordRow, UserRepo, UserWorkspaceRepo, WorkspaceRepo } from '@swiftagent/db';
+import type { RunExecutionService } from '@swiftagent/runtime';
 import { buildApp, type AppContext } from '../server.js';
+
+/** Minimal no-op execution service for route tests that don't execute runs. */
+export function createMockRunExecutionService(
+  overrides: Partial<RunExecutionService> = {},
+): RunExecutionService {
+  return {
+    start: async () => ({ runId: 'run_mockexec123456789' }),
+    requestCancel: async () => ({ requested: true }),
+    ...overrides,
+  };
+}
 
 // ── Test API key ───────────────────────────────────────────────────
 export const TEST_API_KEY = 'sk_test_1234567890abcdef';
@@ -18,6 +30,7 @@ export const SEED_AGENT: AgentRecord = {
   modelConfig: { model: 'openai/gpt-4' },
   systemPrompt: 'You are a test assistant.',
   memoryConfig: { strategy: 'last_n', maxMessages: 50 },
+  tools: [],
   toolRunnerUrl: null,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2025-01-01'),
@@ -107,6 +120,7 @@ export function createMockAgentRepo(): AgentRepo {
         modelConfig: record.modelConfig,
         systemPrompt: record.systemPrompt,
         memoryConfig: record.memoryConfig,
+        tools: record.tools ?? [],
         toolRunnerUrl: record.toolRunnerUrl ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -227,6 +241,20 @@ export function createMockRunRepo(): RunRepo {
       runsMap.set(id, updated);
       return updated;
     },
+    cancel: async (id) => {
+      const r = runsMap.get(id);
+      if (!r) return null;
+      const updated = { ...r, status: 'cancelled' as const, updatedAt: new Date() };
+      runsMap.set(id, updated);
+      return updated;
+    },
+    timeout: async (id) => {
+      const r = runsMap.get(id);
+      if (!r) return null;
+      const updated = { ...r, status: 'timed_out' as const, updatedAt: new Date() };
+      runsMap.set(id, updated);
+      return updated;
+    },
     listBySession: async (sessionId) =>
       [...runsMap.values()].filter((r) => r.sessionId === sessionId),
   };
@@ -284,12 +312,20 @@ export function createMockTraceRepo(): TraceRepo {
       const existing = spansMap.get(traceId) ?? [];
       spansMap.set(traceId, [...existing, ...spans]);
     },
+    saveTraceWithSpans: async (trace, spans) => {
+      tracesMap.set(trace.traceId, trace);
+      if (spans.length > 0) {
+        const existing = spansMap.get(trace.traceId) ?? [];
+        spansMap.set(trace.traceId, [...existing, ...spans]);
+      }
+    },
     getTraceByRunId: async (runId) => {
       for (const trace of tracesMap.values()) {
         if (trace.runId === runId) return trace;
       }
       return null;
     },
+    getTraceById: async (traceId) => tracesMap.get(traceId) ?? null,
     listSpansByTraceId: async (traceId) => {
       const spans = spansMap.get(traceId) ?? [];
       return spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
@@ -361,8 +397,12 @@ export function createMockWorkspaceRepo(): WorkspaceRepo {
 }
 
 // ── Build test app ─────────────────────────────────────────────────
-export async function buildTestApp(): Promise<AppContext> {
+export async function buildTestApp(
+  runExecutionService: RunExecutionService = createMockRunExecutionService(),
+  publicWebsocketUrl = 'ws://localhost:3001',
+): Promise<AppContext> {
   return buildApp({
+    runExecutionService,
     repos: {
       apiKeyRepo: createMockApiKeyRepo(),
       agentRepo: createMockAgentRepo(),
@@ -376,7 +416,7 @@ export async function buildTestApp(): Promise<AppContext> {
       workspaceRepo: createMockWorkspaceRepo(),
     },
     jwtSecret: TEST_JWT_SECRET,
-    publicWebsocketUrl: 'ws://localhost:3001',
+    publicWebsocketUrl,
     logger: false,
   });
 }

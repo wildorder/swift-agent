@@ -2,6 +2,8 @@
 
 ## Program Overview
 
+**Status:** Completed on 2026-07-15.
+
 **Product:** Swift Agent — a hosted real-time agent runtime that lets developers embed streaming, tool-calling, multi-model AI agents into any application.
 
 **Program scope:** Add the Management API layer — Cognito User Pool infrastructure, user identity, workspace management, API key lifecycle, and Cognito JWT authentication. This is the programmatic surface consumed by the marketing site developer console, the CLI, and any future automation (Terraform provider).

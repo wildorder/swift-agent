@@ -2,6 +2,7 @@ import type { MessageRepo, RunRepo, ToolCallRepo, SessionRepo, AgentRepo } from 
 import type { ProviderRegistry } from '@swiftagent/models';
 import type { AgentRecord } from '@swiftagent/shared';
 import type { ToolExecutor } from './tool-executor.js';
+import type { ToolExecutorResolver } from './tool-executor-resolver.js';
 
 export type Logger = {
   info(msg: string, data?: Record<string, unknown>): void;
@@ -9,10 +10,39 @@ export type Logger = {
   error(msg: string, data?: Record<string, unknown>): void;
 };
 
-export type Tracer = {
-  startSpan(name: string, attributes?: Record<string, unknown>): void;
-  endSpan(): void;
-};
+/**
+ * Structural view of the observability `Span` the loop drives. Kept minimal
+ * (and structural, not an import) so `@swiftagent/runtime` need not depend on
+ * `@swiftagent/observability` — the concrete `Span` satisfies this shape.
+ */
+export interface RunSpan {
+  end(status: 'ok' | 'error', error?: Error): unknown;
+  addMetadata(partial: Record<string, unknown>): unknown;
+}
+
+/**
+ * Structural view of `RunTraceContext` from `@swiftagent/observability`. One
+ * trace per run; a span per model call and per tool call; `finish` persists the
+ * trace + all spans via the `TraceSink`.
+ */
+export interface RunTrace {
+  /** Trace id, surfaced for structured finalize logging (WS-28, SC-09). The
+   *  concrete `RunTraceContext` always provides it; optional here so in-memory
+   *  test spies need not. */
+  readonly traceId?: string;
+  startModelCall(modelName: string): RunSpan;
+  startToolCall(toolName: string, callId: string): RunSpan;
+  finish(status: 'ok' | 'error', error?: Error): Promise<void>;
+}
+
+/**
+ * Runtime-facing tracer. Reconciled with the observability `Tracer` (WS-24) —
+ * the previous `startSpan`/`endSpan` shape was never implemented by anything.
+ * The concrete `Tracer` from `@swiftagent/observability` satisfies this.
+ */
+export interface Tracer {
+  startRunTrace(runId: string): RunTrace;
+}
 
 export type AgentEngineDeps = {
   db: {
@@ -23,7 +53,10 @@ export type AgentEngineDeps = {
     agents: AgentRepo;
   };
   modelRegistry: ProviderRegistry;
-  toolExecutor: ToolExecutor;
+  // Resolves the run-scoped executor from the active run's agent (WS-21).
+  // The executor itself lives on RunContext, never here — this keeps one
+  // agent's runner from being reachable by another (SC-07).
+  toolExecutorResolver: ToolExecutorResolver;
   tracer?: Tracer;
   logger?: Logger;
 };
@@ -34,7 +67,14 @@ export const DEFAULT_LAST_N = 50;
 
 export type AgentEngineOptions = {
   maxToolIterations?: number;
+  /** Per-tool-call deadline. Exceeding it fails the tool call AND times out
+   *  the run (`timed_out`) — there is no silent continuation (WS-24, SC-14). */
   toolTimeoutMs?: number;
+  /** Per-model-call deadline. Exceeding it times out the run (WS-24, SC-14). */
+  modelTimeoutMs?: number;
+  /** Total-run deadline across all iterations. Exceeding it times out the run
+   *  (WS-24, SC-14). Composed in `executePreparedRun`. */
+  totalRunMs?: number;
   memoryStrategy?: 'last_n' | 'summary';
   lastN?: number;
 };
@@ -45,4 +85,8 @@ export type RunContext = {
   agentConfig: AgentRecord;
   abortSignal: AbortSignal;
   iterationCount: number;
+  // Executor resolved once per run from `agentConfig`, bound to this run only.
+  // The loop reads it here (not from deps) so cross-routing between concurrent
+  // agents is structurally impossible (WS-21, SC-07).
+  toolExecutor: ToolExecutor;
 };

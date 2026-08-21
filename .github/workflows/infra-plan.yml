@@ -17,7 +17,11 @@ jobs:
     environment: ${{ matrix.environment }}
     strategy:
       matrix:
-        environment: [dev, staging, prod]
+        # staging is not provisioned — no AWS account or OIDC role exists for
+        # it. Restore it to the matrix when (if) a staging environment is
+        # stood up. dev = SwiftAgent-dev (992646609226), prod = SwiftAgent-prod
+        # (548722509196).
+        environment: [dev, prod]
       fail-fast: false
     steps:
       - name: Checkout

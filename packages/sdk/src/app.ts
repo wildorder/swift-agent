@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
+import { createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
+import { importSPKI, importJWK } from 'jose';
+import { ENV_KEYS, SwiftAgentError, SwiftAgentErrorCode } from '@swiftagent/shared';
 import { ControlPlaneClient } from './client.js';
 import { startToolRunner } from './tool-runner.js';
+import type { RunnerVerifyKey } from './runner-token.js';
 import type {
   AgentDefinition,
   CreateAgentAppConfig,
@@ -13,9 +18,38 @@ import type {
   ListMessagesResult,
   SessionRecord,
   RunRecord,
+  AcceptedRun,
 } from './types.js';
 
 const DEFAULT_PORT = 8787;
+const RUNNER_TOKEN_ALG = 'EdDSA';
+
+/**
+ * Resolve a concrete port. When `port` is 0 (OS-assigned), probe a free port by
+ * briefly binding then releasing it, so the runner URL / token audience can be
+ * computed before the runner binds. Minor TOCTOU is acceptable for local/dev use.
+ */
+async function resolveConcretePort(port: number): Promise<number> {
+  if (port !== 0) return port;
+  return new Promise<number>((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address() as AddressInfo | null;
+      const resolved = address ? address.port : 0;
+      probe.close(() => resolve(resolved));
+    });
+  });
+}
+
+/** Import the runner's public verification key from PEM (SPKI) or JWK JSON. */
+async function importRunnerPublicKey(material: string): Promise<RunnerVerifyKey> {
+  const trimmed = material.trim();
+  if (trimmed.startsWith('{')) {
+    return (await importJWK(JSON.parse(trimmed), RUNNER_TOKEN_ALG)) as RunnerVerifyKey;
+  }
+  return importSPKI(trimmed, RUNNER_TOKEN_ALG);
+}
 
 export interface AgentApp {
   /**
@@ -35,10 +69,14 @@ export interface AgentApp {
   };
 
   /**
-   * Run management helpers delegating to the control plane API.
+   * Run management helpers delegating to the control plane API. `create`
+   * returns an accepted run (202) — execution is process-bound; poll `get` for
+   * terminal status. `cancel` is idempotent.
    */
   runs: {
-    create(opts: CreateRunOptions): Promise<RunRecord>;
+    create(opts: CreateRunOptions): Promise<AcceptedRun>;
+    get(runId: string): Promise<RunRecord>;
+    cancel(runId: string): Promise<AcceptedRun>;
   };
 
   /**
@@ -57,7 +95,11 @@ export interface AgentApp {
  */
 export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
   if (!config.apiKey) {
-    throw new Error('apiKey is required');
+    throw new SwiftAgentError(
+      SwiftAgentErrorCode.VALIDATION,
+      'createAgentApp requires an "apiKey" — pass your workspace API key ' +
+        '(e.g. process.env.SWIFT_AGENT_API_KEY) to createAgentApp({ apiKey }).',
+    );
   }
 
   const client = new ControlPlaneClient(config.apiKey, config.baseUrl);
@@ -70,8 +112,10 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
       // Merge tools, checking for duplicates across all registered agents
       for (const t of definition.tools) {
         if (toolsByName.has(t.name)) {
-          throw new Error(
-            `Duplicate tool name "${t.name}" — already registered by another agent`,
+          throw new SwiftAgentError(
+            SwiftAgentErrorCode.VALIDATION,
+            `Duplicate tool name "${t.name}" — each tool name must be unique across all ` +
+              `agents registered on this app; rename one of the conflicting tools.`,
           );
         }
         toolsByName.set(t.name, t as ToolDefinition);
@@ -102,28 +146,57 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
     },
 
     runs: {
-      create(opts: CreateRunOptions): Promise<RunRecord> {
+      create(opts: CreateRunOptions): Promise<AcceptedRun> {
         return client.createRun(opts.sessionId, { content: opts.content });
+      },
+
+      get(runId: string): Promise<RunRecord> {
+        return client.getRun(runId);
+      },
+
+      cancel(runId: string): Promise<AcceptedRun> {
+        return client.cancelRun(runId);
       },
     },
 
     async listen(port?: number): Promise<void> {
       const listenPort = port ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_PORT);
 
-      // Start the tool runner
-      server = await startToolRunner({
-        port: listenPort,
-        registry: toolsByName,
-        apiKey: config.apiKey,
-      });
-
-      // Resolve actual port (important when port=0 for OS-assigned port)
-      const addr = server.server.address();
-      const actualPort = typeof addr === 'object' && addr ? addr.port : listenPort;
-
-      // Compute public URL for tool runner
+      // ── Resolve scoped-token verification config (WS-22) ──────────────────
+      // The token audience MUST equal the runner URL registered with the control
+      // plane (the runtime mints `aud = agent.toolRunnerUrl`). Both derive from a
+      // single `publicUrl`, so resolve a concrete port up front — for an
+      // OS-assigned port (0) we probe a free port before binding the runner — and
+      // reuse it for the audience and the registration.
+      const actualPort = await resolveConcretePort(listenPort);
       const publicUrl =
-        process.env.TOOL_RUNNER_PUBLIC_URL ?? `http://127.0.0.1:${actualPort}`;
+        process.env[ENV_KEYS.TOOL_RUNNER_PUBLIC_URL] ?? `http://127.0.0.1:${actualPort}`;
+
+      const publicKeyMaterial = config.runnerPublicKey ?? process.env[ENV_KEYS.RUNNER_TOKEN_PUBLIC_KEY];
+      if (!publicKeyMaterial) {
+        throw new SwiftAgentError(
+          SwiftAgentErrorCode.VALIDATION,
+          `Runner verification requires the ${ENV_KEYS.RUNNER_TOKEN_PUBLIC_KEY} env var ` +
+            `(PEM/SPKI or JWK JSON) or the runnerPublicKey option — set one before calling app.listen().`,
+        );
+      }
+      const expectedWorkspaceId = config.runnerWorkspaceId ?? process.env[ENV_KEYS.RUNNER_WORKSPACE_ID];
+      if (!expectedWorkspaceId) {
+        throw new SwiftAgentError(
+          SwiftAgentErrorCode.VALIDATION,
+          `Runner verification requires the ${ENV_KEYS.RUNNER_WORKSPACE_ID} env var ` +
+            `(the runner's ws_ workspace id) or the runnerWorkspaceId option — set one before calling app.listen().`,
+        );
+      }
+      const expectedAudience =
+        config.runnerAudience ?? process.env[ENV_KEYS.RUNNER_AUDIENCE] ?? publicUrl;
+      const publicKey = await importRunnerPublicKey(publicKeyMaterial);
+
+      server = await startToolRunner({
+        port: actualPort,
+        registry: toolsByName,
+        auth: { publicKey, expectedAudience, expectedWorkspaceId },
+      });
 
       // Register all agents with the control plane
       for (const agent of agents) {
@@ -132,6 +205,11 @@ export function createAgentApp(config: CreateAgentAppConfig): AgentApp {
           modelConfig: { ...agent.modelConfig },
           systemPrompt: agent.systemPrompt,
           memoryConfig: agent.memoryConfig ? { ...agent.memoryConfig } : undefined,
+          tools: agent.toolSchemas.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.parameters,
+          })),
           toolRunnerUrl: publicUrl,
         });
       }

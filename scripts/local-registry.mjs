@@ -1,0 +1,406 @@
+#!/usr/bin/env node
+// WS-45 · Local npm registry harness orchestrator (Verdaccio) — TEST-TIME ONLY.
+//
+// A REAL npm registry protocol endpoint (SC-05 forbids tarball dirs / file:
+// deps): Verdaccio is started with ephemeral storage, the workspace packages
+// are published INTO it with `pnpm publish --registry`, and consumers install
+// FROM it over HTTP. WS-46 later publishes `create-swift-agent` into the same
+// registry and resolves it through real `npx --registry`.
+//
+// Subcommands:
+//   start                    spawn Verdaccio (detached), poll /-/ping, write state file
+//   stop                     kill the registry + delete ephemeral storage (idempotent)
+//   publish <package-dir>... `pnpm publish --registry <local> --no-git-checks` per dir
+//                            (accepts ANY package dir — the three-package roster is
+//                            only the `verify` flow's default, per the spec)
+//   verify                   end-to-end SC-05 flow: start → publish the three packages
+//                            → assert versions landed locally → run the WS-44 install
+//                            harness against the local endpoint → assert resolved-URL
+//                            provenance → stop. Teardown guaranteed on failure.
+//
+// Knobs:
+//   SWIFTAGENT_LOCAL_REGISTRY_PORT   listen port (default 4873)
+//   SWIFTAGENT_LOCAL_REGISTRY_HOST   listen address (default 127.0.0.1).
+//                                    WS-46's e2e sets 0.0.0.0 ON CI/E2E RUNS
+//                                    ONLY, so the generated project's backend
+//                                    container can npm-install through the
+//                                    docker host-gateway. Never set this on a
+//                                    machine exposed beyond localhost.
+//
+// SECURITY: listens on 127.0.0.1 ONLY by default. Never expose beyond
+// localhost/CI. See test/local-registry/README.md.
+
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+// pnpm/npm are `.cmd` shims on Windows; shell:true resolves them (mirrors
+// scripts/verify-pack.mjs). All args here are shell-safe on cmd.exe and /bin/sh.
+const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
+const PORT = Number(process.env['SWIFTAGENT_LOCAL_REGISTRY_PORT'] ?? 4873);
+// Bind address only — clients (and every URL below) still reach the registry
+// as 127.0.0.1. 0.0.0.0 is a CI/e2e-only opt-in (see the knob note above).
+const LISTEN_HOST = process.env['SWIFTAGENT_LOCAL_REGISTRY_HOST'] ?? '127.0.0.1';
+const REGISTRY_URL = `http://127.0.0.1:${PORT}`;
+// Stable per-port location so `stop` finds what `start` recorded across processes.
+const STATE_FILE = join(tmpdir(), `swiftagent-local-registry-${PORT}.json`);
+const CONFIG_SRC = join(ROOT, 'test', 'local-registry', 'verdaccio.yaml');
+const VERDACCIO_BIN = join(ROOT, 'node_modules', 'verdaccio', 'bin', 'verdaccio');
+const READY_TIMEOUT_MS = 30_000;
+
+// The default roster for `verify` ONLY — `publish` takes arbitrary dirs.
+const VERIFY_PACKAGES = [
+  { name: '@swiftagent/sdk', dir: 'packages/sdk' },
+  { name: '@swiftagent/react', dir: 'packages/react' },
+  { name: '@swiftagent/shared', dir: 'packages/shared' },
+];
+
+const log = (msg) => console.log(`[local-registry] ${msg}`);
+
+function readState() {
+  if (!existsSync(STATE_FILE)) return null;
+  try {
+    return JSON.parse(readFileSync(STATE_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function pingRegistry(timeoutMs = 2_000) {
+  try {
+    const res = await fetch(`${REGISTRY_URL}/-/ping`, { signal: AbortSignal.timeout(timeoutMs) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start Verdaccio: fresh temp storage dir, per-run derived config (committed
+ * yaml + injected ephemeral `storage:` path), loopback listen, bounded
+ * readiness poll, state file. Returns the child handle (verify keeps it;
+ * the `start` CLI detaches and exits).
+ */
+async function startRegistry() {
+  const prior = readState();
+  if (prior && pidAlive(prior.pid)) {
+    throw new Error(
+      `a local registry appears to be running already (pid=${prior.pid}, port=${prior.port}). ` +
+        `Run \`node scripts/local-registry.mjs stop\` first.`,
+    );
+  }
+  if (prior) {
+    // Stale state from a crashed run — clean the leftovers before starting.
+    log(`stale state file found (pid=${prior.pid} not alive) — cleaning up`);
+    await stopRegistry();
+  }
+
+  const work = mkdtempSync(join(tmpdir(), 'swiftagent-registry-'));
+  const storage = join(work, 'storage');
+  mkdirSync(storage, { recursive: true });
+
+  // Derived config: ephemeral storage path injected above the committed rules.
+  // (JSON-quote the path so Windows backslashes survive YAML parsing.)
+  const derivedConfig = join(work, 'verdaccio.yaml');
+  writeFileSync(
+    derivedConfig,
+    `# DERIVED per-run config — generated by scripts/local-registry.mjs. Do not edit.\n` +
+      `storage: ${JSON.stringify(storage)}\n\n` +
+      readFileSync(CONFIG_SRC, 'utf8'),
+    'utf8',
+  );
+
+  // Publish-side npmrc: npm clients insist on an _authToken for `publish` even
+  // though the server (publish: $all) never verifies it — a dummy suffices.
+  const publishNpmrc = join(work, 'publish.npmrc');
+  writeFileSync(publishNpmrc, `//127.0.0.1:${PORT}/:_authToken=swiftagent-local-dummy\n`, 'utf8');
+
+  const logFile = join(work, 'verdaccio.log');
+  const logFd = openSync(logFile, 'a');
+  log(`starting verdaccio on ${REGISTRY_URL} (storage: ${storage})`);
+  // Invoke the JS bin through the current node — Windows-safe (no .cmd shim,
+  // real PID for kill), same interpreter everywhere.
+  const child = spawn(process.execPath, [VERDACCIO_BIN, '--config', derivedConfig, '--listen', `http://${LISTEN_HOST}:${PORT}`], {
+    cwd: ROOT,
+    detached: true,
+    stdio: ['ignore', logFd, logFd],
+  });
+
+  let exited = false;
+  child.on('exit', () => (exited = true));
+
+  const state = { pid: child.pid, port: PORT, work, storage, publishNpmrc, logFile };
+  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (exited) break;
+    if (await pingRegistry()) {
+      log(`registry ready: ${REGISTRY_URL}/-/ping OK (pid=${child.pid})`);
+      return child;
+    }
+    await sleep(400);
+  }
+  // Failed to become ready — tear down whatever half-started.
+  const tail = existsSync(logFile) ? readFileSync(logFile, 'utf8').slice(-2_000) : '(no log)';
+  await stopRegistry();
+  throw new Error(`verdaccio did not answer /-/ping within ${READY_TIMEOUT_MS}ms.\nlog tail:\n${tail}`);
+}
+
+/** Kill the registry and delete its ephemeral storage. Idempotent. */
+async function stopRegistry() {
+  const state = readState();
+  if (!state) {
+    log('stop: nothing running (no state file) — ok');
+    return;
+  }
+  if (state.pid && pidAlive(state.pid)) {
+    log(`stopping verdaccio (pid=${state.pid})`);
+    try {
+      process.kill(state.pid);
+    } catch {
+      /* already gone */
+    }
+    // Wait for the process to release file handles before deleting storage.
+    const deadline = Date.now() + 10_000;
+    while (pidAlive(state.pid) && Date.now() < deadline) await sleep(200);
+    if (pidAlive(state.pid) && process.platform === 'win32') {
+      // Last resort on Windows: force-kill the tree.
+      spawnSync('taskkill', ['/PID', String(state.pid), '/T', '/F'], { stdio: 'ignore', shell: true });
+    }
+  } else {
+    log('stop: registry process not alive — cleaning leftovers');
+  }
+  if (state.work && existsSync(state.work)) {
+    rmSync(state.work, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    log(`removed ephemeral storage ${state.work}`);
+  }
+  try {
+    unlinkSync(STATE_FILE);
+  } catch {
+    /* ok */
+  }
+  log('stop: done');
+}
+
+/**
+ * Publish ANY package dir(s) into the running registry via
+ * `pnpm publish --registry <local> --no-git-checks` from each dir (pnpm, so
+ * `workspace:*` deps are rewritten exactly as a real release rewrites them).
+ * NOT hard-coded to the three-package roster — WS-46 calls this with
+ * `packages/create-swift-agent`, and arbitrary fixture dirs work too.
+ */
+function publishDirs(dirs) {
+  const state = readState();
+  if (!state || !pidAlive(state.pid)) {
+    throw new Error('no local registry running — run `node scripts/local-registry.mjs start` first.');
+  }
+  const registry = `http://127.0.0.1:${state.port}`;
+  for (const dir of dirs) {
+    const abs = resolve(ROOT, dir);
+    if (!existsSync(join(abs, 'package.json'))) throw new Error(`not a package dir (no package.json): ${abs}`);
+    const manifest = JSON.parse(readFileSync(join(abs, 'package.json'), 'utf8'));
+    log(`publishing ${manifest.name}@${manifest.version} from ${dir} → ${registry}`);
+    execFileSync(PNPM, ['publish', '--registry', registry, '--no-git-checks'], {
+      cwd: abs,
+      stdio: 'inherit',
+      shell: true,
+      env: {
+        ...process.env,
+        // Dummy token via an isolated userconfig: npm clients require a token
+        // to publish; Verdaccio (publish: $all) never verifies it. Isolating
+        // userconfig also shields the run from any global ~/.npmrc.
+        npm_config_userconfig: state.publishNpmrc,
+      },
+    });
+    log(`published ${manifest.name}@${manifest.version}`);
+  }
+}
+
+/** `npm view <pkg> version --registry <local>` — asserts the publish landed LOCALLY. */
+function assertVersionLanded(name, expectedVersion, state) {
+  const registry = `http://127.0.0.1:${state.port}`;
+  const out = execFileSync(NPM, ['view', name, 'version', '--registry', registry], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    shell: true,
+    env: { ...process.env, npm_config_userconfig: state.publishNpmrc },
+  }).trim();
+  if (out !== expectedVersion) {
+    throw new Error(`npm view ${name} against ${registry} returned "${out}", expected "${expectedVersion}"`);
+  }
+  log(`landed locally: ${name}@${out} (npm view --registry ${registry})`);
+}
+
+/**
+ * Resolved-URL provenance (SC-05): every @swiftagent/* entry in the consumer's
+ * lockfile must have been SERVED by the local registry — closes the loophole
+ * where a stray npmrc or cache serves the artifact from elsewhere.
+ */
+function assertProvenance(consumerDir, packageNames) {
+  const candidates = [
+    join(consumerDir, 'package-lock.json'),
+    join(consumerDir, 'node_modules', '.package-lock.json'),
+  ];
+  const lockPath = candidates.find((p) => existsSync(p));
+  if (!lockPath) throw new Error(`no lockfile found in consumer ${consumerDir} (looked for ${candidates.join(', ')})`);
+  const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+  const entries = lock.packages ?? {};
+  const prefix = `${REGISTRY_URL}/`;
+  for (const name of packageNames) {
+    const entry = entries[`node_modules/${name}`];
+    if (!entry) throw new Error(`lockfile ${lockPath} has no entry for ${name}`);
+    if (typeof entry.resolved !== 'string' || !entry.resolved.startsWith(prefix)) {
+      throw new Error(
+        `PROVENANCE FAILURE: ${name} resolved from "${entry.resolved}", expected an URL under ${prefix} — ` +
+          `the local registry did not serve this package.`,
+      );
+    }
+    log(`provenance OK: ${name} resolved from ${entry.resolved}`);
+  }
+  log(`provenance: all ${packageNames.length} @swiftagent/* packages served by ${REGISTRY_URL} ✓`);
+}
+
+/** Build the three publishable packages if any dist/ output is missing. */
+function ensureBuilt() {
+  const missing = VERIFY_PACKAGES.filter((p) => !existsSync(join(ROOT, p.dir, 'dist', 'index.js')));
+  if (missing.length === 0) return;
+  log(`dist missing for ${missing.map((p) => p.name).join(', ')} — building`);
+  execFileSync(PNPM, ['--filter', '@swiftagent/sdk...', '--filter', '@swiftagent/react...', 'build'], {
+    cwd: ROOT,
+    stdio: 'inherit',
+    shell: true,
+  });
+}
+
+/** End-to-end SC-05 verify. Teardown guaranteed (try/finally + signal handlers). */
+async function verify() {
+  ensureBuilt();
+
+  let tearingDown = false;
+  const teardown = async () => {
+    if (tearingDown) return;
+    tearingDown = true;
+    await stopRegistry();
+  };
+  const onSignal = (sig) => {
+    log(`received ${sig} — tearing down`);
+    // Fire-and-wait teardown, then exit non-zero.
+    void teardown().finally(() => process.exit(130));
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  try {
+    await startRegistry();
+    const state = readState();
+
+    // 1) Publish the three built packages (the roster is verify's DEFAULT
+    //    argument only — `publish` itself accepts any dir).
+    publishDirs(VERIFY_PACKAGES.map((p) => p.dir));
+
+    // 2) Assert each version actually landed on the LOCAL endpoint (a silent
+    //    fall-through to publishConfig's registry.npmjs.org is impossible).
+    for (const p of VERIFY_PACKAGES) {
+      const version = JSON.parse(readFileSync(join(ROOT, p.dir, 'package.json'), 'utf8')).version;
+      assertVersionLanded(p.name, version, state);
+    }
+
+    // 3) Consumer proof: the WS-44 registry-parameterized install harness,
+    //    pointed at the local endpoint. SWIFTAGENT_INSTALL_TAG=latest pins the
+    //    dist-tag (a PR CI context would otherwise resolve the "pr" tag, which
+    //    this registry does not carry). NODE_AUTH_TOKEN is the dummy the
+    //    consumer .npmrc references via ${NODE_AUTH_TOKEN}.
+    const consumerDirFile = join(state.work, 'consumer-dir.txt');
+    log('running WS-44 install harness against the local registry');
+    const proof = spawnSync(PNPM, ['test:acceptance:install'], {
+      cwd: ROOT,
+      stdio: 'inherit',
+      shell: true,
+      env: {
+        ...process.env,
+        SWIFTAGENT_INSTALL_REGISTRY: REGISTRY_URL,
+        SWIFTAGENT_RUN_INSTALL_PROOF: '1',
+        SWIFTAGENT_INSTALL_TAG: 'latest',
+        NODE_AUTH_TOKEN: 'swiftagent-local-dummy',
+        SWIFTAGENT_CONSUMER_DIR_FILE: consumerDirFile,
+      },
+    });
+    if (proof.status !== 0) throw new Error(`install harness FAILED (exit=${proof.status})`);
+
+    // 4) Provenance: the consumer's lockfile must show the local registry
+    //    served all three packages.
+    if (!existsSync(consumerDirFile)) {
+      throw new Error(`install harness did not report its consumer dir (expected ${consumerDirFile})`);
+    }
+    const consumerDir = readFileSync(consumerDirFile, 'utf8').trim();
+    assertProvenance(
+      consumerDir,
+      VERIFY_PACKAGES.map((p) => p.name),
+    );
+
+    log('VERIFY PASSED — publish + install + typecheck + provenance all green ✓');
+  } finally {
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    await teardown();
+  }
+}
+
+// ── CLI ──────────────────────────────────────────────────────────────────────
+async function main() {
+  const [cmd, ...rest] = process.argv.slice(2);
+  switch (cmd) {
+    case 'start': {
+      const child = await startRegistry();
+      // Leave the registry running after this process exits.
+      child.unref();
+      log(`started. Stop with: node scripts/local-registry.mjs stop`);
+      process.exit(0);
+      break;
+    }
+    case 'stop':
+      await stopRegistry();
+      break;
+    case 'publish': {
+      if (rest.length === 0) throw new Error('usage: local-registry.mjs publish <package-dir>...');
+      publishDirs(rest);
+      break;
+    }
+    case 'verify':
+      await verify();
+      break;
+    default:
+      console.error('usage: node scripts/local-registry.mjs <start|stop|publish <dir>...|verify>');
+      process.exit(2);
+  }
+}
+
+main().catch(async (err) => {
+  console.error(`[local-registry] FAILED: ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+});

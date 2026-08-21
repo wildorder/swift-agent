@@ -28,4 +28,37 @@ export {
   type UserRepo,
   createUserWorkspaceRepo,
   type UserWorkspaceRepo,
+  createPlaygroundSpendRepo,
+  type PlaygroundSpendRepo,
+  type PlaygroundSpendTerminalStatus,
+  type PlaygroundSpendReservationRow,
+  type ReserveResult,
 } from './repositories/index.js';
+
+// Migration status + drift-detection tooling (consumed by WS-29 integration tests)
+export {
+  queryAppliedMigrations,
+  computeMigrationStatus,
+  renderStatusTable,
+  resolveLastAppliedIdx,
+  type AppliedRow,
+  type MigrationStatus,
+  type MigrationStatusState,
+} from './migration-status.js';
+export {
+  checkDrift,
+  introspectLiveSchema,
+  assembleLiveSchema,
+  projectSnapshot,
+  diffSchemas,
+  renderDriftSummary,
+  planPreflight,
+  DRIFT_SKIP_WARNING,
+  type DriftResult,
+  type DriftDifference,
+  type CanonicalSchema,
+  type LiveSchema,
+  type ExpectedSchema,
+  type PreflightPlan,
+} from './drift-check.js';
+export { loadJournal, loadSnapshot, type Journal, type Snapshot } from './snapshot.js';

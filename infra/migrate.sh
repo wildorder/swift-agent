@@ -4,6 +4,13 @@ set -euo pipefail
 # Migration script for ECS RunTask
 # Runs Drizzle migrations against the database
 # Exit non-zero on failure to halt deployment
+#
+# NOTE: This is a standalone MANUAL wrapper. The CD pipeline does NOT invoke it —
+# deploy-{dev,staging,prod}.yml run `node packages/db/dist/migrate.js` directly via
+# an `aws ecs run-task` containerOverrides command. `dist/migrate.js` runs the
+# WS-26 drift preflight (refuses to apply on schema drift unless
+# MIGRATE_SKIP_DRIFT_CHECK=1), so both this script and the CD path inherit the
+# same drift refusal for free. See docs/runbooks/migrations.md.
 
 echo "=== Swift Agent Database Migration ==="
 echo "Environment: ${ENVIRONMENT:-unknown}"

@@ -1,0 +1,45 @@
+{
+  "name": "@swiftagent/playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Swift Agent playground — the four-beat 'infrastructure, not a chat widget' demo: SDK agent backend + Vite/React frontend.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc -p backend/tsconfig.json && vite build -c frontend/vite.config.ts",
+    "typecheck": "tsc -p backend/tsconfig.json --noEmit && tsc -p frontend/tsconfig.json --noEmit",
+    "lint": "eslint backend/src frontend/src",
+    "test": "vitest run",
+    "dev:backend": "tsx watch backend/src/server.ts",
+    "dev:frontend": "vite -c frontend/vite.config.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "^8",
+    "@fastify/websocket": "^11",
+    "@swiftagent/db": "workspace:*",
+    "@swiftagent/react": "workspace:*",
+    "@swiftagent/sdk": "workspace:*",
+    "@swiftagent/shared": "workspace:*",
+    "fastify": "^5",
+    "nanoid": "^5",
+    "postgres": "^3.4",
+    "react": "^19",
+    "react-dom": "^19",
+    "ws": "^8.20.0",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@types/ws": "^8.18.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4",
+    "happy-dom": "^20.8.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.0",
+    "vite": "^5",
+    "vitest": "^3.0.0"
+  }
+}

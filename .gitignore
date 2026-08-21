@@ -7,7 +7,16 @@ build-logs/
 .env
 .env.*
 !.env.example
+
+# Generated local-compose credentials (WS-43 bootstrap output — never commit)
+.swiftagent-local/
 *.log
+
+# Ad-hoc captured lint/test terminal output
+lint.out.txt
+lint.force.txt
+unit.all.txt
+
 .DS_Store
 
 # Terraform

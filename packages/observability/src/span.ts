@@ -1,5 +1,6 @@
 import { generateSpanId } from '@swiftagent/shared';
 import type { SpanType, SpanStatus, SpanError, SpanRecord } from './types.js';
+import { boundSpanRecord } from './bounds.js';
 
 export class Span {
   readonly spanId: string;
@@ -73,6 +74,9 @@ export class Span {
     if (this.error) {
       record.error = this.error;
     }
-    return record;
+    // Bound metadata + error before the record leaves the observability layer,
+    // so every persistence path (tracer.finish and any future in-memory read)
+    // emits a size-capped record and cannot bloat `trace_spans`.
+    return boundSpanRecord(record);
   }
 }

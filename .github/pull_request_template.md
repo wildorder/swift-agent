@@ -12,3 +12,4 @@
 - [ ] Database migration required: **yes / no**
 - [ ] Environment variables added or changed: **yes / no**
 - [ ] Breaking changes: **yes / no**
+- [ ] All commits are signed off (`git commit -s`) per the [DCO](../DCO) — see [CONTRIBUTING.md](../CONTRIBUTING.md)

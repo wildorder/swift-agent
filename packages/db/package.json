@@ -11,19 +11,27 @@
       "import": "./dist/index.js"
     }
   },
+  "//schema-workflow": "Schema changes: (1) edit src/schema/*.ts; (2) `pnpm db:generate` (tsc + drizzle-kit generate) to emit the migration SQL + meta/NNNN_snapshot.json, then commit BOTH; (3) `pnpm build && pnpm db:status` to inspect applied/pending migrations; (4) `pnpm build && pnpm db:check` to detect structural drift (exit 0 clean, 1 drift, 2 tool error); (5) `pnpm migrate` applies pending migrations and runs the drift check as a preflight against the last-applied snapshot, aborting on drift. Bypass the preflight only via MIGRATE_SKIP_DRIFT_CHECK=1 (loudly logged).",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo",
+    "db:generate": "tsc && drizzle-kit generate",
+    "migrate": "node dist/migrate.js",
+    "db:status": "node dist/cli/status.js",
+    "db:check": "node dist/cli/check.js"
   },
   "dependencies": {
     "@swiftagent/shared": "workspace:*",
     "drizzle-orm": "^0.36",
-    "postgres": "^3.4"
+    "nanoid": "^5",
+    "postgres": "^3.4",
+    "zod": "^3.24"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^10.0.0",
     "@types/node": "^25.5.2",
     "drizzle-kit": "^0.30",
     "typescript": "^5.5.0",

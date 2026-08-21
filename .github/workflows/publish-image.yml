@@ -1,0 +1,101 @@
+# Publish the apps/server container image to GHCR (WS-50, SC-14).
+#
+# Deliberately AUTOMATIC — no workflow_dispatch-only trigger, no environment
+# approval. The npm release gate (publish-sdks.yml) protects a semver API
+# commitment; a container image commits to no API surface and its references
+# are replaceable, so it publishes on every push to the default branch and on
+# release tags. The Apache-2.0-before-publish requirement is satisfied
+# causally: WS-50 depends on WS-44, which landed LICENSE in the tree before
+# this workflow first ran.
+#
+# The default branch of this repository is `main` (verified via
+# `gh repo view --json defaultBranchRef`); `main` publishes the moving
+# `latest` tag. Active development happens on `dev`, which does not publish.
+#
+# Tags are human-readable ALIASES only — GHCR provides no immutable-tag
+# enforcement, so every tag (version tags included) is mutable. The only
+# reference that cannot drift is the sha256 MANIFEST-LIST digest echoed at
+# the end of the job; docker-compose.yml pins that digest, never a tag.
+# See docs/runbooks/container-image.md.
+name: Publish Container Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    name: Build & push multi-arch image
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tag aliases)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # One image name, used everywhere (workflow, compose pin, runbook,
+          # WS-47 deploy template): ghcr.io/<owner>/<repo>. Derived from
+          # github.repository rather than hardcoded so forks build cleanly.
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            # Moving alias tracking the default branch:
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Semver aliases on release tags (v1.2.3 -> 1.2.3, 1.2, 1):
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # Traceability alias per commit:
+            type=sha,format=long
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Free platform provenance (mode=min); no cosign, no SBOM pipeline.
+          provenance: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # This digest is the MANIFEST-LIST (image index) digest — the value
+      # docker-compose.yml pins. A per-platform manifest digest would break
+      # the other architecture; this one resolves per-platform automatically.
+      - name: Echo manifest-list digest (the compose pin)
+        run: |
+          echo "::notice title=Manifest-list digest::${{ steps.build.outputs.digest }}"
+          echo "Pin this in docker-compose.yml as:"
+          echo "  image: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"

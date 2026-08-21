@@ -131,7 +131,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         isStreaming: false,
-        lastError: action.message,
+        // Prefix the server code for a readable, self-describing lastError
+        // (WS-41), e.g. `[MODEL_ERROR] upstream provider failed`. Always a
+        // plain string — never a raw event/object.
+        lastError: `[${action.code}] ${action.message}`,
         // Mark any streaming messages as complete
         messages: state.messages.map((m) =>
           m.status === 'streaming'

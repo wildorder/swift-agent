@@ -8,3 +8,10 @@ export { createToolCallRepo, type ToolCallRepo } from './tool-call-repo.js';
 export { createTraceRepo, type TraceRepo, type TraceRecordRow, type SpanRecordRow } from './trace-repo.js';
 export { createUserRepo, type UserRepo } from './user-repo.js';
 export { createUserWorkspaceRepo, type UserWorkspaceRepo } from './user-workspace-repo.js';
+export {
+  createPlaygroundSpendRepo,
+  type PlaygroundSpendRepo,
+  type PlaygroundSpendTerminalStatus,
+  type PlaygroundSpendReservationRow,
+  type ReserveResult,
+} from './playground-spend-repo.js';

@@ -1,0 +1,41 @@
+name: DCO
+
+# WS-44 (SC-13): enforce the Developer Certificate of Origin sign-off on every
+# PR commit via the committed scripts/check-dco.mjs — deliberately an owned
+# script, not a CLA bot or third-party DCO app. The self-test runs first so
+# every workflow run demonstrates the check accepting a signed-off commit and
+# rejecting an unsigned one, independent of the PR's own commits.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full history to resolve the PR's commit range
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Deterministic accept/reject proof — the check "actually running".
+      - name: DCO self-test
+        run: node scripts/check-dco.mjs --self-test
+
+      # Real check: every commit this PR adds over its base must be signed off.
+      - name: Check PR commits for Signed-off-by
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          node scripts/check-dco.mjs "origin/${{ github.base_ref }}..HEAD"

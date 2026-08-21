@@ -28,9 +28,22 @@ import {
   createOpenAIProvider,
   createAnthropicProvider,
   createGoogleProvider,
+  createEchoProvider,
+  createToolFixtureProvider,
 } from '@swiftagent/models';
 import { Tracer, type TraceSink } from '@swiftagent/observability';
-import { AgentEngine, LocalToolExecutor } from '@swiftagent/runtime';
+import {
+  AgentEngine,
+  createRunExecutionService,
+  createToolExecutorResolver,
+  mintRunnerToken,
+  importRunnerPrivateKey,
+  type AgentEngineDeps,
+  type RunExecutionService,
+  type RunnerSigningKey,
+  type OutboundUrlPolicy,
+  type Logger,
+} from '@swiftagent/runtime';
 import {
   createTokenService,
   type TokenService,
@@ -67,8 +80,12 @@ export interface Container {
   /** Observability tracer */
   tracer: Tracer;
 
-  /** Agent runtime engine — implements RuntimeDelegate */
+  /** Agent runtime engine — legacy lock-owning entry point. */
   engine: AgentEngine;
+
+  /** Unified run execution service (WS-23) — the single run-id + session-lock
+   *  owner shared by the REST API and the WebSocket gateway. */
+  runExecutionService: RunExecutionService;
 
   /** API services */
   tokenService: TokenService;
@@ -135,12 +152,95 @@ export function buildContainer(config: ServerConfig): Container {
     registeredProviders.push('google');
   }
 
+  // Echo provider — always registered, needs no API key, makes no external
+  // call. Reachable only by an agent whose modelConfig.model is `echo/*` (the
+  // seeded `smoke-echo` agent used by the deployed realtime smoke test). The
+  // explicit throwaway config stops the registry resolving a real env key. It
+  // is intentionally NOT added to `registeredProviders`, which tracks only the
+  // key-gated real providers surfaced in the startup banner.
+  modelRegistry.register('echo', createEchoProvider, { apiKey: 'echo-provider-no-key' });
+
+  // Tool-fixture provider (WS-43) — registered ONLY when the local-only
+  // LOCAL_FIXTURE_PROVIDER boot flag is set (loadServerConfig hard-fails when
+  // that flag meets a cloud DEPLOY_ENV, so this branch is structurally
+  // unreachable in deployed environments — unlike echo, which stays
+  // always-registered for the cloud smoke test). Needs no API key, makes no
+  // external call: it deterministically emits one `local_echo` tool_call on its
+  // first turn so the local compose smoke can assert a real tool round trip.
+  // Reachable only by an agent whose modelConfig.model is `fixture/*` (the
+  // bootstrap-provisioned `local-dev` agent). The explicit throwaway config
+  // stops the registry resolving a real env key. Like echo, it is intentionally
+  // NOT added to `registeredProviders`, which tracks only the key-gated real
+  // providers surfaced in the startup banner (the banner instead surfaces the
+  // flag itself via redactConfig's LOCAL_FIXTURE_PROVIDER boolean).
+  if (config.LOCAL_FIXTURE_PROVIDER) {
+    modelRegistry.register('fixture', createToolFixtureProvider, {
+      apiKey: 'fixture-provider-no-key',
+    });
+  }
+
   // 4. Tracer — TraceRepo implements TraceSink interface
   const tracer = new Tracer(repos.traceRepo as unknown as TraceSink);
 
-  // 5. AgentEngine — the core runtime, implements RuntimeDelegate
-  const toolExecutor = new LocalToolExecutor();
-  const engine = new AgentEngine({
+  // 5. AgentEngine — the core runtime, implements RuntimeDelegate.
+  // Executors are resolved per-agent at run time (WS-21): agents with a
+  // toolRunnerUrl get a RemoteToolExecutor for that URL; agents with no
+  // execution config fail fast. No server-wide LocalToolExecutor singleton.
+  //
+  // WS-22: the resolver mints a short-lived, asymmetrically-signed scoped token
+  // per tool invocation. The PRIVATE signing key lives only here (hosted
+  // runtime); the SDK runner verifies with the distributed PUBLIC key. The raw
+  // workspace API key is never used as a runner credential.
+  const privateKeyMaterial = config[ENV_KEYS.RUNNER_TOKEN_PRIVATE_KEY];
+  // Import lazily + once: buildContainer is sync, and tool-less deployments
+  // never mint, so a missing key only fails when a remote tool actually runs.
+  let signingKeyPromise: Promise<RunnerSigningKey> | null = null;
+  const getSigningKey = (): Promise<RunnerSigningKey> => {
+    if (!privateKeyMaterial) {
+      throw new Error(
+        `Remote tool execution requires ${ENV_KEYS.RUNNER_TOKEN_PRIVATE_KEY} to be configured`,
+      );
+    }
+    signingKeyPromise ??= importRunnerPrivateKey(privateKeyMaterial);
+    return signingKeyPromise;
+  };
+
+  // Deployed environments require HTTPS and disallow loopback; dev/test (https
+  // not required) allow loopback for a local runner.
+  const requireHttps = config[ENV_KEYS.RUNNER_REQUIRE_HTTPS] !== false;
+  const runnerPolicy: OutboundUrlPolicy = {
+    requireHttps,
+    allowLoopback: !requireHttps,
+  };
+
+  const toolExecutorResolver = createToolExecutorResolver({
+    policy: runnerPolicy,
+    mintToken: async (agent, call, ctx) => {
+      const audience = agent.toolRunnerUrl;
+      if (!audience) {
+        throw new Error(`Agent ${agent.agentId} has no tool runner URL to scope a token to`);
+      }
+      const signingKey = await getSigningKey();
+      return mintRunnerToken(signingKey, {
+        aud: audience,
+        workspaceId: agent.workspaceId,
+        agentId: agent.agentId,
+        runId: ctx.runId,
+        callId: call.callId,
+        idempotencyKey: call.callId,
+        toolName: call.toolName,
+      });
+    },
+  });
+  // WS-28: a thin console-backed logger so the loop's finalize logging is live
+  // in production. Structured `data` is passed through as a second argument.
+  const engineLogger: Logger = {
+    info: (msg, data) => console.info(msg, data ?? {}),
+    warn: (msg, data) => console.warn(msg, data ?? {}),
+    error: (msg, data) => console.error(msg, data ?? {}),
+  };
+
+  const engineDeps: AgentEngineDeps = {
     db: {
       messages: repos.messageRepo,
       runs: repos.runRepo,
@@ -149,8 +249,23 @@ export function buildContainer(config: ServerConfig): Container {
       agents: repos.agentRepo,
     },
     modelRegistry,
-    toolExecutor,
-  });
+    toolExecutorResolver,
+    // WS-24: wire the observability tracer into the runtime loop so trace +
+    // span records are populated on every run (previously the tracer was
+    // instantiated but never passed in). This is what makes
+    // `GET /v1/runs/:runId/trace` return real spans (SC-15).
+    tracer,
+    // WS-28: surface trace-write failures through the runtime logger instead of
+    // swallowing them (SC-09).
+    logger: engineLogger,
+  };
+  const engine = new AgentEngine(engineDeps);
+
+  // The unified execution service (WS-23) owns the session lock + active-run
+  // registry shared by REST and the gateway, so a REST-triggered run blocks a
+  // concurrent WebSocket run on the same session and vice versa. Execution is
+  // process-bound; in-flight runs are abandoned on restart (Phase 2 recovery).
+  const runExecutionService = createRunExecutionService(engineDeps);
 
   // 6. API services
   const tokenService = createTokenService({
@@ -165,6 +280,7 @@ export function buildContainer(config: ServerConfig): Container {
     runRepo: repos.runRepo,
     toolCallRepo: repos.toolCallRepo,
     agentService,
+    runExecutionService,
   });
 
   return {
@@ -173,6 +289,7 @@ export function buildContainer(config: ServerConfig): Container {
     modelRegistry,
     tracer,
     engine,
+    runExecutionService,
     tokenService,
     agentService,
     sessionService,

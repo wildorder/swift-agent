@@ -1,0 +1,67 @@
+{
+  "program": {
+    "id": "management-auth-hardening",
+    "name": "Swift Agent — Management Auth Hardening",
+    "description": "Server-side companion to console-identity-readiness: explicit Cognito token_use validation, a legible auth error taxonomy, and route-protection contract tests for /v1/management/*.",
+    "status": "completed",
+    "created": "2026-07-21",
+    "completed": "2026-07-21"
+  },
+  "technology": {
+    "identity_provider": "AWS Cognito User Pool (OIDC)",
+    "validation": "jose (JWKS, createLocalJWKSet in tests)"
+  },
+  "companionProgram": {
+    "repo": "swift-agent-site",
+    "id": "console-identity-readiness",
+    "relationship": "Primary program. Consumes this program's token contract; its WS-02 depends on WS-19."
+  },
+  "packages": [
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "Cognito JWT auth middleware, /v1/management/* routes, and buildApp-level contract tests (extends existing package)"
+    }
+  ],
+  "workstreams": [
+    {
+      "id": "WS-19",
+      "name": "Token-Type Validation Hardening",
+      "taskFile": "tasks/management-auth-hardening/ws-19-token-type-validation.md",
+      "status": "completed",
+      "size": "S",
+      "dependencies": [],
+      "packages": ["packages/api"]
+    },
+    {
+      "id": "WS-20",
+      "name": "Management Route-Protection & Contract Tests",
+      "taskFile": "tasks/management-auth-hardening/ws-20-route-protection-contract-tests.md",
+      "status": "completed",
+      "size": "S",
+      "dependencies": ["WS-19"],
+      "packages": ["packages/api"]
+    }
+  ],
+  "tokenContract": {
+    "acceptedToken": "Cognito ID token",
+    "requiredClaims": ["token_use=id", "aud=<app client id>", "iss=<issuer>", "sub", "email"],
+    "rejected": ["Cognito access token (token_use=access)", "missing/expired/invalid tokens"],
+    "consumedBy": "swift-agent-site session.idToken (formerly session.accessToken)"
+  },
+  "successCriteria": [
+    { "id": "SC-01", "description": "cognito-auth.ts explicitly asserts token_use === 'id' and rejects other values with a distinct, accurate error." },
+    { "id": "SC-02", "description": "A Cognito access token is rejected at /v1/management/* with 401; a valid ID token is accepted with 200, both asserted by tests." },
+    { "id": "SC-03", "description": "Auth failures are distinguishable (missing header / missing token / wrong token type / invalid or expired) while preserving the HTTP status contract." },
+    { "id": "SC-04", "description": "The route-protection matrix (401 unauthenticated, 200 valid, 401 access token, 403 cross-workspace) is covered by automated tests." },
+    { "id": "SC-05", "description": "The accepted-token contract is documented in code/README for the site to reference." },
+    { "id": "SC-06", "description": "pnpm typecheck and the @swiftagent/api test suite pass with the new tests (excluding pre-existing unrelated failures)." }
+  ],
+  "outOfScope": [
+    "Any change to the marketing site (owned by console-identity-readiness)",
+    "New Management API endpoints or data-model changes",
+    "Rate limiting, API key rotation, audit logging",
+    "Cognito User Pool / Terraform changes (pool already exists from management-api WS-14)",
+    "Accepting access tokens or supporting both token types (contract is ID-token-only)"
+  ]
+}

@@ -1,16 +1,24 @@
 import { z } from 'zod';
 import type { ZodType } from 'zod';
-import type {
-  AgentRecord,
-  SessionRecord,
-  MessageRecord,
-  RunRecord,
+import {
+  RunnerRequestSchema,
+  type AgentRecord,
+  type SessionRecord,
+  type MessageRecord,
+  type RunRecord,
 } from '@swiftagent/shared';
+import type { RunnerVerifyKey } from './runner-token.js';
 
 // ── Tool context passed to execute handlers ─────────────────────────
 
 export interface ToolContext {
   sessionId: string;
+  /** Resolved agent id (WS-22) — matches the signed token's `agentId` claim. */
+  agentId: string;
+  /** Run id (WS-22) — invocation scope, matches the signed token's `runId` claim. */
+  runId: string;
+  /** Swift Agent tc_ call id (WS-22) — invocation identity + idempotency key. */
+  callId: string;
   userId?: string;
   metadata?: Record<string, unknown>;
 }
@@ -84,19 +92,23 @@ export interface AgentDefinition {
 export interface CreateAgentAppConfig {
   apiKey: string;
   baseUrl?: string;
+  /**
+   * Runner scoped-token verification (WS-22). Overrides the corresponding env
+   * vars. `runnerPublicKey` is PEM (SPKI) or JWK JSON; `runnerAudience` defaults
+   * to `TOOL_RUNNER_PUBLIC_URL`; `runnerWorkspaceId` is the runner's `ws_` id.
+   */
+  runnerPublicKey?: string;
+  runnerAudience?: string;
+  runnerWorkspaceId?: string;
 }
 
 // ── Tool runner HTTP types ──────────────────────────────────────────
 
-export const ToolRunnerRequestSchema = z.object({
-  input: z.unknown(),
-  context: z.object({
-    sessionId: z.string(),
-    userId: z.string().optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-  }),
-});
-export type ToolRunnerRequest = z.infer<typeof ToolRunnerRequestSchema>;
+// The wire contract is owned by @swiftagent/shared so both the runtime executor
+// and this runner validate against one schema (WS-22). Re-exported under the
+// legacy name for existing call sites.
+export const ToolRunnerRequestSchema = RunnerRequestSchema;
+export type ToolRunnerRequest = z.infer<typeof RunnerRequestSchema>;
 
 export interface ToolRunnerSuccessResponse {
   result: unknown;
@@ -106,11 +118,35 @@ export interface ToolRunnerErrorResponse {
   error: {
     code: string;
     message: string;
+    details?: unknown;
   };
+}
+
+// ── Runner auth config (WS-22) ──────────────────────────────────────
+
+/**
+ * Scoped-token verification configuration for a runner process. All fields are
+ * known at startup, before any agent registers, so a token can be verified
+ * against the runner's stable identity without needing agent ids in advance.
+ */
+export interface RunnerAuthConfig {
+  /** Public verification key (imported PEM/JWK). */
+  publicKey: RunnerVerifyKey;
+  /** Required `aud` — the runner's stable public URL (RUNNER_AUDIENCE / TOOL_RUNNER_PUBLIC_URL). */
+  expectedAudience: string;
+  /** Required `workspaceId` claim — the runner's owning workspace (RUNNER_WORKSPACE_ID). */
+  expectedWorkspaceId: string;
 }
 
 // ── SDK HTTP error ──────────────────────────────────────────────────
 
+/**
+ * Internal wire error for a non-2xx control-plane response. It carries the raw
+ * `status`/`body`, but is NOT surfaced to SDK consumers directly: `client.ts`
+ * maps it to a typed {@link SwiftAgentError} (with an actionable message and a
+ * `code`) and attaches this instance as `.cause` (WS-41). Reachable via the
+ * `@swiftagent/sdk/internal` subpath for advanced callers who want `.status`/`.body`.
+ */
 export class SdkHttpError extends Error {
   constructor(
     message: string,
@@ -147,6 +183,13 @@ export interface CreateSessionResult {
   sessionId: string;
   clientToken: string;
   websocketUrl: string;
+  /**
+   * Server-advertised control-plane protocol version (the `x-swiftagent-protocol`
+   * header off `POST /v1/sessions`, WS-37). Feed this to the `@swiftagent/react`
+   * connect path so it can assert compatibility before opening the socket.
+   * `undefined` on a legacy server that omits the header (fail-open).
+   */
+  serverProtocolVersion?: string;
 }
 
 export interface ListMessagesOptions {
@@ -162,4 +205,14 @@ export interface ListMessagesResult {
 export interface CreateRunOptions {
   sessionId: string;
   content: string;
+}
+
+/**
+ * Result of an accepted async run (202). Execution is process-bound on the
+ * server; poll `runs`/`getRun` for terminal status. Cancellation returns the
+ * same shape.
+ */
+export interface AcceptedRun {
+  runId: string;
+  status: string;
 }

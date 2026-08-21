@@ -1,0 +1,275 @@
+{
+  "program": {
+    "id": "sdk-dev-ux",
+    "name": "Swift Agent — SDK & Developer Experience",
+    "description": "Deliver the \"working agent in minutes\" developer experience: finalize the @swiftagent/sdk and @swiftagent/react public API surfaces, establish a versioning and SDK<->server compatibility policy, harden a Changesets-driven publish pipeline targeting GitHub Packages (the org's existing private registry), ship a maintained in-repo example application, align all documentation to the actual APIs, make setup and runtime error messages actionable, and add an automated quickstart acceptance test that installs the published packages and verifies the full define-agent -> session -> stream path.",
+    "status": "completed",
+    "created": "2026-07-20",
+    "completed": "2026-07-20"
+  },
+  "technology": {
+    "@changesets/cli": "new — workspace version management, changelog generation, and release orchestration (source of truth for version bumps)",
+    "GitHub Packages (npm.pkg.github.com)": "the org's existing private npm registry for the @swiftagent scope; the publish pipeline pushes here and the acceptance test installs from here via read:packages token — no new infrastructure, only .npmrc scope config and token wiring",
+    "vite": "new — dev/build tooling for the example React frontend (library packages keep their existing build setup)"
+  },
+  "successCriteria": [
+    {
+      "id": "SC-01",
+      "description": "@swiftagent/sdk and @swiftagent/react expose exactly the vision-advertised public surface (incl. fluent app.sessions.*/app.runs.*, useAgentChat, createChatSession) through explicit exports maps; internal modules are not reachable from the package root."
+    },
+    {
+      "id": "SC-02",
+      "description": "A versioning + deprecation policy and an SDK<->server/protocol compatibility policy are documented and committed."
+    },
+    {
+      "id": "SC-03",
+      "description": "Version/compatibility constants are surfaced from @swiftagent/shared, and the SDK/runner assert compatibility at registration/connect time, failing with an actionable message on mismatch."
+    },
+    {
+      "id": "SC-04",
+      "description": "The publishable packages (@swiftagent/sdk, @swiftagent/react, and their workspace deps) build correct dual ESM + type outputs, declare files/publishConfig, resolve workspace:* to concrete versions, and publish to GitHub Packages (npm.pkg.github.com) driven by Changesets, gated by dry-run verification."
+    },
+    {
+      "id": "SC-05",
+      "description": "A maintained example application (backend agent + tools via @swiftagent/sdk, React frontend via @swiftagent/react) exists in-repo, consumes only public APIs, and is kept green in CI."
+    },
+    {
+      "id": "SC-06",
+      "description": "The quickstart, per-package READMEs, and the vision's API-surface tables match the shipped APIs, with example-sourced snippets."
+    },
+    {
+      "id": "SC-07",
+      "description": "Setup errors (missing/invalid API key, missing env keys, malformed agent/tool config) produce actionable messages naming the offending key/field and the remediation."
+    },
+    {
+      "id": "SC-08",
+      "description": "Runtime errors (connection/auth, tool-runner unreachable, tool-handler throw, model/provider failure) surface as typed, human-readable errors through the SDK and the React client's lastError."
+    },
+    {
+      "id": "SC-09",
+      "description": "An automated quickstart acceptance test installs the published packages from GitHub Packages and exercises define agent -> create session -> connect -> stream a response (incl. a tool-call round-trip) against a deterministic stub agent, running as a CI gate."
+    },
+    {
+      "id": "SC-10",
+      "description": "Type-checking, linting, and unit tests pass for every package this program touches, and the integration/acceptance suites introduce no new failures relative to the documented pre-existing baseline. The known pre-existing failures (the @swiftagent/server vitest exit-1 and the 3 @swiftagent/api failures) are not regressions and are out of scope to fix here; a workstream may note them but must not be blocked by them."
+    }
+  ],
+  "packages": [
+    {
+      "name": "@swiftagent/sdk",
+      "path": "packages/sdk",
+      "description": "Finalize the public server-SDK surface: build the fluent app.sessions.*/app.runs.* wrappers over the existing ControlPlaneClient, lock the exports map and public entry point, hide internals, and route setup/runtime failures through typed SwiftAgentError variants."
+    },
+    {
+      "name": "@swiftagent/react",
+      "path": "packages/react",
+      "description": "Audit and lock the public export set (useAgentChat, createChatSession, useConnection + public types) via an explicit exports map; surface typed runtime errors through lastError."
+    },
+    {
+      "name": "@swiftagent/shared",
+      "path": "packages/shared",
+      "description": "Surface version/compatibility constants tied to RUNNER_PROTOCOL_VERSION and the stream protocol; extend SwiftAgentError variants for actionable setup/runtime messages; publishable workspace dependency of the SDKs."
+    },
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "Types-only support for the fluent SDK wrappers (reuse existing session/run response schemas); actionable error-message pass-through. No new endpoints."
+    },
+    {
+      "name": "examples/quickstart",
+      "path": "examples/quickstart",
+      "description": "New maintained example app: a backend defining an agent + tool(s) via @swiftagent/sdk with the tool runner, and a minimal React (Vite) frontend using @swiftagent/react useAgentChat. Consumes only public APIs; kept green in CI and the canonical quickstart source."
+    },
+    {
+      "name": "test/acceptance",
+      "path": "test/acceptance",
+      "description": "New end-to-end quickstart acceptance suite: installs the published packages from GitHub Packages, runs the example against a Testcontainers stack, and asserts the message_started->token->message_completed sequence plus a tool-call round-trip against a deterministic stub agent."
+    },
+    {
+      "name": ".github/workflows",
+      "path": ".github/workflows",
+      "description": "Changesets-driven publish to GitHub Packages (npm.pkg.github.com) with dry-run verification; CI inclusion of the example build and the acceptance test as a gate."
+    },
+    {
+      "name": "docs",
+      "path": "docs",
+      "description": "Versioning/compatibility policy doc; quickstart and per-package README alignment to the shipped APIs with example-sourced snippets."
+    }
+  ],
+  "successCriteriaNotes": "The runtime loop, model providers, gateway/stream protocol, persistence, and AWS infrastructure already exist and are unchanged (see docs/as-built.md). This program finishes the developer-facing surface only. Key decisions: (1) the fluent app.sessions.*/app.runs.* SDK surface is built as typed wrappers over the existing ControlPlaneClient with no new server endpoints; (2) publishing targets GitHub Packages (npm.pkg.github.com), the org's existing private registry — public npm is a later flip; (3) only @swiftagent/sdk, @swiftagent/react, and their workspace deps are publishable, not the full nine-package surface; (4) the acceptance test installs the real published packages from GitHub Packages but uses a deterministic stub agent to stay fast and non-flaky.",
+  "workstreams": [
+    {
+      "id": "WS-36",
+      "name": "SDK API Finalization & Surface Lockdown",
+      "taskFile": "tasks/sdk-dev-ux/ws-36-sdk-api-finalization.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "product-x:WS-08",
+        "product-x:WS-09",
+        "realtime-cloud-delivery:WS-34"
+      ],
+      "packages": [
+        "packages/sdk",
+        "packages/react"
+      ]
+    },
+    {
+      "id": "WS-37",
+      "name": "Versioning & Compatibility Policy",
+      "taskFile": "tasks/sdk-dev-ux/ws-37-versioning-compat-policy.md",
+      "status": "completed",
+      "size": "S",
+      "dependencies": [
+        "WS-36"
+      ],
+      "packages": [
+        "packages/shared",
+        "packages/sdk",
+        "packages/react",
+        "packages/api",
+        "docs"
+      ]
+    },
+    {
+      "id": "WS-38",
+      "name": "Package Publishing Pipeline",
+      "taskFile": "tasks/sdk-dev-ux/ws-38-package-publishing-pipeline.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-36",
+        "WS-37"
+      ],
+      "packages": [
+        ".github/workflows",
+        "packages/sdk",
+        "packages/react",
+        "packages/shared"
+      ]
+    },
+    {
+      "id": "WS-39",
+      "name": "Maintained Example Application",
+      "taskFile": "tasks/sdk-dev-ux/ws-39-example-application.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-36"
+      ],
+      "packages": [
+        "examples/quickstart",
+        "pnpm-workspace.yaml",
+        ".github/workflows"
+      ]
+    },
+    {
+      "id": "WS-40",
+      "name": "Documentation Alignment with Actual APIs",
+      "taskFile": "tasks/sdk-dev-ux/ws-40-docs-alignment.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-36",
+        "WS-39"
+      ],
+      "packages": [
+        "docs",
+        "packages/sdk",
+        "packages/react",
+        "packages/shared"
+      ]
+    },
+    {
+      "id": "WS-41",
+      "name": "Setup & Runtime Error Messages",
+      "taskFile": "tasks/sdk-dev-ux/ws-41-error-messages.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-36"
+      ],
+      "packages": [
+        "packages/shared",
+        "packages/sdk",
+        "packages/react"
+      ]
+    },
+    {
+      "id": "WS-42",
+      "name": "Quickstart Acceptance Flow",
+      "taskFile": "tasks/sdk-dev-ux/ws-42-quickstart-acceptance.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-38",
+        "WS-39",
+        "WS-40",
+        "WS-41"
+      ],
+      "packages": [
+        "test/acceptance",
+        "examples/quickstart",
+        ".github/workflows"
+      ]
+    }
+  ],
+  "runtimeEndpoints": [],
+  "architectureDecisions": [
+    {
+      "id": "AD-01",
+      "decision": "Build the advertised fluent SDK surface (app.sessions.*/app.runs.*) as typed wrappers over the existing ControlPlaneClient",
+      "rationale": "The vision advertises a fluent server SDK, but as-built only ships the lower-level ControlPlaneClient. Wrapping the existing /v1/sessions and /v1/sessions/:id/runs routes delivers the advertised DX with no new server endpoints or protocol change.",
+      "alternativesRejected": [
+        "Add new server endpoints to back the fluent surface (unneeded; expands the runtime surface)",
+        "Ship only the low-level ControlPlaneClient and change the vision (regresses the advertised DX)"
+      ]
+    },
+    {
+      "id": "AD-02",
+      "decision": "Publish to GitHub Packages (npm.pkg.github.com), the org's existing private registry; defer public npm",
+      "rationale": "The org already uses GitHub Packages for other packages, so it needs no new infrastructure — only .npmrc scope config and read/write:packages token wiring. Lets the acceptance test install real published packages and validate the install step without irreversible public releases. Public-npm publishing is a later flip once the surface and versioning policy are proven.",
+      "alternativesRejected": [
+        "Stand up a separate/ephemeral registry such as Verdaccio (GitHub Packages is already the org standard; no new infra needed)",
+        "Dry-run only, no real registry (acceptance test can't validate a real install)",
+        "Publish to public npm now (irreversible releases; needs npm-org/token setup before the surface is proven)"
+      ]
+    },
+    {
+      "id": "AD-03",
+      "decision": "Publish only @swiftagent/sdk, @swiftagent/react, and their workspace dependencies",
+      "rationale": "These are the developer-facing packages. Publishing the full nine-package surface would multiply versioning, documentation, and support cost for internal packages that are not part of the public contract.",
+      "alternativesRejected": [
+        "Publish all nine @swiftagent/* packages (larger public surface to version/document/support)"
+      ]
+    },
+    {
+      "id": "AD-04",
+      "decision": "The quickstart acceptance test uses a deterministic echo/streaming stub agent",
+      "rationale": "Proves the full transport/tool wiring fast and without external model API keys, cost, or flakiness. Real-provider fidelity is verified elsewhere (existing realtime smoke), not in the per-commit acceptance gate.",
+      "alternativesRejected": [
+        "Call a real model provider in CI (needs secrets, costs money, and can flake)"
+      ]
+    },
+    {
+      "id": "AD-05",
+      "decision": "PR builds publish Changesets snapshot prereleases to GitHub Packages under a non-latest 'pr' dist-tag (0.0.0-pr-<sha>); the acceptance test installs only from the real registry (no local-tarball fallback)",
+      "rationale": "SC-09 is only meaningful if the acceptance test installs from GitHub Packages. Since PRs run before a stable version is published, WS-38 publishes a snapshot prerelease on every PR so WS-42 can always install a real registry artifact; the stable latest release on merge is untouched. Resolves the pre-publish chicken-and-egg without weakening SC-09.",
+      "alternativesRejected": [
+        "Local `pnpm pack` tarball fallback on PRs (does not prove a real registry install; SC-09 never exercised)",
+        "Registry install gated to main only (PRs would not validate the published-package path before merge)"
+      ]
+    }
+  ],
+  "outOfScope": [
+    "Any change to the runtime loop, model providers, executor resolution, gateway/stream protocol, or trace/span schema",
+    "New server API endpoints (the fluent SDK wraps existing control-plane routes)",
+    "Completing the SummaryMemoryStrategy stub (runtime tech debt, not DX)",
+    "Horizontal multi-instance realtime scaling and durable execution (Phase 2)",
+    "Publishing to the public npm registry (GitHub Packages private registry only; public is a later flip)",
+    "Publishing the full nine-package surface (only the SDKs + their workspace deps are publishable here)",
+    "A hosted docs site / marketing dashboard build-out (content alignment only)",
+    "CLI or Terraform-provider surfaces (future automation consumers)",
+    "Usage metering / billing / autoscaling"
+  ]
+}

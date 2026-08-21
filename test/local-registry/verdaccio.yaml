@@ -1,0 +1,57 @@
+# WS-45 · Local registry (Verdaccio) config — TEST-TIME ONLY.
+#
+# This file is the COMMITTED half of the harness config. The orchestrator
+# (scripts/local-registry.mjs) copies it into a fresh temp dir per run and
+# prepends an ephemeral `storage:` path, so no registry state ever lives in
+# the repo and every run starts empty (re-publishing the same version is
+# always clean — no --force needed).
+#
+# LOAD-BEARING RULES (see tasks/oss-direction/ws-45-local-registry-harness.md):
+#   1. `@swiftagent/*` and `create-swift-agent` have NO `proxy` — a lookup for
+#      our names resolves locally or 404s. It must NEVER leak to npmjs, where
+#      pre-release nothing exists and post-release the wrong artifact would
+#      mask a local-publish failure. `create-swift-agent` is pre-provisioned
+#      for WS-46's `npx create-swift-agent` proof.
+#   2. Everything else (`**`) proxies to the npmjs uplink, so a consumer's
+#      full dependency tree (typescript, a scaffolded project's deps) installs
+#      through this single endpoint — what lets `npx --registry <local>` work.
+#   3. Loopback + ephemeral + permissive. The orchestrator passes
+#      `--listen http://127.0.0.1:<port>`; auth is relaxed for test use
+#      (max_users: -1 disables registration; publish is open to $all — npm
+#      clients still insist on a token for `publish`, so the orchestrator
+#      supplies a DUMMY _authToken the server never verifies).
+#
+# SECURITY: loopback binding is the security boundary. NEVER expose this
+# registry beyond 127.0.0.1 / a CI runner.
+
+auth:
+  htpasswd:
+    # Relative to this config file's (temp) location — ephemeral like storage.
+    file: ./htpasswd
+    max_users: -1
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
+packages:
+  '@swiftagent/*':
+    access: $all
+    publish: $all
+    # NO proxy: local-or-404, by design.
+
+  'create-swift-agent':
+    access: $all
+    publish: $all
+    # NO proxy: pre-provisioned for WS-46; local-or-404.
+
+  '**':
+    access: $all
+    proxy: npmjs
+
+# Quiet by default; the orchestrator captures stdout to a log file in the
+# ephemeral storage area for post-mortem on failures.
+log:
+  type: stdout
+  format: pretty
+  level: warn

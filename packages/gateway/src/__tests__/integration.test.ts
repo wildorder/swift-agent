@@ -114,11 +114,16 @@ describe('Gateway Integration', () => {
   ];
 
   const mockRuntime: RuntimeDelegate = {
-    run: (async function* (_sessionId: string, _userMessage: string) {
+    start: (async (
+      _input: { sessionId: string; content: string },
+      opts?: { onEvent?: (event: ChatEvent) => void },
+    ) => {
       for (const event of mockEvents) {
-        yield event;
+        opts?.onEvent?.(event);
       }
-    }) as unknown as RuntimeDelegate['run'],
+      return { runId: 'run_i1' };
+    }) as unknown as RuntimeDelegate['start'],
+    requestCancel: (async () => ({ requested: true })) as RuntimeDelegate['requestCancel'],
   };
 
   beforeAll(async () => {
@@ -270,6 +275,24 @@ describe('Gateway Integration', () => {
       await new Promise((r) => setTimeout(r, 100));
 
       const messagesPromise = collectMessages(ws, 1);
+      ws.send(JSON.stringify({ type: 'ping' }));
+
+      const messages = await messagesPromise;
+      const pong = JSON.parse(messages[0]);
+      expect(pong.type).toBe('pong');
+    });
+
+    it('does not drop a frame sent immediately on open (pre-auth buffer)', async () => {
+      // Regression: the inbound handler used to be attached only after the
+      // async auth + subscribe steps completed, so a frame sent the moment
+      // `open` fired (fast localhost links) was silently dropped. The
+      // synchronous pre-auth buffer must capture and replay it. Note: no
+      // settle delay here, unlike the tests above — the race IS the test.
+      const token = await signToken(validClaims());
+      const ws = createWs(`/v1/stream?token=${token}`);
+
+      const messagesPromise = collectMessages(ws, 1);
+      await waitForOpen(ws);
       ws.send(JSON.stringify({ type: 'ping' }));
 
       const messages = await messagesPromise;

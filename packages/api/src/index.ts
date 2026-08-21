@@ -20,9 +20,11 @@ export type {
   WorkspaceResponse,
   ApiKeyResponse,
   CreateApiKeyResponse,
+  RunMetricsResponse,
 } from './types.js';
 export {
   ErrorBodySchema,
+  RunMetricsResponseSchema,
   CreateAgentBodySchema,
   CreateSessionBodySchema,
   PatchSessionBodySchema,

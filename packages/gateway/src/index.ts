@@ -4,6 +4,9 @@ export const PACKAGE_NAME = 'gateway' as const;
 export { createGatewayServer, startGateway } from './server.js';
 export type { GatewayContext } from './server.js';
 
+// Plugin (unified realtime server — mounts onto a host Fastify app)
+export { registerGatewayPlugin } from './plugin.js';
+
 // Types
 export type {
   ChatEvent,
@@ -12,6 +15,8 @@ export type {
   PingMessage,
   ErrorEvent,
   GatewayConfig,
+  GatewayPluginConfig,
+  GatewayComponents,
   RuntimeDelegate,
   AuthenticatedSocket,
 } from './types.js';
@@ -41,6 +46,10 @@ export {
   createRedisPubSub,
 } from './session-bridge.js';
 export type { RedisPubSubStub, RedisMessageHandler, SessionBridgeDeps } from './session-bridge.js';
+
+// Channel registry (ref-counted per-session fanout subscriptions)
+export { ChannelRegistry, createChannelRegistry } from './channel-registry.js';
+export type { ChannelRegistryDeps } from './channel-registry.js';
 
 // Heartbeat
 export { HeartbeatManager } from './heartbeat.js';

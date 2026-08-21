@@ -185,7 +185,9 @@ describe('chatReducer', () => {
       });
 
       expect(state.isStreaming).toBe(false);
-      expect(state.lastError).toBe('Something went wrong');
+      // lastError is the code-prefixed, readable string (WS-41) — never a raw object.
+      expect(state.lastError).toBe('[MODEL_ERROR] Something went wrong');
+      expect(state.lastError).not.toContain('[object');
       // Streaming message should be marked complete
       const msg = state.messages[0] as ChatMessage;
       expect(msg.status).toBe('complete');

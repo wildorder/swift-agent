@@ -1,0 +1,470 @@
+{
+  "schemaVersion": 5,
+  "programId": "oss-direction",
+  "generatedAt": "2026-08-20T04:34:20.044Z",
+  "inputHash": "313fdc832629a78ca1dd41db7473f7b1d48a44746e7712b26ba76a1ae586eb36",
+  "outcome": "requires-replan",
+  "summary": "Plan audit found 3 blocker/major finding(s) before authoring.",
+  "replanFindings": [
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-09",
+      "message": "The mandated completed-run settlement source undercounts every successful multi-round tool run. The runtime replaces lastUsage on each provider round and writes only the final round into RunRecord.tokenUsage, while SC-09 requires the mediator to treat that value as actual run usage and forbids the runtime change needed to aggregate it. The playground's successful tool-call path necessarily has multiple provider rounds, so the daily spend ceiling can be exceeded while its ledger reports compliance.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "usage overwrite",
+          "detail": "packages/runtime/src/loop.ts assigns lastUsage = chunk.usage during every model round and later passes only lastUsage to runs.complete()."
+        },
+        {
+          "kind": "concern",
+          "named": "persistence source",
+          "detail": "packages/db/src/repositories/run-repo.ts complete() persists the single TokenUsage argument; GET /v1/runs/:runId returns that RunRecord unchanged."
+        },
+        {
+          "kind": "concern",
+          "named": "affected core path",
+          "detail": "A successful tool call runs model -> tool -> model, so at least the first provider round's tokens are absent from the value SC-09 calls actual usage."
+        },
+        {
+          "kind": "concern",
+          "named": "forbidden repair",
+          "detail": "SC-09 and program scope require no runtime change, preventing aggregation at the authoritative run-completion write."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "93d5fd3d6fb041db"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-12",
+      "message": "SC-12 quantifies over every deployment surface created by the program, but the manifest also creates a scaffold-generated compose deployment in WS-46. That local surface cannot be verified across a managed rolling deployment and WS-46 owns none of the criterion's work. The criterion must explicitly limit its family to managed/public deployment surfaces or give the local compose member an applicable verification rule.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "omitted family member",
+          "detail": "WS-46 includes a generated compose file, alongside the WS-47 managed template and WS-49 playground deployment."
+        },
+        {
+          "kind": "concern",
+          "named": "inapplicable operation",
+          "detail": "A local generated compose project has no managed-host autoscaling or rolling-deployment operation to observe."
+        },
+        {
+          "kind": "concern",
+          "named": "conflicting narrowing",
+          "detail": "Program architecture names only the deploy template and playground as the deployment-surface family, but canonical SC-12 remains unqualified."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "4ab5c2676a19d3f0"
+    },
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "The manifest's WS-50 summary reintroduces the exact human-action contradiction decisions 5 and 6 resolved: it says the workstream makes GHCR anonymously pullable, while the canonical criterion and the same workstream's excludes prohibit performing, awaiting, or asserting the only action that can make it so.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "scope-summary contradiction",
+          "detail": "workstreams[WS-50].scope.summary says WS-50 'makes that package anonymously pullable.'"
+        },
+        {
+          "kind": "concern",
+          "named": "excluded prerequisite",
+          "detail": "WS-50 excludes waiting on the owner's visibility click, running anonymous-pull acceptance evidence, or claiming that it succeeded."
+        },
+        {
+          "kind": "concern",
+          "named": "canonical disposition",
+          "detail": "SC-15 and constraints.ghcrVisibility require only documentation plus a ready-to-run post-click command and authenticated in-program pulls."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    }
+  ],
+  "relatedFindings": [
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-09",
+      "message": "The mandated completed-run settlement source undercounts every successful multi-round tool run. The runtime replaces lastUsage on each provider round and writes only the final round into RunRecord.tokenUsage, while SC-09 requires the mediator to treat that value as actual run usage and forbids the runtime change needed to aggregate it. The playground's successful tool-call path necessarily has multiple provider rounds, so the daily spend ceiling can be exceeded while its ledger reports compliance.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "usage overwrite",
+          "detail": "packages/runtime/src/loop.ts assigns lastUsage = chunk.usage during every model round and later passes only lastUsage to runs.complete()."
+        },
+        {
+          "kind": "concern",
+          "named": "persistence source",
+          "detail": "packages/db/src/repositories/run-repo.ts complete() persists the single TokenUsage argument; GET /v1/runs/:runId returns that RunRecord unchanged."
+        },
+        {
+          "kind": "concern",
+          "named": "affected core path",
+          "detail": "A successful tool call runs model -> tool -> model, so at least the first provider round's tokens are absent from the value SC-09 calls actual usage."
+        },
+        {
+          "kind": "concern",
+          "named": "forbidden repair",
+          "detail": "SC-09 and program scope require no runtime change, preventing aggregation at the authoritative run-completion write."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "93d5fd3d6fb041db"
+    },
+    {
+      "severity": "major",
+      "category": "acceptance-criteria",
+      "subject": "SC-12",
+      "message": "SC-12 quantifies over every deployment surface created by the program, but the manifest also creates a scaffold-generated compose deployment in WS-46. That local surface cannot be verified across a managed rolling deployment and WS-46 owns none of the criterion's work. The criterion must explicitly limit its family to managed/public deployment surfaces or give the local compose member an applicable verification rule.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "omitted family member",
+          "detail": "WS-46 includes a generated compose file, alongside the WS-47 managed template and WS-49 playground deployment."
+        },
+        {
+          "kind": "concern",
+          "named": "inapplicable operation",
+          "detail": "A local generated compose project has no managed-host autoscaling or rolling-deployment operation to observe."
+        },
+        {
+          "kind": "concern",
+          "named": "conflicting narrowing",
+          "detail": "Program architecture names only the deploy template and playground as the deployment-surface family, but canonical SC-12 remains unqualified."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "4ab5c2676a19d3f0"
+    },
+    {
+      "severity": "blocker",
+      "category": "acceptance-criteria",
+      "subject": "SC-15",
+      "message": "The manifest's WS-50 summary reintroduces the exact human-action contradiction decisions 5 and 6 resolved: it says the workstream makes GHCR anonymously pullable, while the canonical criterion and the same workstream's excludes prohibit performing, awaiting, or asserting the only action that can make it so.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "scope-summary contradiction",
+          "detail": "workstreams[WS-50].scope.summary says WS-50 'makes that package anonymously pullable.'"
+        },
+        {
+          "kind": "concern",
+          "named": "excluded prerequisite",
+          "detail": "WS-50 excludes waiting on the owner's visibility click, running anonymous-pull acceptance evidence, or claiming that it succeeded."
+        },
+        {
+          "kind": "concern",
+          "named": "canonical disposition",
+          "detail": "SC-15 and constraints.ghcrVisibility require only documentation plus a ready-to-run post-click command and authenticated in-program pulls."
+        }
+      ],
+      "requiresReplan": true,
+      "id": "641a9982f8e92583"
+    },
+    {
+      "severity": "minor",
+      "category": "acceptance-criteria",
+      "subject": "Program Success Criteria section",
+      "message": "The program document duplicates the complete text of SC-01 through SC-17 instead of referencing the manifest IDs. The manifest successCriteria array is canonical; retaining a second full copy creates avoidable future drift even though the present copies are materially aligned.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "duplicated canonical text",
+          "detail": "Program 'Success Criteria' restates all seventeen descriptions that already exist in manifest.successCriteria."
+        }
+      ],
+      "id": "2df6331d836fc82d"
+    },
+    {
+      "severity": "minor",
+      "category": "acceptance-criteria",
+      "subject": "Program Workstreams section",
+      "message": "The program document duplicates the workstream roster, names, dependencies, and sizes rather than treating manifest.workstreams as canonical and referencing IDs. The dependency graph may remain as architectural explanation, but the duplicate roster should be removed or generated from the manifest.",
+      "evidence": [
+        {
+          "kind": "concern",
+          "named": "duplicated workstream roster",
+          "detail": "Program 'Workstreams' repeats all nine manifest workstream records' IDs, names, dependency metadata, and effort."
+        }
+      ],
+      "id": "00e9ed93d6d6fdad"
+    }
+  ],
+  "classAnalyses": [
+    {
+      "subject": "SC-09",
+      "scope": "systemic",
+      "rootCause": "The plan treats a final-model-round usage field as aggregate run usage across a terminal accounting rule.",
+      "affectedSubjects": [
+        "completed runs with one or more successful tool iterations",
+        "completed runs with failed or rejected tool calls followed by model recovery",
+        "all playground completed runs whose model is invoked more than once"
+      ],
+      "checkedSubjects": [
+        "completed single-round runs",
+        "completed multi-round runs",
+        "failed runs",
+        "cancelled runs",
+        "timed_out runs",
+        "packages/shared/src/types/run.ts",
+        "packages/runtime/src/loop.ts",
+        "packages/db/src/repositories/run-repo.ts",
+        "packages/api/src/routes/runs.ts",
+        "packages/sdk/src/client.ts",
+        "completed runs with one or more successful tool iterations",
+        "completed runs with failed or rejected tool calls followed by model recovery",
+        "all playground completed runs whose model is invoked more than once"
+      ],
+      "completenessBasis": "RunStatusSchema supplies the exhaustive status family; completed, failed, cancelled, and timed_out are all terminal members, and every terminal transition plus the sole usage-producing completion path was inspected."
+    },
+    {
+      "subject": "SC-12",
+      "scope": "isolated",
+      "rootCause": "An unqualified deployment-surface quantifier includes a local generated compose artifact to which managed rolling-deployment verification does not apply.",
+      "affectedSubjects": [
+        "WS-46 scaffold-generated compose file"
+      ],
+      "checkedSubjects": [
+        "WS-46 scaffold-generated compose file",
+        "WS-47 managed-host deploy template",
+        "WS-49 playground public deployment"
+      ],
+      "completenessBasis": "The complete manifest workstream roster was searched for every created compose, deploy-template, hosting, and public-deployment artifact; these are the three resulting members."
+    },
+    {
+      "subject": "SC-15",
+      "scope": "isolated",
+      "rootCause": "One unreconciled workstream summary still promises the outcome of an explicitly owner-only post-program action.",
+      "affectedSubjects": [
+        "manifest workstreams[WS-50].scope.summary"
+      ],
+      "checkedSubjects": [
+        "manifest successCriteria[SC-15]",
+        "constraints.ghcrVisibility",
+        "constraints.artifactAudience",
+        "manifest workstreams[WS-50].scope.summary",
+        "all WS-50 includes",
+        "all WS-50 excludes",
+        "program decisions 5 and 6",
+        "program GHCR architecture prose",
+        "program Scope In",
+        "program Scope Out",
+        "program SC-15",
+        "program GHCR risk mitigation"
+      ],
+      "completenessBasis": "All active copies found under the canonical criterion, constraints, workstream scope, decisions, architecture, scope, and risk sections were compared; only the WS-50 summary asserts in-program anonymous pullability."
+    }
+  ],
+  "proofObligations": [
+    {
+      "id": "P1",
+      "subject": "SC-09",
+      "members": [
+        {
+          "id": "P1.1",
+          "text": "completed single-round runs",
+          "affected": false
+        },
+        {
+          "id": "P1.2",
+          "text": "completed multi-round runs",
+          "affected": false
+        },
+        {
+          "id": "P1.3",
+          "text": "failed runs",
+          "affected": false
+        },
+        {
+          "id": "P1.4",
+          "text": "cancelled runs",
+          "affected": false
+        },
+        {
+          "id": "P1.5",
+          "text": "timed_out runs",
+          "affected": false
+        },
+        {
+          "id": "P1.6",
+          "text": "packages/shared/src/types/run.ts",
+          "affected": false
+        },
+        {
+          "id": "P1.7",
+          "text": "packages/runtime/src/loop.ts",
+          "affected": false
+        },
+        {
+          "id": "P1.8",
+          "text": "packages/db/src/repositories/run-repo.ts",
+          "affected": false
+        },
+        {
+          "id": "P1.9",
+          "text": "packages/api/src/routes/runs.ts",
+          "affected": false
+        },
+        {
+          "id": "P1.10",
+          "text": "packages/sdk/src/client.ts",
+          "affected": false
+        },
+        {
+          "id": "P1.11",
+          "text": "completed runs with one or more successful tool iterations",
+          "affected": true
+        },
+        {
+          "id": "P1.12",
+          "text": "completed runs with failed or rejected tool calls followed by model recovery",
+          "affected": true
+        },
+        {
+          "id": "P1.13",
+          "text": "all playground completed runs whose model is invoked more than once",
+          "affected": true
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "subject": "SC-12",
+      "members": [
+        {
+          "id": "P2.1",
+          "text": "WS-46 scaffold-generated compose file",
+          "affected": true
+        },
+        {
+          "id": "P2.2",
+          "text": "WS-47 managed-host deploy template",
+          "affected": false
+        },
+        {
+          "id": "P2.3",
+          "text": "WS-49 playground public deployment",
+          "affected": false
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "subject": "SC-15",
+      "members": [
+        {
+          "id": "P3.1",
+          "text": "manifest successCriteria[SC-15]",
+          "affected": false
+        },
+        {
+          "id": "P3.2",
+          "text": "constraints.ghcrVisibility",
+          "affected": false
+        },
+        {
+          "id": "P3.3",
+          "text": "constraints.artifactAudience",
+          "affected": false
+        },
+        {
+          "id": "P3.4",
+          "text": "manifest workstreams[WS-50].scope.summary",
+          "affected": true
+        },
+        {
+          "id": "P3.5",
+          "text": "all WS-50 includes",
+          "affected": false
+        },
+        {
+          "id": "P3.6",
+          "text": "all WS-50 excludes",
+          "affected": false
+        },
+        {
+          "id": "P3.7",
+          "text": "program decisions 5 and 6",
+          "affected": false
+        },
+        {
+          "id": "P3.8",
+          "text": "program GHCR architecture prose",
+          "affected": false
+        },
+        {
+          "id": "P3.9",
+          "text": "program Scope In",
+          "affected": false
+        },
+        {
+          "id": "P3.10",
+          "text": "program Scope Out",
+          "affected": false
+        },
+        {
+          "id": "P3.11",
+          "text": "program SC-15",
+          "affected": false
+        },
+        {
+          "id": "P3.12",
+          "text": "program GHCR risk mitigation",
+          "affected": false
+        }
+      ]
+    }
+  ],
+  "criteriaPatches": [],
+  "checkpointAssessments": [],
+  "criticSummary": "SC-09: The mediator can read an authenticated RunRecord from GET /v1/runs/:runId, but that record does not contain total usage for a multi-round run. packages/runtime/src/loop.ts overwrites lastUsage on every provider round and complete() persists only the final round. Every successful playground tool call requires at least two model rounds, so settling completed runs against this value would systematically undercount provider spend. Correcting the runtime aggregation is forbidden, while the criterion requires actual-usage settlement for completed runs.; SC-12: The unqualified phrase 'every deployment surface created by this program' includes three manifest-produced surfaces: the WS-46 generated compose file, the WS-47 managed-host template, and the WS-49 playground deployment. The generated local compose file has neither managed-host autoscaling nor a rolling-deployment operation to observe, and WS-46 contains none of SC-12's verification or documentation work. The program prose silently narrows the family to WS-47 and WS-49, contradicting the canonical criterion's asserted-equal family.; SC-15: SC-15, decisions 5/6, constraints.ghcrVisibility, and WS-50's detailed includes/excludes consistently say the program only documents the post-publish visibility click and never claims anonymous pullability. However, manifest workstreams[WS-50].scope.summary says WS-50 'makes that package anonymously pullable.' An author cannot satisfy that summary without performing the expressly excluded owner-only UI action.",
+  "criticLogs": [
+    "build-logs/oss-direction-plan-audit-2026-08-20T04-28-25-795Z-65e3697b-critic-attempt-1.log"
+  ],
+  "planningInstruction": "Run /plan-program oss-direction. Read lastAttempt first when present and prioritize every failedSubjects entry. Resolve every replanFindings and blocker/major relatedFindings entry. For each classAnalyses entry, close the root-cause class by reconciling every checkedSubjects member with an explicit fixed or already-correct disposition and concrete evidence; naming a member in narrative prose is not proof. Re-check every workstreams[].scope copy affected by a criterion or interface repair. Apply only the explicitly listed intent-preserving criteriaPatches; any other requirements change needs a human decision.",
+  "supersedes": "docs/programs/oss-direction-replan-history/2026-08-20T04-34-20-031Z-099cd7fd.json",
+  "lastAttempt": {
+    "attemptedAt": "2026-08-20T04:38:07.614Z",
+    "attempt": 2,
+    "agent": "codex exec",
+    "outcome": "rejected",
+    "reason": "Replanner resolution proof failed: SC-09 (P1): expected exactly one resolution proof, received 0 | SC-12 (P2): expected exactly one resolution proof, received 0 | SC-15 (P3): expected exactly one resolution proof, received 0.",
+    "failedSubjects": [
+      "SC-09",
+      "SC-12",
+      "SC-15"
+    ],
+    "artifactsLeftOnDisk": false
+  },
+  "attemptHistory": [
+    {
+      "attemptedAt": "2026-08-20T04:35:44.646Z",
+      "attempt": 1,
+      "agent": "codex exec",
+      "outcome": "rejected",
+      "reason": "Replanner did not return the required REPLAN_COMPLETE contract.",
+      "failedSubjects": [],
+      "artifactsLeftOnDisk": false
+    },
+    {
+      "attemptedAt": "2026-08-20T04:38:07.614Z",
+      "attempt": 2,
+      "agent": "codex exec",
+      "outcome": "rejected",
+      "reason": "Replanner resolution proof failed: SC-09 (P1): expected exactly one resolution proof, received 0 | SC-12 (P2): expected exactly one resolution proof, received 0 | SC-15 (P3): expected exactly one resolution proof, received 0.",
+      "failedSubjects": [
+        "SC-09",
+        "SC-12",
+        "SC-15"
+      ],
+      "artifactsLeftOnDisk": false
+    }
+  ]
+}

@@ -22,16 +22,36 @@ async function mintToken(overrides: {
   email?: string;
   exp?: number;
   signingKey?: CryptoKey;
+  /** Cognito token type. Defaults to `'id'` — the only accepted type. */
+  token_use?: string | null;
+  /** Set `false` to omit `email` — the shape of a real Cognito access token. */
+  includeEmail?: boolean;
+  /** Set `false` to omit `aud` — the shape of a real Cognito access token. */
+  includeAud?: boolean;
+  /** Set `false` to omit `sub`. */
+  includeSub?: boolean;
 } = {}): Promise<string> {
   const key = overrides.signingKey ?? privateKey;
-  let builder = new SignJWT({
-    email: overrides.email ?? EMAIL,
-  })
+
+  const claims: Record<string, unknown> = {};
+  if (overrides.token_use !== null) {
+    claims.token_use = overrides.token_use ?? 'id';
+  }
+  if (overrides.includeEmail !== false) {
+    claims.email = overrides.email ?? EMAIL;
+  }
+
+  let builder = new SignJWT(claims)
     .setProtectedHeader({ alg: 'RS256' })
     .setIssuedAt()
-    .setIssuer(overrides.iss ?? issuerUrl)
-    .setAudience(overrides.aud ?? AUDIENCE)
-    .setSubject(overrides.sub ?? SUB);
+    .setIssuer(overrides.iss ?? issuerUrl);
+
+  if (overrides.includeAud !== false) {
+    builder = builder.setAudience(overrides.aud ?? AUDIENCE);
+  }
+  if (overrides.includeSub !== false) {
+    builder = builder.setSubject(overrides.sub ?? SUB);
+  }
 
   if (overrides.exp !== undefined) {
     builder = builder.setExpirationTime(overrides.exp);
@@ -96,9 +116,9 @@ afterAll(async () => {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('Cognito auth middleware', () => {
-  it('decorates request with cognitoSub and email for a valid token', async () => {
+  it('decorates request with cognitoSub and email for a valid ID token', async () => {
     const app = buildTestApp();
-    const token = await mintToken();
+    const token = await mintToken({ token_use: 'id' });
 
     const res = await app.inject({
       method: 'GET',
@@ -140,9 +160,16 @@ describe('Cognito auth middleware', () => {
     await app.close();
   });
 
-  it('rejects token with wrong audience', async () => {
+  it('rejects a Cognito access token by token type, not incidentally', async () => {
     const app = buildTestApp();
-    const token = await mintToken({ aud: 'wrong-audience' });
+    // A real Cognito access token: token_use "access", no `aud` (it uses
+    // `client_id`), and no `email`. It must fail on the TYPE check — which only
+    // works because `audience` is no longer enforced inside `jwtVerify`.
+    const token = await mintToken({
+      token_use: 'access',
+      includeAud: false,
+      includeEmail: false,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -151,13 +178,75 @@ describe('Cognito auth middleware', () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(res.json().error.code).toBe('UNAUTHORIZED');
+    const { error } = res.json();
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.message).toMatch(/token_use/i);
+    expect(error.message).toMatch(/access/);
+    // Proves it did NOT fall through to the audience/email checks.
+    expect(error.message).not.toMatch(/audience/i);
+    expect(error.message).not.toMatch(/email/i);
+    await app.close();
+  });
+
+  it('rejects a token with no token_use claim', async () => {
+    const app = buildTestApp();
+    const token = await mintToken({ token_use: null });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(401);
+    const { error } = res.json();
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.message).toMatch(/no token_use claim/i);
+    await app.close();
+  });
+
+  it('rejects token with wrong audience via the manual audience check', async () => {
+    const app = buildTestApp();
+    const token = await mintToken({ token_use: 'id', aud: 'wrong-audience' });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(401);
+    const { error } = res.json();
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.message).toBe('Invalid token audience');
+    await app.close();
+  });
+
+  it('accepts an ID token whose aud is an array containing the client id', async () => {
+    const app = buildTestApp();
+    const token = await new SignJWT({ token_use: 'id', email: EMAIL })
+      .setProtectedHeader({ alg: 'RS256' })
+      .setIssuedAt()
+      .setIssuer(issuerUrl)
+      .setAudience(['other-client', AUDIENCE])
+      .setSubject(SUB)
+      .setExpirationTime('5m')
+      .sign(privateKey);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().sub).toBe(SUB);
     await app.close();
   });
 
   it('rejects token with wrong issuer', async () => {
     const app = buildTestApp();
-    const token = await mintToken({ iss: 'https://wrong-issuer.example.com' });
+    const token = await mintToken({ token_use: 'id', iss: 'https://wrong-issuer.example.com' });
 
     const res = await app.inject({
       method: 'GET',
@@ -173,7 +262,10 @@ describe('Cognito auth middleware', () => {
   it('rejects an expired token', async () => {
     const app = buildTestApp();
     // Set exp to 1 hour in the past
-    const token = await mintToken({ exp: Math.floor(Date.now() / 1000) - 3600 });
+    const token = await mintToken({
+      token_use: 'id',
+      exp: Math.floor(Date.now() / 1000) - 3600,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -182,14 +274,16 @@ describe('Cognito auth middleware', () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(res.json().error.code).toBe('UNAUTHORIZED');
+    const { error } = res.json();
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.message).toBe('Invalid or expired token');
     await app.close();
   });
 
   it('rejects a token signed with a different key', async () => {
     const app = buildTestApp();
     const { privateKey: otherKey } = await generateKeyPair('RS256');
-    const token = await mintToken({ signingKey: otherKey });
+    const token = await mintToken({ token_use: 'id', signingKey: otherKey });
 
     const res = await app.inject({
       method: 'GET',
@@ -216,18 +310,9 @@ describe('Cognito auth middleware', () => {
     await app.close();
   });
 
-  it('rejects token missing email claim', async () => {
+  it('rejects a well-typed ID token missing the email claim', async () => {
     const app = buildTestApp();
-
-    // Mint a token without the email claim
-    const token = await new SignJWT({})
-      .setProtectedHeader({ alg: 'RS256' })
-      .setIssuedAt()
-      .setIssuer(issuerUrl)
-      .setAudience(AUDIENCE)
-      .setSubject(SUB)
-      .setExpirationTime('5m')
-      .sign(privateKey);
+    const token = await mintToken({ token_use: 'id', includeEmail: false });
 
     const res = await app.inject({
       method: 'GET',
@@ -236,7 +321,57 @@ describe('Cognito auth middleware', () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(res.json().error.code).toBe('UNAUTHORIZED');
+    const { error } = res.json();
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.message).toBe('Token missing email claim');
+    await app.close();
+  });
+
+  it('rejects a well-typed ID token missing the sub claim', async () => {
+    const app = buildTestApp();
+    const token = await mintToken({ token_use: 'id', includeSub: false });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(res.statusCode).toBe(401);
+    const { error } = res.json();
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.message).toBe('Token missing sub claim');
+    await app.close();
+  });
+
+  it('distinguishes every auth failure by message while keeping 401/UNAUTHORIZED', async () => {
+    const app = buildTestApp();
+
+    // NOTE: the `Missing bearer token` branch is not exercised here — the HTTP
+    // layer trims trailing whitespace from header values, so `Bearer ` arrives
+    // as `Bearer` and is caught by the header guard instead. That branch remains
+    // as defence-in-depth for non-HTTP callers of the hook.
+    const cases: { name: string; headers: Record<string, string> }[] = [
+      // "missing" and "malformed" header are deliberately ONE taxonomy case —
+      // both mean "no usable Bearer credential was presented".
+      { name: 'missing or invalid header', headers: {} },
+      { name: 'wrong token type', headers: { authorization: `Bearer ${await mintToken({ token_use: 'access', includeAud: false, includeEmail: false })}` } },
+      { name: 'missing token_use', headers: { authorization: `Bearer ${await mintToken({ token_use: null })}` } },
+      { name: 'wrong audience', headers: { authorization: `Bearer ${await mintToken({ aud: 'nope' })}` } },
+      { name: 'missing sub', headers: { authorization: `Bearer ${await mintToken({ includeSub: false })}` } },
+      { name: 'missing email', headers: { authorization: `Bearer ${await mintToken({ includeEmail: false })}` } },
+      { name: 'invalid or expired', headers: { authorization: 'Bearer not.a.valid.jwt' } },
+    ];
+
+    const messages: string[] = [];
+    for (const { headers } of cases) {
+      const res = await app.inject({ method: 'GET', url: '/test', headers });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().error.code).toBe('UNAUTHORIZED');
+      messages.push(res.json().error.message);
+    }
+
+    expect(new Set(messages).size).toBe(cases.length);
     await app.close();
   });
 });

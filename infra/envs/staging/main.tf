@@ -159,22 +159,33 @@ module "ecr" {
   source = "../../modules/ecr"
 }
 
+# Public wss:// base URL, up to and including /v1/stream (sessions.ts appends only
+# `?token=…`). Derived from the DNS domain when TLS/DNS is enabled (yields
+# wss://staging-api.swiftagent.dev/v1/stream); otherwise from the ALB DNS name so
+# the value is never empty and is always a real, non-localhost wss endpoint that
+# passes the server's cloud startup guard. The module.dns[0] reference is guarded
+# by the same var.enable_dns expression the domain_name output uses.
+locals {
+  public_websocket_url = var.enable_dns ? "wss://${module.dns[0].domain_name}/v1/stream" : "wss://${module.loadbalancer.alb_dns_name}/v1/stream"
+}
+
 module "secrets" {
   source = "../../modules/secrets"
 
-  environment  = var.environment
-  database_url = module.database.connection_string
-  redis_url    = module.cache.connection_string
+  environment          = var.environment
+  database_url         = module.database.connection_string
+  redis_url            = module.cache.connection_string
+  public_websocket_url = local.public_websocket_url
 }
 
 module "iam" {
   source = "../../modules/iam"
 
-  environment          = var.environment
-  ssm_parameter_arns   = values(module.secrets.parameter_arns)
-  ecr_repository_arn   = module.ecr.repository_arn
-  state_bucket_arn     = var.state_bucket_arn
-  lock_table_arn       = var.lock_table_arn
+  environment        = var.environment
+  ssm_parameter_arns = values(module.secrets.parameter_arns)
+  ecr_repository_arn = module.ecr.repository_arn
+  state_bucket_arn   = var.state_bucket_arn
+  lock_table_arn     = var.lock_table_arn
 }
 
 module "dns" {

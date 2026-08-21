@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ModelConfigSchema,
   MemoryConfigSchema,
+  ToolDefinitionSchema,
 } from '@swiftagent/shared';
 
 // ── Authenticated request ──────────────────────────────────────────
@@ -34,6 +35,7 @@ export const CreateAgentBodySchema = z.object({
   systemPrompt: z.string(),
   memoryConfig: MemoryConfigSchema.optional(),
   toolRunnerUrl: z.string().url().nullable().optional(),
+  tools: z.array(ToolDefinitionSchema).optional(),
 }).strict();
 export type CreateAgentBody = z.infer<typeof CreateAgentBodySchema>;
 
@@ -63,6 +65,30 @@ export const CreateRunBodySchema = z.object({
   content: z.string().min(1),
 }).strict();
 export type CreateRunBody = z.infer<typeof CreateRunBodySchema>;
+
+// Async run acceptance body (202) — REST no longer returns a full RunRecord;
+// execution is process-bound and observed via GET /runs/:runId.
+export const AcceptedRunResponseSchema = z.object({
+  runId: z.string(),
+  status: z.string(),
+}).strict();
+export type AcceptedRunResponse = z.infer<typeof AcceptedRunResponseSchema>;
+
+// ── Run metrics response ───────────────────────────────────────────
+// Derived-on-read roll-up of a run's persisted spans (WS-28). `runId` +
+// `traceId` are added beyond the raw `RunMetrics` fields for client correlation.
+export const RunMetricsResponseSchema = z.object({
+  runId: z.string(),
+  traceId: z.string(),
+  totalRunDurationMs: z.number().nullable(),
+  timeToFirstTokenMs: z.number().nullable(),
+  modelCallCount: z.number().int().nonnegative(),
+  toolCallCount: z.number().int().nonnegative(),
+  totalModelLatencyMs: z.number().nonnegative(),
+  totalToolLatencyMs: z.number().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+}).strict();
+export type RunMetricsResponse = z.infer<typeof RunMetricsResponseSchema>;
 
 // ── Session creation response ──────────────────────────────────────
 export const CreateSessionResponseSchema = z.object({

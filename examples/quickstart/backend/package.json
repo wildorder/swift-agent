@@ -1,0 +1,27 @@
+{
+  "name": "@swiftagent/example-backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Swift Agent quickstart backend — one agent, one tool, and a /api/session route.",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@swiftagent/sdk": "workspace:*",
+    "@swiftagent/shared": "workspace:*",
+    "fastify": "^5",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -7,6 +7,77 @@ import { loadConfig as sharedLoadConfig, ENV_KEYS, type AppConfig } from '@swift
  */
 export interface ServerConfig extends AppConfig {
   AUTO_MIGRATE: boolean;
+  /**
+   * WS-43 local-only boot flag: registers the zero-cost `fixture` tool-calling
+   * provider and satisfies the at-least-one-model-key requirement so a clean
+   * `docker compose up` boots with no real provider key. Read directly from env
+   * (like AUTO_MIGRATE / DEPLOY_ENV — NOT in ENV_KEYS) and hard-refused when
+   * DEPLOY_ENV is a cloud env, so it is structurally unreachable in deployments.
+   */
+  LOCAL_FIXTURE_PROVIDER: boolean;
+}
+
+/** Hosts that are never a valid public endpoint in a cloud environment. */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
+
+/**
+ * Deploy environments that are "cloud" — the exact values used as the Terraform
+ * `environment` and injected as the `DEPLOY_ENV` container env (see WS-32).
+ */
+const CLOUD_ENVS = new Set(['dev', 'staging', 'prod']);
+
+/**
+ * Cloud-only validation for PUBLIC_WEBSOCKET_URL (SC-04).
+ *
+ * When `DEPLOY_ENV` marks a cloud environment, the URL MUST be present, use the
+ * `wss:` scheme, and NOT point at localhost — otherwise clients would be handed
+ * an unreachable/wrong-scheme WebSocket URL. In local dev (`DEPLOY_ENV` absent
+ * or not a cloud env) the check is skipped entirely, so local boot needs no
+ * ceremony and a `ws://localhost:3001` value is allowed.
+ *
+ * INSECURE OPT-OUT (`PUBLIC_WS_ALLOW_INSECURE=true`): a domainless environment
+ * (e.g. dev, whose ALB has no ACM cert and thus no TLS listener) cannot serve a
+ * real `wss://` endpoint on its raw `*.elb.amazonaws.com` name. Setting this
+ * boot-time flag permits a non-localhost `ws://` URL so the realtime path is
+ * reachable over plain HTTP (port 80). It is deliberately NOT set for
+ * staging/prod, which keep the strict `wss://`-only policy. The localhost ban
+ * still applies either way.
+ *
+ * `DEPLOY_ENV` / `PUBLIC_WS_ALLOW_INSECURE` are read directly from `env`
+ * (mirroring AUTO_MIGRATE) rather than added to ENV_KEYS/ConfigSchema — they are
+ * boot-time deployment markers, not app config the schema needs to type.
+ *
+ * @returns an error message when the URL violates cloud policy, else `null`.
+ */
+export function validatePublicWebsocketUrl(
+  env: Record<string, string | undefined>,
+): string | null {
+  const deployEnv = env['DEPLOY_ENV'];
+  if (!deployEnv || !CLOUD_ENVS.has(deployEnv)) return null; // local dev: no constraint
+
+  const raw = env[ENV_KEYS.PUBLIC_WEBSOCKET_URL];
+  if (!raw) {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} is required in a cloud environment (DEPLOY_ENV=${deployEnv})`;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} is not a valid URL (got '${raw}')`;
+  }
+
+  const allowInsecure = env['PUBLIC_WS_ALLOW_INSECURE'] === 'true';
+  const okProtocol = url.protocol === 'wss:' || (allowInsecure && url.protocol === 'ws:');
+  if (!okProtocol) {
+    const schemes = allowInsecure ? 'wss:// or ws://' : 'wss://';
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must use the ${schemes} scheme in a cloud environment (got '${raw}')`;
+  }
+  if (LOCAL_HOSTS.has(url.hostname)) {
+    return `${ENV_KEYS.PUBLIC_WEBSOCKET_URL} must not point at localhost in a cloud environment (got '${raw}')`;
+  }
+
+  return null;
 }
 
 /**
@@ -26,15 +97,37 @@ export function loadServerConfig(
     }
   }
 
-  // At least one model provider key is required
+  // WS-43: the LOCAL_FIXTURE_PROVIDER boot flag (local compose only). When set
+  // it satisfies the model-key requirement below via the zero-cost `fixture`
+  // provider; when combined with a cloud DEPLOY_ENV it is a hard config error,
+  // aggregated into the same fail-fast message as other missing vars, so the
+  // fixture can never boot in a deployed environment.
+  const localFixtureProvider = env['LOCAL_FIXTURE_PROVIDER'] === 'true';
+  const deployEnv = env['DEPLOY_ENV'];
+  if (localFixtureProvider && deployEnv && CLOUD_ENVS.has(deployEnv)) {
+    missing.push(
+      `LOCAL_FIXTURE_PROVIDER must not be set in a cloud environment (DEPLOY_ENV=${deployEnv}) — it is a local-compose-only flag`,
+    );
+  }
+
+  // At least one model provider key is required — unless the local fixture
+  // provider is enabled (a valid, zero-cost model configuration on its own).
   const modelKeys = [
     ENV_KEYS.OPENAI_API_KEY,
     ENV_KEYS.ANTHROPIC_API_KEY,
     ENV_KEYS.GOOGLE_API_KEY,
   ] as const;
   const hasModelKey = modelKeys.some((k) => !!env[k]);
-  if (!hasModelKey) {
+  if (!hasModelKey && !localFixtureProvider) {
     missing.push(`At least one of: ${modelKeys.join(', ')}`);
+  }
+
+  // Cloud-only: PUBLIC_WEBSOCKET_URL must be a real wss:// endpoint (SC-04).
+  // Folded into the same fail-fast aggregation so a bad URL is reported
+  // alongside any other missing var in one message.
+  const websocketUrlError = validatePublicWebsocketUrl(env);
+  if (websocketUrlError) {
+    missing.push(websocketUrlError);
   }
 
   if (missing.length > 0) {
@@ -63,6 +156,7 @@ export function loadServerConfig(
     // Clear REDIS_URL if it wasn't actually provided
     [ENV_KEYS.REDIS_URL]: redisProvided ? config[ENV_KEYS.REDIS_URL] : undefined as unknown as string,
     AUTO_MIGRATE: autoMigrate,
+    LOCAL_FIXTURE_PROVIDER: localFixtureProvider,
   };
 }
 
@@ -83,7 +177,13 @@ export function redactConfig(config: ServerConfig): Record<string, string> {
     GOOGLE_API_KEY: redact(config[ENV_KEYS.GOOGLE_API_KEY]),
     PUBLIC_WEBSOCKET_URL: config[ENV_KEYS.PUBLIC_WEBSOCKET_URL] ?? '(not set)',
     API_PORT: String(config[ENV_KEYS.API_PORT]),
-    GATEWAY_PORT: String(config[ENV_KEYS.GATEWAY_PORT]),
+    // GATEWAY_PORT is retained in ENV_KEYS for the standalone gateway (local
+    // dev / tests), but the unified server (WS-30) binds only API_PORT — it is
+    // not a second listening port, so the banner marks it local-only.
+    GATEWAY_PORT: '(local-only)',
     AUTO_MIGRATE: String(config.AUTO_MIGRATE),
+    // Not a secret — a plain boolean so the banner shows when the local-only
+    // fixture provider is active (WS-43).
+    LOCAL_FIXTURE_PROVIDER: String(config.LOCAL_FIXTURE_PROVIDER),
   };
 }

@@ -96,26 +96,29 @@ jobs:
     needs: [build-lint, unit-tests]
 
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: swiftagent
-          POSTGRES_PASSWORD: swiftagent_ci
-          POSTGRES_DB: swiftagent_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U swiftagent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
         options: >-
           --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      # Dedicated, shell-reachable Postgres for the schema drift guard below.
+      # The integration TESTS get their own DB from Testcontainers INSIDE the
+      # test process (test/setup-db.ts), which is not reachable from a plain
+      # workflow step — so the guard needs this separate, deterministic DB it
+      # can point DATABASE_URL at and apply exactly the committed migrations to.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: swiftagent_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -144,13 +147,206 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-      - name: Run database migrations
-        run: pnpm --filter @swiftagent/db migrate
+      # Runs BEFORE the integration tests to fail fast: applies exactly the
+      # committed migrations to a clean DB, then runs db:check against it.
+      # A freshly-migrated DB always matches the journal-implied schema, so a
+      # non-zero db:check here can ONLY mean a schema change was not captured as
+      # a generated migration (the author edited packages/db/src/schema/*.ts but
+      # forgot `pnpm db:generate`, or committed the schema edit but not the
+      # resulting 000N_*.sql + snapshot). There is no benign failure mode — do
+      # NOT silence a red build here; run `pnpm --filter @swiftagent/db db:generate`
+      # and commit the emitted migration + snapshot instead. See
+      # docs/runbooks/migrations.md.
+      - name: Schema drift guard
+        run: |
+          pnpm --filter @swiftagent/db migrate
+          pnpm --filter @swiftagent/db db:check
         env:
-          DATABASE_URL: postgresql://swiftagent:swiftagent_ci@localhost:5432/swiftagent_test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/swiftagent_ci
 
       - name: Run integration tests
         run: pnpm test:integration
         env:
-          DATABASE_URL: postgresql://swiftagent:swiftagent_ci@localhost:5432/swiftagent_test
+          # DATABASE_URL is provisioned per-suite by test/setup-db.ts (Testcontainers),
+          # which starts its own PostgreSQL and applies the Drizzle migrations.
           REDIS_URL: redis://localhost:6379
+
+  # ── Job 4: Acceptance Tests (after Jobs 1 + 2 + 3) — REQUIRED GATE ────
+  # The quickstart acceptance flow (WS-42): boots the stub-agent stack on a
+  # Testcontainers Postgres (migrations via test/setup-db.ts; Redis OFF), drives
+  # the documented quickstart through the PUBLIC SDK, and asserts the full
+  # message_started → token → tool_call_* → message_completed sequence with a
+  # real tool round-trip. Testcontainers uses the runner's Docker daemon, so no
+  # `services:` block is needed. A non-zero exit BLOCKS the pipeline.
+  #
+  # WS-44: no registry auth here anymore. The install-from-registry proof is an
+  # explicit opt-in (SWIFTAGENT_RUN_INSTALL_PROOF=1) that LOUD-SKIPS until a
+  # version exists on public npm; WS-45's local Verdaccio registry re-enables it
+  # per PR via SWIFTAGENT_INSTALL_REGISTRY. Public npm needs no token, so the
+  # former private-registry permissions/registry-url/scope/NODE_AUTH_TOKEN are gone.
+  #
+  # NOTE: the root `test/` tree is excluded from typecheck/lint by convention, so
+  # the acceptance suite is validated by RUNNING it here, not by build-lint.
+  acceptance-tests:
+    name: Acceptance Tests
+    runs-on: ubuntu-latest
+    needs: [build-lint, unit-tests, integration-tests]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      - name: Run acceptance tests
+        run: pnpm test:acceptance
+        # DATABASE_URL is provisioned per-suite by test/setup-db.ts
+        # (Testcontainers). Redis is OFF by default (single-node gateway).
+
+  # ── Job 5: Publish dry-run (pack gate) ───────────────────────────────
+  # Packs @swiftagent/{sdk,react,shared} and asserts each tarball ships only
+  # dist (JS + d.ts) + README.md — no src/tests/tsconfig/CJS — that workspace:*
+  # deps resolved to concrete versions, and that publish metadata is correct.
+  # Catches a broken files/metadata/workspace-resolution regression BEFORE a
+  # release. Runs the SAME command as the documented local check so CI and
+  # local never diverge: `node scripts/verify-pack.mjs`.
+  publish-dryrun:
+    name: Publish dry-run (pack)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... --filter create-swift-agent build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      - name: Pack & verify tarballs
+        run: node scripts/verify-pack.mjs
+
+  # ── Job 6: Local registry harness (WS-45, SC-05) ─────────────────────
+  # Boots an ephemeral loopback Verdaccio registry (scripts/local-registry.mjs),
+  # publishes @swiftagent/{sdk,react,shared} INTO it with `pnpm publish
+  # --registry`, installs them FROM it into a throwaway consumer via the WS-44
+  # install harness (SWIFTAGENT_INSTALL_REGISTRY + SWIFTAGENT_RUN_INSTALL_PROOF),
+  # and asserts resolved-URL provenance (every @swiftagent/* tarball served by
+  # http://127.0.0.1:<port>/). The whole flow is loopback HTTP: no Docker, no
+  # registry secrets, no packages:read. Kept separate from acceptance-tests so
+  # a registry-harness failure is legible on its own. NOTE: the root test/ and
+  # scripts/ trees are excluded from typecheck/lint by convention — this run IS
+  # their validation.
+  local-registry:
+    name: Local registry harness
+    runs-on: ubuntu-latest
+    needs: build-lint
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: pnpm --filter @swiftagent/sdk... --filter @swiftagent/react... build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      - name: Verify local registry end-to-end
+        run: pnpm verify:local-registry
+
+  # ── Job 7: create-swift-agent e2e (WS-46, SC-06) ─────────────────────
+  # The scaffold proof, end to end through REAL npm-registry protocol: publish
+  # @swiftagent/{shared,sdk,react} + create-swift-agent into the WS-45
+  # Verdaccio registry, resolve `npx create-swift-agent` AGAINST that registry
+  # (fresh npm cache — no file paths, no stale-cache masking), install the
+  # generated project from it (lockfile provenance asserted), typecheck/build/
+  # lint it (the no-restricted-imports deep-import guard runs on generated
+  # code), then `docker compose up` the GENERATED project's single-server
+  # WS-43-wired stack, let its bootstrap self-provision the dev API key, and
+  # drive one streaming turn asserting tool_call_started AND
+  # tool_call_completed. Teardown (compose down -v + registry stop) is
+  # guaranteed by the script. Same committed command locally and here:
+  # `pnpm e2e:create-swift-agent`. Needs Docker (present on ubuntu runners).
+  # NOTE: scripts/ is excluded from typecheck/lint by convention — this run IS
+  # its validation.
+  create-swift-agent-e2e:
+    name: create-swift-agent e2e
+    runs-on: ubuntu-latest
+    needs: build-lint
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run the scaffold end-to-end proof
+        run: pnpm e2e:create-swift-agent
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

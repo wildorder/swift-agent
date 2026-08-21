@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm';
-import type { AgentRecord, ModelConfig, MemoryConfig } from '@swiftagent/shared';
+import type { AgentRecord, ModelConfig, MemoryConfig, ToolDefinition } from '@swiftagent/shared';
 import type { Db } from '../client.js';
 import { agents } from '../schema/index.js';
 
@@ -12,10 +12,12 @@ export function createAgentRepo(db: Db) {
       modelConfig: ModelConfig;
       systemPrompt: string;
       memoryConfig: MemoryConfig;
+      tools?: ToolDefinition[];
       toolRunnerUrl?: string | null;
     }): Promise<AgentRecord> {
       const rows = await db.insert(agents).values({
         ...record,
+        tools: record.tools ?? [],
         toolRunnerUrl: record.toolRunnerUrl ?? null,
       }).returning();
       const row = rows[0];
@@ -48,6 +50,7 @@ export function createAgentRepo(db: Db) {
         modelConfig: ModelConfig;
         systemPrompt: string;
         memoryConfig: MemoryConfig;
+        tools: ToolDefinition[];
         toolRunnerUrl: string | null;
       }>,
     ): Promise<AgentRecord | null> {
@@ -69,6 +72,7 @@ function toRecord(row: typeof agents.$inferSelect): AgentRecord {
     modelConfig: row.modelConfig as ModelConfig,
     systemPrompt: row.systemPrompt,
     memoryConfig: row.memoryConfig as MemoryConfig,
+    tools: (row.tools as ToolDefinition[] | null) ?? [],
     toolRunnerUrl: row.toolRunnerUrl,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

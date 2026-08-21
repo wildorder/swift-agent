@@ -1,0 +1,101 @@
+# WS-49: the PLAYGROUND APP on Fly.io — the mediator + static frontend built
+# by apps/playground/Dockerfile from the monorepo (the package depends on
+# private workspace packages and is never published). The second of exactly
+# two services in this deployment; the first is runtime.fly.toml.
+#
+# SINGLE INSTANCE, BY DESIGN (SC-12): the mediator's rate/cap counters and
+# guest-session map are process-local on purpose (the Postgres ledger — not
+# these counters — holds the daily ceiling). See
+# docs/runbooks/realtime-operations.md §1/§6 and deploy/playground/README.md §7.
+
+app = "swift-agent-playground"
+primary_region = "iad"
+
+[build]
+  # Built from the repo checkout (monorepo build; no registry image exists
+  # for this private package):
+  dockerfile = "../../apps/playground/Dockerfile"
+
+[deploy]
+  # Never two Machines mid-deploy (SC-12): replace in place. (Migrations run
+  # on the RUNTIME app's release step; the mediator only reads/writes the
+  # ledger tables that migration created.)
+  strategy = "immediate"
+
+[env]
+  PORT = "4100"
+  NODE_ENV = "production"
+  # ── Guardrail configuration (every cap; defaults + meaning in README §4) ──
+  PLAYGROUND_SESSION_TTL_SECONDS = "600"
+  PLAYGROUND_IP_MINTS_PER_WINDOW = "10"
+  PLAYGROUND_IP_WINDOW_SECONDS = "3600"
+  PLAYGROUND_SESSION_SENDS_PER_WINDOW = "6"
+  PLAYGROUND_SESSION_WINDOW_SECONDS = "60"
+  PLAYGROUND_MESSAGES_PER_SESSION = "20"
+  PLAYGROUND_MESSAGE_MAX_CHARS = "500"
+  PLAYGROUND_TOKENS_PER_SESSION = "8000"
+  PLAYGROUND_DAILY_CEILING_MICRO_USD = "5000000"   # $5.00/day
+  PLAYGROUND_ALERT_THRESHOLD_FRACTION = "0.5"
+  PLAYGROUND_SWEEP_INTERVAL_SECONDS = "60"
+  PLAYGROUND_ABANDONED_AFTER_SECONDS = "300"
+  # ── Reservation formula inputs (README §4 documents the arithmetic) ──
+  PLAYGROUND_MAX_INPUT_TOKENS_PER_RUN = "30000"
+  PLAYGROUND_MAX_OUTPUT_TOKENS_PER_RUN = "10240"
+  PLAYGROUND_INPUT_PRICE_USD_PER_MTOK = "0.8"
+  PLAYGROUND_OUTPUT_PRICE_USD_PER_MTOK = "4.0"
+  # ── Retention windows (README §6) ──
+  PLAYGROUND_RETENTION_HOURS = "24"
+  PLAYGROUND_LEDGER_AUDIT_DAYS = "30"
+  # ── Wiring to the isolated runtime app ──
+  SWIFT_AGENT_BASE_URL = "https://swift-agent-playground-runtime.fly.dev"
+  # The playground's tool runner, exposed on the raw TLS service below; the
+  # runtime dials this URL for tool calls, and runner tokens are minted with
+  # aud bound to it:
+  TOOL_RUNNER_PUBLIC_URL = "https://swift-agent-playground.fly.dev:8443"
+  RUNNER_AUDIENCE = "https://swift-agent-playground.fly.dev:8443"
+  PLAYGROUND_TOOL_RUNNER_PORT = "8090"
+  PLAYGROUND_TRUST_PROXY = "1"
+
+# Secrets (set with `fly secrets set -a swift-agent-playground` — README §3):
+#   SWIFT_AGENT_API_KEY        workspace API key minted on the runtime app;
+#                              held ONLY by the mediator, never the browser
+#   DATABASE_URL               the RUNTIME app's Postgres (same DB the ledger
+#                              migration created the spend tables in)
+#   RUNNER_TOKEN_PUBLIC_KEY    public half of the runtime's runner keypair
+#   RUNNER_WORKSPACE_ID        the ws_ workspace id from provisioning
+#
+# NO provider key is ever set on this app — the dedicated ANTHROPIC_API_KEY
+# lives only on the runtime app (runtime.fly.toml). The mediator neither
+# holds nor proxies provider credentials.
+
+[http_service]
+  internal_port = 4100
+  force_https = true
+  # Autoscaling fully disabled — exactly one Machine, always running:
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+# The SDK tool runner, public behind Fly edge TLS on :8443 (scoped, short-
+# lived runner tokens authenticate every call — see packages/sdk runner auth).
+[[services]]
+  internal_port = 8090
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+# Exactly one machine in one region; no concurrency section — concurrency-
+# triggered scaling must never be configured for this app.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  count = 1

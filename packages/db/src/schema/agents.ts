@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { pgTable, text, timestamp, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { workspaces } from './workspaces.js';
 
@@ -8,6 +9,7 @@ export const agents = pgTable('agents', {
   modelConfig: jsonb('model_config').notNull(),
   systemPrompt: text('system_prompt').notNull(),
   memoryConfig: jsonb('memory_config').notNull(),
+  tools: jsonb('tools').notNull().default(sql`'[]'::jsonb`),
   toolRunnerUrl: text('tool_runner_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

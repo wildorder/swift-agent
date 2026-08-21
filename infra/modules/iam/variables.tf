@@ -16,7 +16,7 @@ variable "ecr_repository_arn" {
 variable "github_org" {
   description = "GitHub organization name"
   type        = string
-  default     = "wingitlabs"
+  default     = "wildorder"
 }
 
 variable "github_repo" {

@@ -69,6 +69,64 @@ describe('registerHealthCheck', () => {
     expect(body.checks.db).toBe('error');
   });
 
+  it('returns 200 with checks.redis ok when redisPing resolves true', async () => {
+    await app.close();
+    app = Fastify();
+
+    registerHealthCheck(app, {
+      dbClient: mockDbClient as never,
+      connectionManager: null,
+      redisEnabled: true,
+      redisPing: async () => true,
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.status).toBe('ok');
+    expect(body.checks.redis).toBe('ok');
+  });
+
+  it('returns 503 with checks.redis error when redisPing resolves false', async () => {
+    await app.close();
+    app = Fastify();
+
+    registerHealthCheck(app, {
+      dbClient: mockDbClient as never,
+      connectionManager: null,
+      redisEnabled: true,
+      redisPing: async () => false,
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(503);
+    const body = JSON.parse(res.payload);
+    expect(body.status).toBe('degraded');
+    expect(body.checks.redis).toBe('error');
+  });
+
+  it('reports redis disabled without calling redisPing when Redis is off', async () => {
+    await app.close();
+    app = Fastify();
+
+    const redisPing = vi.fn(async () => true);
+    registerHealthCheck(app, {
+      dbClient: mockDbClient as never,
+      connectionManager: null,
+      redisEnabled: false,
+      redisPing,
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.checks.redis).toBe('disabled');
+    expect(redisPing).not.toHaveBeenCalled();
+  });
+
   it('reports redis error when ping fails', async () => {
     await app.close();
     app = Fastify();

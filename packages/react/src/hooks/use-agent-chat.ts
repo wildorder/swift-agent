@@ -10,7 +10,15 @@ function generateUserMsgId(): string {
 }
 
 export function useAgentChat(args: UseAgentChatArgs): UseAgentChatResult {
-  const { sessionId, token, websocketUrl, reconnect, createWebSocket, onError } = args;
+  const {
+    sessionId,
+    token,
+    websocketUrl,
+    serverProtocolVersion,
+    reconnect,
+    createWebSocket,
+    onError,
+  } = args;
 
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
 
@@ -18,7 +26,7 @@ export function useAgentChat(args: UseAgentChatArgs): UseAgentChatResult {
     sessionId,
     token,
     websocketUrl,
-    { reconnect, createWebSocket, onError },
+    { serverProtocolVersion, reconnect, createWebSocket, onError },
   );
 
   const clientRef = useRef(client);

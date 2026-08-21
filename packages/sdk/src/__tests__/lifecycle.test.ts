@@ -1,8 +1,37 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { z } from 'zod';
+import { generateKeyPair, exportSPKI, SignJWT, type CryptoKey } from 'jose';
 import { createAgentApp } from '../app.js';
 import { defineAgent } from '../agent.js';
 import { tool } from '../tool.js';
+
+const WORKSPACE = 'ws_abc123';
+let publicKeyPem: string;
+let privateKey: CryptoKey;
+
+beforeAll(async () => {
+  const pair = await generateKeyPair('EdDSA');
+  privateKey = pair.privateKey as CryptoKey;
+  publicKeyPem = await exportSPKI(pair.publicKey);
+});
+
+/** Mint a scoped token whose audience is the runner's registered URL. */
+async function mintToken(audience: string, toolName: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({
+    workspaceId: WORKSPACE,
+    agentId: 'agt_1',
+    runId: 'run_1',
+    callId: 'tc_1',
+    idempotencyKey: 'tc_1',
+    toolName,
+  })
+    .setProtectedHeader({ alg: 'EdDSA' })
+    .setAudience(audience)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 60)
+    .sign(privateKey);
+}
 
 /**
  * Lifecycle integration test:
@@ -84,7 +113,12 @@ describe('Lifecycle integration', () => {
     });
 
     const API_KEY = 'integration-test-key';
-    app = createAgentApp({ apiKey: API_KEY, baseUrl: 'http://localhost:3000' });
+    app = createAgentApp({
+      apiKey: API_KEY,
+      baseUrl: 'http://localhost:3000',
+      runnerPublicKey: publicKeyPem,
+      runnerWorkspaceId: WORKSPACE,
+    });
     app.agent(agent);
 
     // Start tool runner on random port
@@ -102,16 +136,26 @@ describe('Lifecycle integration', () => {
     const toolRunnerUrl = registeredBody.toolRunnerUrl as string;
     expect(toolRunnerUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
 
-    // Simulate runtime calling the tool runner
+    // Simulate the runtime calling the tool runner with a scoped token whose
+    // audience equals the registered runner URL (WS-22).
+    const token = await mintToken(toolRunnerUrl, 'lookupOrder');
     const res = await fetch(`${toolRunnerUrl}/tools/lookupOrder`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        version: '1',
+        idempotencyKey: 'tc_1',
         input: { orderId: 'ORD-001' },
-        context: { sessionId: 'ses_test123', userId: 'user_1' },
+        context: {
+          sessionId: 'ses_test123',
+          agentId: 'agt_1',
+          runId: 'run_1',
+          callId: 'tc_1',
+          userId: 'user_1',
+        },
       }),
     });
 

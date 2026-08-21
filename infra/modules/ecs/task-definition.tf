@@ -11,9 +11,10 @@ resource "aws_ecs_task_definition" "this" {
 
   container_definitions = jsonencode([
     {
-      name      = local.name_prefix
-      image     = var.image_uri
-      essential = true
+      name        = local.name_prefix
+      image       = var.image_uri
+      essential   = true
+      stopTimeout = var.stop_timeout
 
       portMappings = [
         {
@@ -21,6 +22,40 @@ resource "aws_ecs_task_definition" "this" {
           protocol      = "tcp"
         }
       ]
+
+      # Plain (non-secret) environment. DEPLOY_ENV is ALWAYS injected as the
+      # environment name — it is the cloud signal the server's startup guard
+      # reads (WS-32) to enforce a real wss:// PUBLIC_WEBSOCKET_URL. It is not a
+      # secret, so it needs no SSM param.
+      #
+      # MIGRATE_SKIP_DRIFT_CHECK is concatenated in ONLY when non-empty so it is
+      # absent from the task def in normal operation (default ""). It is a
+      # migrate-CLI escape hatch for the reconciliation path, inert for the
+      # running server — see var.migrate_skip_drift_check and
+      # docs/runbooks/migrations.md.
+      environment = concat(
+        [
+          {
+            name  = "DEPLOY_ENV"
+            value = var.environment
+          }
+        ],
+        var.migrate_skip_drift_check != "" ? [
+          {
+            name  = "MIGRATE_SKIP_DRIFT_CHECK"
+            value = var.migrate_skip_drift_check
+          }
+        ] : [],
+        # Only for a domainless env (dev) whose ALB has no TLS listener — lets
+        # the startup guard accept a ws:// PUBLIC_WEBSOCKET_URL. Absent (strict
+        # wss:// only) for staging/prod.
+        var.public_ws_allow_insecure ? [
+          {
+            name  = "PUBLIC_WS_ALLOW_INSECURE"
+            value = "true"
+          }
+        ] : []
+      )
 
       secrets = [
         for key, arn in var.ssm_parameter_arns : {

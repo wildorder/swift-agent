@@ -30,9 +30,35 @@ export interface ReconnectOptions {
 
 /** Options for creating a vanilla JS chat session */
 export interface CreateChatSessionOptions {
+  /**
+   * Session identifier used for message-id correlation only. It is NOT used for
+   * URL construction — the gateway derives `sessionId` from the JWT claims, so
+   * do not restore it as a query parameter.
+   */
   sessionId: string;
+  /**
+   * Fallback client JWT. Only appended when `websocketUrl` is a bare base URL
+   * without a `token` query param. When `websocketUrl` is the canonical
+   * API-provided URL (which already embeds the token), this is ignored for URL
+   * construction.
+   */
   token: string;
+  /**
+   * The canonical WebSocket URL and source of truth for the connection: the
+   * `wss://<host>/v1/stream?token=<jwt>` value returned by `POST /v1/sessions`.
+   * Used verbatim when it already carries a `token` param. Optional at the type
+   * level for backward compatibility, but effectively required: a missing/empty
+   * value throws at runtime (there is no hardcoded default).
+   */
   websocketUrl?: string;
+  /**
+   * Server-advertised control-plane protocol version, sourced from the SDK's
+   * `CreateSessionResult.serverProtocolVersion` (WS-37). When present it is
+   * asserted against the react build's `API_PROTOCOL_VERSION` BEFORE the socket
+   * opens — a mismatch throws a typed `SwiftAgentError(INCOMPATIBLE_VERSION)`.
+   * `undefined` (legacy server) fails open and connects normally.
+   */
+  serverProtocolVersion?: string;
   reconnect?: ReconnectOptions;
   /** Injectable WebSocket factory for testing */
   createWebSocket?: (url: string) => WebSocket;
@@ -53,6 +79,12 @@ export interface UseAgentChatArgs {
   sessionId: string;
   token: string;
   websocketUrl?: string;
+  /**
+   * Server-advertised control-plane protocol version from the SDK's
+   * `CreateSessionResult.serverProtocolVersion` (WS-37). Asserted before connect;
+   * a mismatch surfaces the actionable `INCOMPATIBLE_VERSION` message via `lastError`.
+   */
+  serverProtocolVersion?: string;
   reconnect?: ReconnectOptions;
   createWebSocket?: (url: string) => WebSocket;
   onError?: (error: unknown) => void;

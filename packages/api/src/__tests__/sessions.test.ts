@@ -36,6 +36,26 @@ describe('Sessions routes', () => {
     expect(body.websocketUrl).toContain(body.clientToken);
   });
 
+  it('POST /v1/sessions builds wss://<host>/v1/stream?token=<jwt> from the injected base (SC-02)', async () => {
+    // A realistic per-env base (WS-32): full URL up to and including /v1/stream.
+    const base = 'wss://api.swiftagent.dev/v1/stream';
+    const ctx = await buildTestApp(undefined, base);
+    try {
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/sessions',
+        headers,
+        payload: { agentName: 'test-agent' },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      // Exactly one `?token=` appended, /v1/stream preserved, wss scheme intact.
+      expect(body.websocketUrl).toBe(`${base}?token=${body.clientToken}`);
+    } finally {
+      await ctx.app.close();
+    }
+  });
+
   it('POST /v1/sessions JWT is decodable and contains correct claims', async () => {
     const res = await app.inject({
       method: 'POST',

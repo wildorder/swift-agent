@@ -1,8 +1,15 @@
 {
   "name": "@swiftagent/shared",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
+  "description": "Shared types, Zod schemas, ID helpers, and Redis client for Swift Agent.",
+  "license": "Apache-2.0",
+  "author": "Swift Agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wildorder/swift-agent.git",
+    "directory": "packages/shared"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -14,6 +21,21 @@
       "types": "./dist/redis-client.d.ts",
       "import": "./dist/redis-client.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts.map",
+    "!dist/**/__tests__"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",

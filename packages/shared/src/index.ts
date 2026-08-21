@@ -52,6 +52,7 @@ export {
   MemoryStrategySchema,
   MemoryConfigSchema,
   ModelConfigSchema,
+  ToolDefinitionSchema,
   AgentConfigSchema,
   AgentRecordSchema,
 } from './types/agent.js';
@@ -59,6 +60,7 @@ export type {
   MemoryStrategy,
   MemoryConfig,
   ModelConfig,
+  ToolDefinition,
   AgentConfig,
   AgentRecord,
 } from './types/agent.js';
@@ -90,6 +92,34 @@ export type { RunStatus, TokenUsage, RunRecord } from './types/run.js';
 // Tool call types
 export { ToolCallStatusSchema, ToolCallRecordSchema } from './types/tool-call.js';
 export type { ToolCallStatus, ToolCallRecord } from './types/tool-call.js';
+
+// Runner protocol (WS-22) — versioned, bounded remote tool-runner wire contract
+export {
+  RUNNER_PROTOCOL_VERSION,
+  RUNNER_MAX_INPUT_BYTES,
+  RUNNER_MAX_OUTPUT_BYTES,
+  RUNNER_MAX_ERROR_BYTES,
+  RunnerRequestContextSchema,
+  RunnerRequestSchema,
+  RunnerSuccessResponseSchema,
+  RunnerErrorResponseSchema,
+} from './types/runner-protocol.js';
+export type {
+  RunnerRequestContext,
+  RunnerRequest,
+  RunnerSuccessResponse,
+  RunnerErrorResponse,
+  RunnerResponse,
+} from './types/runner-protocol.js';
+
+// Protocol versioning & compatibility (WS-37) — control-plane + stream contract
+export {
+  API_PROTOCOL_VERSION,
+  SDK_MIN_SERVER_PROTOCOL,
+  PROTOCOL_HEADER,
+  PROTOCOL,
+  assertProtocolCompatible,
+} from './types/protocol.js';
 
 // Stream events
 export {

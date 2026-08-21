@@ -7,6 +7,13 @@ import type {
 } from '../types.js';
 
 export interface UseConnectionOptions {
+  /**
+   * Server-advertised control-plane protocol version (WS-37). Forwarded to
+   * `createChatSession`, which asserts compatibility before opening the socket;
+   * a mismatch throws synchronously inside the effect and is surfaced via
+   * `lastError` (never rethrown out of the effect).
+   */
+  serverProtocolVersion?: string;
   reconnect?: ReconnectOptions;
   createWebSocket?: (url: string) => WebSocket;
   onError?: (error: unknown) => void;
@@ -39,19 +46,37 @@ export function useConnection(
       return;
     }
 
-    const client = createChatSession({
-      sessionId,
-      token,
-      websocketUrl,
-      reconnect: options?.reconnect,
-      createWebSocket: options?.createWebSocket,
-      onError: (err) => {
-        setLastError(err instanceof Error ? err.message : String(err));
-        options?.onError?.(err);
-      },
-    }) as ChatSessionClient & {
-      onStatusChange: (h: (s: ConnectionStatus) => void) => () => void;
+    const handleError = (err: unknown): void => {
+      setLastError(err instanceof Error ? err.message : String(err));
+      options?.onError?.(err);
     };
+
+    let client:
+      | (ChatSessionClient & {
+          onStatusChange: (h: (s: ConnectionStatus) => void) => () => void;
+        })
+      | null;
+    try {
+      client = createChatSession({
+        sessionId,
+        token,
+        websocketUrl,
+        serverProtocolVersion: options?.serverProtocolVersion,
+        reconnect: options?.reconnect,
+        createWebSocket: options?.createWebSocket,
+        onError: handleError,
+      }) as ChatSessionClient & {
+        onStatusChange: (h: (s: ConnectionStatus) => void) => () => void;
+      };
+    } catch (err) {
+      // A pre-connect assertion (e.g. INCOMPATIBLE_VERSION, WS-37) throws
+      // synchronously from createChatSession before any socket opens. Surface it
+      // through the same lastError path and leave the connection unopened — the
+      // throw must NOT escape the effect.
+      handleError(err);
+      setConnectionStatus('disconnected');
+      return;
+    }
 
     clientRef.current = client;
 
@@ -72,7 +97,7 @@ export function useConnection(
       client.disconnect();
       clientRef.current = null;
     };
-  }, [sessionId, token, websocketUrl]);
+  }, [sessionId, token, websocketUrl, options?.serverProtocolVersion]);
 
   return {
     client: clientRef.current,

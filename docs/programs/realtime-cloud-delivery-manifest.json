@@ -1,0 +1,239 @@
+{
+  "program": {
+    "id": "realtime-cloud-delivery",
+    "name": "Swift Agent — Realtime Cloud Delivery",
+    "description": "Make the locally working realtime runtime accessible, reliable, and verifiable through deployed AWS environments: unify REST + WebSocket onto a single public port, establish one canonical WebSocket URL contract, wire PUBLIC_WEBSOCKET_URL through Terraform/SSM/ECS with fail-fast validation, harden deploy-time connection draining, correct Redis fanout and health, align the React SDK and site docs, and add a deployed realtime smoke test that blocks releases.",
+    "status": "completed",
+    "created": "2026-07-16",
+    "completed": "2026-07-17"
+  },
+  "technology": {},
+  "successCriteria": [
+    {
+      "id": "SC-01",
+      "description": "REST and WebSocket are served on a single public port (3000); /v1/stream is reachable through the existing ALB with no separate gateway port exposed in the container, task definition, or security group."
+    },
+    {
+      "id": "SC-02",
+      "description": "Session creation returns, and the SDK consumes, one canonical WebSocket URL of the form wss://<host>/v1/stream?token=<jwt>."
+    },
+    {
+      "id": "SC-03",
+      "description": "PUBLIC_WEBSOCKET_URL is provisioned via Terraform/SSM and injected into ECS with correct per-environment (dev/staging/prod) wss:// values."
+    },
+    {
+      "id": "SC-04",
+      "description": "Startup fails fast when PUBLIC_WEBSOCKET_URL is missing or localhost in a cloud environment — the silent ws://localhost:3001 fallback is removed."
+    },
+    {
+      "id": "SC-05",
+      "description": "Graceful shutdown drains in-flight WebSocket connections within the configured ECS stop window, and ALB idle-timeout/stickiness/deregistration are tuned for long-lived sockets."
+    },
+    {
+      "id": "SC-06",
+      "description": "Redis fanout delivers run events to locally-connected sockets on the subscribing instance, and /health reports Redis reachability via PING."
+    },
+    {
+      "id": "SC-07",
+      "description": "The single-task posture, process-local replay-buffer and session-lock limits, and in-flight-run/reconnect-replay behavior are documented."
+    },
+    {
+      "id": "SC-08",
+      "description": "The React/vanilla SDK consumes the API-provided canonical URL using safe URL construction; the redundant sessionId query parameter and the double-? construction bug are removed."
+    },
+    {
+      "id": "SC-09",
+      "description": "Site docs and the quickstart document the canonical /v1/stream endpoint and are validated against deployed dev."
+    },
+    {
+      "id": "SC-10",
+      "description": "A deployed WebSocket smoke test exercises session create → connect → auth → event stream, and its failure blocks the deploy in dev, staging, and production."
+    },
+    {
+      "id": "SC-11",
+      "description": "Staging/production Docker build inconsistencies are resolved so all environments build and deploy from an identical image path."
+    },
+    {
+      "id": "SC-12",
+      "description": "Monorepo type-checking, linting, unit tests, and integration tests pass."
+    }
+  ],
+  "packages": [
+    {
+      "name": "@swiftagent/gateway",
+      "path": "packages/gateway",
+      "description": "WebSocket route refactored into a Fastify plugin mountable on the API app; Redis fanout correctness to locally-connected sockets; single-server heartbeat/session-bridge teardown on shutdown."
+    },
+    {
+      "name": "@swiftagent/api",
+      "path": "packages/api",
+      "description": "Mounts the gateway plugin so REST + WS serve on one port; canonical websocketUrl formatting; removal of the silent localhost default."
+    },
+    {
+      "name": "@swiftagent/react",
+      "path": "packages/react",
+      "description": "Consume the API-provided canonical websocketUrl; safe URL/searchParams construction; drop the redundant sessionId param and fix the wrong default path / double-? bug."
+    },
+    {
+      "name": "@swiftagent/shared",
+      "path": "packages/shared",
+      "description": "ENV_KEYS / config alignment for the unified port and PUBLIC_WEBSOCKET_URL; retire GATEWAY_PORT as a required key."
+    },
+    {
+      "name": "apps/server",
+      "path": "apps/server",
+      "description": "Single startup + consolidated graceful shutdown lifecycle draining WebSockets; composed /health covering gateway + Redis PING; fail-fast PUBLIC_WEBSOCKET_URL validation; single-port Dockerfile."
+    },
+    {
+      "name": "infra",
+      "path": "infra",
+      "description": "Single-port ALB/ECS alignment (remove stale 3001, tune deregistration/stopTimeout/stickiness, pin desired count = 1) and PUBLIC_WEBSOCKET_URL SSM parameter wired into ECS for dev/staging/prod."
+    },
+    {
+      "name": ".github/workflows",
+      "path": ".github/workflows",
+      "description": "Deployed WebSocket smoke test wired into dev/staging/prod deploy jobs as a release-blocking gate; resolved staging/production Docker build inconsistencies."
+    }
+  ],
+  "successCriteriaNotes": "The runtime loop, gateway protocol, Redis pub/sub adapters, and AWS Terraform stacks already exist (see docs/as-built.md). This program exposes, configures, drains, and verifies the gateway; it does not change the runtime loop, stream event protocol, or trace schema. Key decisions: unify REST + WebSocket onto port 3000 (no new ALB target group/listener rule) and pin a single gateway task for the MVP (horizontal scale deferred to Phase 2).",
+  "workstreams": [
+    {
+      "id": "WS-30",
+      "name": "Unified Realtime Server (Port Consolidation)",
+      "taskFile": "tasks/realtime-cloud-delivery/ws-30-unified-realtime-server.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "product-x:WS-06",
+        "core-runtime-completion:WS-23"
+      ],
+      "packages": [
+        "packages/gateway",
+        "packages/api",
+        "apps/server",
+        "packages/shared"
+      ]
+    },
+    {
+      "id": "WS-31",
+      "name": "Realtime Infra: Single-Port Routing & Drain Tuning",
+      "taskFile": "tasks/realtime-cloud-delivery/ws-31-realtime-infra-routing-drain.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-30"
+      ],
+      "packages": [
+        "infra/modules/ecs",
+        "infra/modules/loadbalancer",
+        "infra/envs/dev",
+        "infra/envs/staging",
+        "infra/envs/prod",
+        "apps/server"
+      ]
+    },
+    {
+      "id": "WS-32",
+      "name": "Environment URL Configuration & Startup Validation",
+      "taskFile": "tasks/realtime-cloud-delivery/ws-32-env-url-config-validation.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-31"
+      ],
+      "packages": [
+        "infra/modules/secrets",
+        "infra/envs/dev",
+        "infra/envs/staging",
+        "infra/envs/prod",
+        "packages/api",
+        "apps/server",
+        "packages/shared"
+      ]
+    },
+    {
+      "id": "WS-33",
+      "name": "Redis Fanout Correctness & Health",
+      "taskFile": "tasks/realtime-cloud-delivery/ws-33-redis-fanout-health.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-30"
+      ],
+      "packages": [
+        "packages/gateway",
+        "apps/server",
+        "docs"
+      ]
+    },
+    {
+      "id": "WS-34",
+      "name": "Client & Documentation Alignment",
+      "taskFile": "tasks/realtime-cloud-delivery/ws-34-client-docs-alignment.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-30",
+        "WS-32"
+      ],
+      "packages": [
+        "packages/react",
+        "packages/api",
+        "docs"
+      ]
+    },
+    {
+      "id": "WS-35",
+      "name": "Deployment Verification: Realtime Smoke Tests",
+      "taskFile": "tasks/realtime-cloud-delivery/ws-35-deployment-realtime-smoke.md",
+      "status": "completed",
+      "size": "M",
+      "dependencies": [
+        "WS-30",
+        "WS-31",
+        "WS-32"
+      ],
+      "packages": [
+        ".github/workflows",
+        "apps/server",
+        "test"
+      ]
+    }
+  ],
+  "runtimeEndpoints": [
+    {
+      "method": "GET",
+      "path": "/v1/stream",
+      "purpose": "Authenticated bidirectional WebSocket stream, now served on the unified public port (3000) and reachable through the ALB via the canonical wss://<host>/v1/stream?token=<jwt> contract"
+    }
+  ],
+  "architectureDecisions": [
+    {
+      "id": "AD-01",
+      "decision": "Unify REST and WebSocket onto a single public port (3000)",
+      "rationale": "The ALB already forwards /v1/stream to 3000; mounting the gateway as a plugin on the API Fastify app avoids a new target group, listener rule, security-group port, and second health check. Smallest infra surface for a single-task MVP.",
+      "alternativesRejected": [
+        "Path-route /v1/stream to a separate port-3001 target group (more infra)",
+        "Separate rt.* hostname with host-based routing (DNS/ACM SAN + most infra)"
+      ]
+    },
+    {
+      "id": "AD-02",
+      "decision": "Pin a single gateway task for the realtime MVP",
+      "rationale": "Verify Redis fanout correctness and add a Redis health check, but keep desired count = 1 and document the process-local replay-buffer/session-lock limits. Avoids cross-instance lock/replay complexity.",
+      "alternativesRejected": [
+        "Support horizontal scale now (cross-instance A→B streaming, multi-instance CI test) — deferred to Phase 2 durable layer"
+      ]
+    }
+  ],
+  "outOfScope": [
+    "Horizontal multi-instance realtime scaling (cross-instance replay/lock semantics) — Phase 2",
+    "A separate rt.* realtime hostname or CloudFront fronting",
+    "A second ALB target group / listener rule (obviated by the single-port decision)",
+    "Durable/persisted replay buffer and shared session lock across instances",
+    "Changes to the runtime loop, providers, executor resolution, or stream event protocol",
+    "New trace/span schema or metrics work (covered by persist-observe)",
+    "Down/reverse migrations",
+    "Usage metering / billing / autoscaling policies"
+  ]
+}

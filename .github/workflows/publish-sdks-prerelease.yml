@@ -1,0 +1,93 @@
+name: Publish SDKs (Snapshot Prerelease)
+
+# WS-44: this workflow previously auto-published a `0.0.0-pr-<sha>` snapshot to
+# the private registry on EVERY pull request. Auto-publishing snapshots to
+# PUBLIC npm on every PR is not acceptable (they are real, publicly visible
+# publications), so the snapshot path is now behind an explicit manual
+# workflow_dispatch too (program decision 4). Accepted consequence: the per-PR
+# published-artifact install proof ceases until WS-45, whose local Verdaccio
+# registry becomes the pre-release verification path (the acceptance harness is
+# already parameterized for it via SWIFTAGENT_INSTALL_REGISTRY — see
+# test/acceptance/install-published.ts and RELEASING.md).
+on:
+  workflow_dispatch:
+
+# No git writes (snapshot publish must not commit) and no packages:write —
+# npm auth comes from the NPM_TOKEN secret.
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-sdks-prerelease
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9.15.4'
+
+jobs:
+  prerelease:
+    name: Snapshot Publish (public npm, tag=pr)
+    runs-on: ubuntu-latest
+    outputs:
+      snapshot-version: ${{ steps.snap.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Changesets needs history to diff
+
+      # Fail fast, with a clear message, if the owner has not provisioned the
+      # npm automation token yet (see RELEASING.md).
+      - name: Assert NPM_TOKEN is provisioned
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN secret is not set. Provision an npm automation token for the @swiftagent scope and store it as the NPM_TOKEN repository secret (see RELEASING.md) before dispatching this workflow."
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js (public npm)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build EVERY workspace package so `changeset publish` can snapshot any
+      # non-private package (create-swift-agent joins via WS-46 with no
+      # workflow edit — see the same note in publish-sdks.yml).
+      - name: Build all packages
+        run: pnpm build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      # Stamp ephemeral snapshot versions: 0.0.0-pr-<shortsha> on the
+      # publishable packages. The `{tag}-{commit}` template yields the documented
+      # `pr-<shortsha>` suffix ({commit} = `git rev-parse --short HEAD`); without
+      # it Changesets would default to a datetime suffix. Requires a changeset to
+      # be present; otherwise this is a no-op and the publish step below
+      # publishes nothing.
+      - name: Apply snapshot versions
+        run: pnpm changeset version --snapshot pr --snapshot-prerelease-template '{tag}-{commit}'
+
+      - name: Capture snapshot version
+        id: snap
+        run: echo "version=$(node -p "require('./packages/sdk/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Publish under dist-tag `pr`; --no-git-tag => no git writes. Never touches
+      # `latest`. Registry resolves from publishConfig (registry.npmjs.org) +
+      # the setup-node registry-url; auth is the NPM_TOKEN secret (never
+      # committed).
+      - name: Publish snapshot to public npm
+        run: pnpm changeset publish --tag pr --no-git-tag
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

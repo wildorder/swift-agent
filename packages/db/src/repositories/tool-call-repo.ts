@@ -1,4 +1,4 @@
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import type { ToolCallRecord, ToolCallStatus } from '@swiftagent/shared';
 import type { Db } from '../client.js';
 import { toolCalls } from '../schema/index.js';
@@ -25,6 +25,12 @@ export function createToolCallRepo(db: Db) {
       return toRecord(row);
     },
 
+    // ── Conditional terminal transitions (WS-24, SC-15) ────────────────
+    // `updateResult`/`fail` are guarded by `status = 'started'` so a late or
+    // duplicate runner response cannot overwrite an already-finalized tool
+    // call (returns `null` when no row transitioned). This is the tool-call
+    // analogue of the conditional run transitions in `run-repo`.
+
     async updateResult(
       callId: string,
       output: unknown,
@@ -33,7 +39,7 @@ export function createToolCallRepo(db: Db) {
       const [row] = await db
         .update(toolCalls)
         .set({ output, status, updatedAt: new Date() })
-        .where(eq(toolCalls.callId, callId))
+        .where(and(eq(toolCalls.callId, callId), eq(toolCalls.status, 'started')))
         .returning();
       return row ? toRecord(row) : null;
     },
@@ -42,7 +48,7 @@ export function createToolCallRepo(db: Db) {
       const [row] = await db
         .update(toolCalls)
         .set({ status: 'failed', updatedAt: new Date() })
-        .where(eq(toolCalls.callId, callId))
+        .where(and(eq(toolCalls.callId, callId), eq(toolCalls.status, 'started')))
         .returning();
       return row ? toRecord(row) : null;
     },

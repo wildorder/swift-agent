@@ -30,6 +30,10 @@ export const ModelMessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant', 'tool']),
   content: z.string(),
   toolCallId: z.string().optional(),
+  // Tool name for tool-role messages. Providers that correlate a tool result
+  // back to its request by function *name* (Google) rather than by call id
+  // (OpenAI/Anthropic) read this to populate `functionResponse.name`.
+  toolName: z.string().optional(),
   toolCalls: z.array(ToolCallMessageSchema).optional(),
 }).strict();
 export type ModelMessage = z.infer<typeof ModelMessageSchema>;

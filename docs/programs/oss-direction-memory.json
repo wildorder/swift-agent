@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "programId": "oss-direction",
+  "updatedAt": "2026-08-20T04:38:07.617Z",
+  "runs": [
+    {
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "stage": "plan-audit",
+      "startedAt": "2026-08-20T03:41:59.973Z",
+      "outcome": "human-required",
+      "result": "HUMAN_REQUIRED",
+      "reason": "SC-15 requires a genuine intent choice. Either the program must wait for the owner visibility click and require the anonymous pull before SC-15, SC-07, and final clean-checkout claims are accepted, or the no-human-dependent-checkpoint decision must remain and SC-15 must be weakened to deliver the documented post-click verification command without claiming that it succeeded during the program. Wording alone cannot preserve both outcomes."
+    },
+    {
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "stage": "plan-audit",
+      "startedAt": "2026-08-20T04:34:20.020Z",
+      "outcome": "requires-replan",
+      "result": "REQUIRES_REPLAN",
+      "reason": "Plan audit found 3 blocker/major finding(s) before authoring."
+    }
+  ],
+  "findings": {},
+  "checkpoints": {},
+  "attempts": {
+    "replan": [
+      {
+        "runId": "replan-2026-08-20T04-34-20.078Z-fa7ddbb5",
+        "attempt": 1,
+        "outcome": "failed",
+        "reason": "Replanner did not return the required REPLAN_COMPLETE contract.",
+        "at": "2026-08-20T04:35:44.649Z"
+      },
+      {
+        "runId": "replan-2026-08-20T04-34-20.078Z-fa7ddbb5",
+        "attempt": 2,
+        "outcome": "failed",
+        "reason": "Replanner resolution proof failed: SC-09 (P1): expected exactly one resolution proof, received 0 | SC-12 (P2): expected exactly one resolution proof, received 0 | SC-15 (P3): expected exactly one resolution proof, received 0.",
+        "at": "2026-08-20T04:38:07.617Z"
+      }
+    ]
+  },
+  "diagnoses": [
+    {
+      "stage": "plan-audit",
+      "outcome": "execution-mode-appropriate",
+      "reason": "The plan contains real independent delivery boundaries and a staged migration rather than cosmetic task slicing. After WS-51, WS-43 and WS-44 are independent roots; packaging/scaffold and hosting/playground chains can proceed concurrently, while GHCR publication followed by digest adoption is an unavoidable expand-then-migrate sequence. Each chain has its own deployable or publishable artifact and rejoins only at the terminal documentation/guardrail gate.",
+      "detail": "WS-51 branches independently to WS-43 and WS-44; WS-44 -> WS-45 -> WS-46 is a package-consumption and scaffold chain; WS-43 -> WS-48 is an independently testable playground-application chain; WS-43 + WS-44 -> WS-50 -> WS-47 is a container and deployment-template chain; WS-50 must publish before docker-compose.yml can adopt the generated manifest-list digest; WS-49 is the sole terminal join and depends on WS-46, WS-47, and WS-48; AGENTS.md requires parallelization for large tasks spanning independent files",
+      "runId": "plan-audit-2026-08-20T03-34-25-489Z-3b9d11aa",
+      "at": "2026-08-20T03:41:59.973Z"
+    },
+    {
+      "stage": "plan-audit",
+      "outcome": "execution-mode-appropriate",
+      "reason": "The plan has genuine independently verifiable branches and an external-artifact bootstrap sequence. After the common gate/root repairs, package publication readiness and registry/scaffold work can proceed separately from the playground application, while container publication must precede digest adoption and managed deployment. All branches then join at the sole terminal posture/documentation/gate workstream.",
+      "detail": "WS-51 independently stabilizes the common verification gate before WS-43 and WS-44; WS-44 -> WS-45 -> WS-46 is a distinct package-consumption and scaffold chain; WS-43 -> WS-48 is an independently testable playground-application chain; WS-43 + WS-44 -> WS-50 -> WS-47 is an ordered publish-digest-deploy chain; WS-50 requires a staged publish followed by adoption of the externally produced manifest-list digest; WS-49 depends on WS-46, WS-47, and WS-48 and is the sole terminal integration checkpoint",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    }
+  ],
+  "criteria": {
+    "SC-01": {
+      "status": "satisfiable",
+      "reason": "The repository has all required primitives: direct workspace/API-key/agent repositories, API-key-authenticated agent and session routes, runner-token signing and verification, a loopback-capable development runner policy, and an always-registered zero-cost echo provider that can be extended into the deterministic tool-calling fixture. The current smoke test and compose file lack the required provisioning and tool assertions, but WS-43 can add them without a new public API.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-02": {
+      "status": "satisfiable",
+      "reason": "apps/server/src/main.ts binds REST and WebSocket to one API_PORT listener, while docker-compose.yml currently exposes the contradictory 3001 port and ws://localhost:3001 URL. Removing those compose claims is sufficient; GATEWAY_PORT can remain for the standalone gateway.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-03": {
+      "status": "satisfiable",
+      "reason": "The three canonical publishable manifests currently contain the expected GitHub Packages/restricted/UNLICENSED values, and scripts/verify-pack.mjs centrally enumerates exactly those three packages and validates registry, license presence, packed files, and workspace dependency rewriting. The planned metadata and verifier changes are expressible.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-04": {
+      "status": "satisfiable",
+      "reason": "pnpm is the configured package manager, the existing pack verifier already proves workspace:* rewriting through pnpm pack, and the stable release workflow can be converted from push-on-main/GitHub Packages to workflow_dispatch/public npm without publishing during the workstream. WS-46 is ordered after WS-44 and explicitly adds create-swift-agent to the delivered workflow.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-05": {
+      "status": "satisfiable",
+      "reason": "No Verdaccio harness exists yet, but the current acceptance-install scripts identify the consumer operations that must be redirected, and WS-45 unambiguously requires a registry-protocol endpoint, publication of all three packages, consumer import/typecheck, teardown, and CI wiring.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-06": {
+      "status": "satisfiable",
+      "reason": "The CLI does not exist yet, but WS-45 provides the required registry protocol and generic publication path, while the existing SDK supports agent registration, session creation, runner hosting, streaming, and tool execution needed by the generated-project proof. WS-46 owns package creation, bin verification, real npx resolution, bootstrap reuse, and release-workflow inclusion.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-07": {
+      "status": "satisfiable",
+      "reason": "The server image contains the migration executable and health endpoint, the migration runbook defines the forward-only command, and WS-47 requires choosing a host only after verifying managed Postgres, Redis, WebSockets, single-instance operation, template support, and authenticated GHCR pulls. No existing server signature blocks the template.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-08": {
+      "status": "satisfiable",
+      "reason": "The public event union carries tool start/completion identity and the React vanilla client exposes every ChatEvent through onEvent. Duration can be measured by the playground between the two events, and WS-49 owns the public deployment and live smoke test.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-09": {
+      "status": "conflict",
+      "reason": "The mediator can read an authenticated RunRecord from GET /v1/runs/:runId, but that record does not contain total usage for a multi-round run. packages/runtime/src/loop.ts overwrites lastUsage on every provider round and complete() persists only the final round. Every successful playground tool call requires at least two model rounds, so settling completed runs against this value would systematically undercount provider spend. Correcting the runtime aggregation is forbidden, while the criterion requires actual-usage settlement for completed runs.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-10": {
+      "status": "satisfiable",
+      "reason": "The currently active README, quickstart, vision ladder, three package READMEs, and release workflows all expose the old posture and are assigned to WS-44 or terminal WS-49. WS-49 depends on WS-46, WS-47, and WS-48, so the final documentation pass occurs only after the scaffold, deploy button, and playground application exist.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-11": {
+      "status": "satisfiable",
+      "reason": "The workspace globs yield the stated current roster: three public-bound packages and nine private packages. Repository-wide active-text inspection found the private/restricted posture on the enumerated metadata, policy, documentation, workflow, verifier, registry-routing, and acceptance-harness surfaces; no additional active source was found outside that set. The two planned workspace members have explicit born-correct requirements and WS-49 is terminal.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-12": {
+      "status": "conflict",
+      "reason": "The unqualified phrase 'every deployment surface created by this program' includes three manifest-produced surfaces: the WS-46 generated compose file, the WS-47 managed-host template, and the WS-49 playground deployment. The generated local compose file has neither managed-host autoscaling nor a rolling-deployment operation to observe, and WS-46 contains none of SC-12's verification or documentation work. The program prose silently narrows the family to WS-47 and WS-49, contradicting the canonical criterion's asserted-equal family.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-13": {
+      "status": "satisfiable",
+      "reason": "The repository currently has one pull-request template and no DCO or CONTRIBUTING file. WS-44 correctly assigns creation of the two files, amendment of the existing template, and a pull-request commit check with positive and negative execution evidence.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-14": {
+      "status": "satisfiable",
+      "reason": "apps/server/Dockerfile is based on multi-architecture Node Alpine images, includes the migration artifacts, exposes the unified listener, and has a health check. A new buildx workflow can publish amd64 and arm64 automatically and authenticate the equivalence test before package visibility changes.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-15": {
+      "status": "conflict",
+      "reason": "SC-15, decisions 5/6, constraints.ghcrVisibility, and WS-50's detailed includes/excludes consistently say the program only documents the post-publish visibility click and never claims anonymous pullability. However, manifest workstreams[WS-50].scope.summary says WS-50 'makes that package anonymously pullable.' An author cannot satisfy that summary without performing the expressly excluded owner-only UI action.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-16": {
+      "status": "satisfiable",
+      "reason": "The public ChatEvent union exposes raw events, callId, tool name, and completion status; the runtime emits a failed completion before a timeout failure; and createChatSession exposes onEvent and disconnect. A new client can be constructed with the same session ID, token, and canonical WebSocket URL after intentional disconnect. Demo-owned budget and timestamps require no runtime field.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    },
+    "SC-17": {
+      "status": "satisfiable",
+      "reason": "The four commands exist at the root and map to Turbo tasks. The identified test contains the bare dynamic import inside a default-timeout test, and WS-51 requires auditing the same pattern repository-wide and proving repeated cache-bypassed runs. WS-49 is the sole terminal workstream and repeats the proof after both new workspace packages exist.",
+      "runId": "plan-audit-2026-08-20T04-28-25-795Z-65e3697b",
+      "at": "2026-08-20T04:34:20.020Z"
+    }
+  }
+}

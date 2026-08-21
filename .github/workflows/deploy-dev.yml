@@ -69,6 +69,10 @@ jobs:
           terraform import -var="aws_region=${{ secrets.AWS_REGION }}" \
             'module.database.aws_ssm_parameter.master_password' '/dev/swiftagent/db_master_password' 2>/dev/null || true
 
+          echo "Importing ECR repository created by the 'Ensure ECR repository exists' step..."
+          terraform import -var="aws_region=${{ secrets.AWS_REGION }}" \
+            'module.ecr.aws_ecr_repository.this' 'swiftagent/server' 2>/dev/null || true
+
           echo "State reconciliation complete"
 
       - name: Ensure ECR repository exists
@@ -108,6 +112,12 @@ jobs:
             --cluster $ECS_CLUSTER \
             --services $ECS_SERVICE
 
+      # Runs the identical migrator as local + CI (packages/db/dist/migrate.js,
+      # resolved from the image WORKDIR /app). Drift refusal is enforced by the
+      # migrator's own preflight (WS-26) — a diverged schema makes it exit
+      # non-zero, which the exitCode check below turns into a failed deploy. The
+      # only way to bypass the preflight is MIGRATE_SKIP_DRIFT_CHECK, reserved
+      # for the operator-driven reconciliation path — see docs/runbooks/migrations.md.
       - name: Run database migration
         run: |
           TASK_DEF=$(aws ecs describe-services \
@@ -148,6 +158,73 @@ jobs:
           fi
           echo "Migration completed successfully"
 
+      # Idempotently provision the resources the realtime smoke test (WS-35)
+      # assumes: a workspace, an API key whose sha256 == SMOKE_API_KEY, and a
+      # `smoke-echo` agent backed by the zero-cost echo provider. Runs the same
+      # one-off ECS task mechanism as the migration, on the same task def (so it
+      # has DATABASE_URL via SSM). SMOKE_API_KEY is passed as a container env
+      # override; the script persists only its hash. Requires the schema to
+      # exist, so it runs AFTER the migration.
+      - name: Provision realtime smoke resources
+        env:
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+        run: |
+          if [ -z "$SMOKE_API_KEY" ]; then
+            echo "SMOKE_API_KEY secret is not set for the dev environment — cannot provision the realtime smoke test."
+            exit 1
+          fi
+
+          TASK_DEF=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          NETWORK_CONFIG=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].networkConfiguration' \
+            --output json)
+
+          # Build the overrides JSON with jq so the secret is safely quoted.
+          OVERRIDES=$(jq -nc \
+            --arg name "$ENVIRONMENT-swiftagent" \
+            --arg key "$SMOKE_API_KEY" \
+            '{containerOverrides: [{
+              name: $name,
+              command: ["node", "packages/db/dist/provision-smoke.js"],
+              environment: [
+                {name: "SMOKE_API_KEY", value: $key},
+                {name: "SMOKE_AGENT_NAME", value: "smoke-echo"}
+              ]
+            }]}')
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $TASK_DEF \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --overrides "$OVERRIDES" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Waiting for smoke provisioning task to complete..."
+          aws ecs wait tasks-stopped \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Smoke provisioning failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          echo "Smoke provisioning completed successfully"
+
       - name: Smoke test
         env:
           HEALTH_URL: ${{ steps.tf-outputs.outputs.health_url }}
@@ -163,6 +240,34 @@ jobs:
             exit 1
           fi
           echo "Smoke test passed"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Realtime smoke test
+        # Proves the deployed realtime path end-to-end: POST /v1/sessions (API-key)
+        # → WS connect to the returned websocketUrl (/v1/stream?token=) → send_message
+        # → assert message_started → token(s) → message_completed. A failure here
+        # BLOCKS the deploy. See WS-35 / docs quickstart (WS-34).
+        env:
+          SMOKE_BASE_URL: http://${{ steps.tf-outputs.outputs.alb_dns_name }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          SMOKE_AGENT_NAME: smoke-echo
+        run: pnpm smoke:realtime
 
       - name: Notify deployment
         if: always()

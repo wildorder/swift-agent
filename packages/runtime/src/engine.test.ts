@@ -25,10 +25,20 @@ function makeAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
     systemPrompt: 'You are a helpful assistant.',
     memoryConfig: { strategy: 'last_n', maxMessages: 50 },
     toolRunnerUrl: null,
+    tools: [],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
   };
+}
+
+/** Builds permissive `{type:'object'}`-schema tool definitions by name. */
+function makeTools(...names: string[]): AgentRecord['tools'] {
+  return names.map((name) => ({
+    name,
+    description: `The ${name} tool`,
+    inputSchema: { type: 'object' },
+  }));
 }
 
 function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
@@ -144,6 +154,24 @@ function createMockDeps(overrides?: {
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
+        cancel: vi.fn(async (runId: string) => ({
+          runId,
+          sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
+          status: 'cancelled' as const,
+          model: 'openai/gpt-4o',
+          tokenUsage: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+        timeout: vi.fn(async (runId: string) => ({
+          runId,
+          sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
+          status: 'timed_out' as const,
+          model: 'openai/gpt-4o',
+          tokenUsage: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
         listBySession: vi.fn(async () => []),
       },
       toolCalls: {
@@ -174,8 +202,13 @@ function createMockDeps(overrides?: {
       },
     },
     modelRegistry: registry,
-    toolExecutor: overrides?.toolExecutor ?? {
-      execute: vi.fn(async () => ({ ok: true, output: 'done' }) as ToolCallResult),
+    // WS-21: the engine resolves the executor per-run from the agent record.
+    // Direct runAgentLoop tests instead put the executor on ctx (see below).
+    toolExecutorResolver: {
+      resolve: () =>
+        overrides?.toolExecutor ?? {
+          execute: vi.fn(async () => ({ ok: true, output: 'done' }) as ToolCallResult),
+        },
     },
   };
 }
@@ -401,6 +434,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent(),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Hello'));
@@ -441,9 +475,10 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('lookup') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor,
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'What is the answer?'));
@@ -455,12 +490,15 @@ describe('runAgentLoop', () => {
     expect(types).toContain('token');
     expect(types).toContain('message_completed');
 
+    // The persisted ToolCall uses a Swift Agent `tc_` id, NOT the provider id.
     expect(deps.db.toolCalls.create).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: 'lookup', callId: 'tc_001xxxxxxxxxxxxxxxxxxxx' }),
+      expect.objectContaining({ toolName: 'lookup', callId: expect.stringMatching(/^tc_/) as unknown as string }),
     );
+    const createdCallId = (deps.db.toolCalls.create as ReturnType<typeof vi.fn>).mock.calls[0][0].callId as string;
+    expect(createdCallId).not.toBe('tc_001xxxxxxxxxxxxxxxxxxxx');
     expect(toolExecutor.execute).toHaveBeenCalled();
     expect(deps.db.toolCalls.updateResult).toHaveBeenCalledWith(
-      'tc_001xxxxxxxxxxxxxxxxxxxx',
+      createdCallId,
       { value: 42 },
       'completed',
     );
@@ -486,9 +524,10 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('step1', 'step2') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Do both steps'));
@@ -522,9 +561,10 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('bad_tool') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor,
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Try the bad tool'));
@@ -533,8 +573,11 @@ describe('runAgentLoop', () => {
     expect(toolCompleted).toBeDefined();
     expect(toolCompleted).toHaveProperty('status', 'failed');
 
+    // Executor was invoked (tool is registered + args valid) and its failure
+    // is recorded under the Swift Agent `tc_` id.
+    expect(toolExecutor.execute).toHaveBeenCalled();
     expect(deps.db.toolCalls.updateResult).toHaveBeenCalledWith(
-      'tc_failxxxxxxxxxxxxxxxxxx',
+      expect.stringMatching(/^tc_/),
       'Not found',
       'failed',
     );
@@ -555,9 +598,10 @@ describe('runAgentLoop', () => {
     const ctx = {
       sessionId: 'ses_testxxxxxxxxxxxxxxxxx',
       runId: 'run_testxxxxxxxxxxxxxxxxx',
-      agentConfig: makeAgent(),
+      agentConfig: makeAgent({ tools: makeTools('infinite') }),
       abortSignal: new AbortController().signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(
@@ -590,6 +634,7 @@ describe('runAgentLoop', () => {
       agentConfig: makeAgent(),
       abortSignal: controller.signal,
       iterationCount: 0,
+      toolExecutor: { execute: vi.fn(async () => ({ ok: true as const, output: 'ok' })) },
     };
 
     const events = await collectEvents(runAgentLoop(ctx, deps, 'Cancel me'));
@@ -597,7 +642,10 @@ describe('runAgentLoop', () => {
     const lastEvent = events.at(-1);
     expect(lastEvent).toHaveProperty('type', 'run_failed');
     expect(lastEvent).toHaveProperty('code', 'CANCELLED');
-    expect(deps.db.runs.fail).toHaveBeenCalled();
+    // WS-24: a user cancellation finalizes via the conditional `cancel`
+    // transition (terminal `cancelled`), NOT `fail` (SC-13).
+    expect(deps.db.runs.cancel).toHaveBeenCalled();
+    expect(deps.db.runs.fail).not.toHaveBeenCalled();
   });
 });
 
