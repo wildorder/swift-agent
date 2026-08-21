@@ -74,7 +74,12 @@ resource "aws_ecs_task_definition" "this" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+        # busybox wget, NOT curl: the image is node:22-alpine, which ships no
+        # curl — `curl -f …` exits 127 (not found), so this check could never
+        # pass and every task was marked UNHEALTHY while serving traffic fine.
+        # 127.0.0.1, NOT localhost: the server binds 0.0.0.0 (IPv4 only) and
+        # alpine resolves localhost to ::1 first, which would refuse.
+        command     = ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3

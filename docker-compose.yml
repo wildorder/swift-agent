@@ -85,11 +85,9 @@ services:
     env_file:
       - path: .env
         required: false
-    # Override the image HEALTHCHECK with an IPv4 literal: the server listens on
-    # 0.0.0.0 (IPv4), but Alpine wget resolves `localhost` to ::1 first, so the
-    # image's own check always fails with "connection refused" (pre-existing
-    # Dockerfile defect surfaced by WS-43 — the bootstrap one-shot gates on this
-    # health status via depends_on).
+    # The image's own HEALTHCHECK is now correct (IPv4 literal); this override
+    # only tightens the cadence so `docker compose up` reaches healthy quickly
+    # — the bootstrap one-shot gates on this status via depends_on.
     healthcheck:
       test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1']
       interval: 5s
