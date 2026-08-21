@@ -69,6 +69,25 @@ jobs:
         working-directory: infra/envs/prod
         run: terraform apply -auto-approve -var="image_uri=${{ steps.build.outputs.image_uri }}"
 
+      # Derive the public endpoint from Terraform rather than hardcoding a
+      # domain: with enable_dns=false the stack serves plain HTTP on the raw
+      # ALB hostname (no TLS listener exists), and there is no custom domain
+      # until one is registered and delegated. tls_enabled gates the wss://
+      # realtime smoke below.
+      - name: Capture Terraform outputs
+        id: tf-outputs
+        working-directory: infra/envs/prod
+        run: |
+          DOMAIN=$(terraform output -raw domain_name)
+          if echo "$DOMAIN" | grep -q 'elb.amazonaws.com'; then
+            SCHEME=http; TLS=false
+          else
+            SCHEME=https; TLS=true
+          fi
+          echo "base_url=$SCHEME://$DOMAIN" >> $GITHUB_OUTPUT
+          echo "health_url=$SCHEME://$DOMAIN/health" >> $GITHUB_OUTPUT
+          echo "tls_enabled=$TLS" >> $GITHUB_OUTPUT
+
       - name: Wait for ECS service stability
         run: |
           aws ecs wait services-stable \
@@ -132,10 +151,75 @@ jobs:
           fi
           echo "Migration completed successfully"
 
-      - name: Smoke test
+      # Idempotently provision the resources the realtime smoke test assumes
+      # (same mechanism as deploy-dev): a workspace, an API key whose sha256 ==
+      # SMOKE_API_KEY, and a `smoke-echo` agent on the zero-cost echo provider.
+      - name: Provision realtime smoke resources
+        env:
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
         run: |
+          if [ -z "$SMOKE_API_KEY" ]; then
+            echo "SMOKE_API_KEY secret is not set — cannot provision the realtime smoke test."
+            exit 1
+          fi
+
+          TASK_DEF=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          NETWORK_CONFIG=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].networkConfiguration' \
+            --output json)
+
+          OVERRIDES=$(jq -nc \
+            --arg name "$ENVIRONMENT-swiftagent" \
+            --arg key "$SMOKE_API_KEY" \
+            '{containerOverrides: [{
+              name: $name,
+              command: ["node", "packages/db/dist/provision-smoke.js"],
+              environment: [
+                {name: "SMOKE_API_KEY", value: $key},
+                {name: "SMOKE_AGENT_NAME", value: "smoke-echo"}
+              ]
+            }]}')
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $TASK_DEF \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --overrides "$OVERRIDES" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Waiting for smoke provisioning task to complete..."
+          aws ecs wait tasks-stopped \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Smoke provisioning failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          echo "Smoke provisioning completed successfully"
+
+      - name: Smoke test
+        env:
+          HEALTH_URL: ${{ steps.tf-outputs.outputs.health_url }}
+        run: |
+          echo "Testing: $HEALTH_URL"
           for i in {1..5}; do
-            STATUS=$(curl -sf https://api.swiftagent.dev/health | jq -r '.status' 2>/dev/null) && break
+            STATUS=$(curl -sf "$HEALTH_URL" | jq -r '.status' 2>/dev/null) && break
             echo "Attempt $i failed, retrying in 10s..."
             sleep 10
           done
@@ -167,11 +251,23 @@ jobs:
         # → WS connect to the returned websocketUrl (/v1/stream?token=) → send_message
         # → assert message_started → token(s) → message_completed. A failure here
         # BLOCKS the deploy (and the release tag below). See WS-35 / docs quickstart (WS-34).
+        #
+        # GATED ON TLS: with enable_dns=false the server hands out a
+        # wss:// websocketUrl pointing at the raw ALB, which has no TLS
+        # listener — the WS connect cannot succeed until a domain is
+        # registered, delegated, and enable_dns applied. The gate keeps the
+        # deploy honest instead of red while the domain is pending; the
+        # loud log line below makes the skip visible.
+        if: steps.tf-outputs.outputs.tls_enabled == 'true'
         env:
-          SMOKE_BASE_URL: https://api.swiftagent.dev
+          SMOKE_BASE_URL: ${{ steps.tf-outputs.outputs.base_url }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           SMOKE_AGENT_NAME: smoke-echo
         run: pnpm smoke:realtime
+
+      - name: Realtime smoke skipped (no TLS yet)
+        if: steps.tf-outputs.outputs.tls_enabled != 'true'
+        run: echo "SKIPPED realtime smoke — enable_dns=false, no TLS listener; register + delegate the domain, enable DNS, and this step runs for real."
 
       - name: Tag image with release version
         if: github.event_name == 'release'

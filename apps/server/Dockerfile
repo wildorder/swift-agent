@@ -73,8 +73,11 @@ USER swiftagent
 # Expose the single unified API + WebSocket port
 EXPOSE 3000
 
+# 127.0.0.1, not localhost: the server binds 0.0.0.0 (IPv4 only) while alpine
+# resolves localhost to ::1 first, which refuses the connection and fails the
+# check on a perfectly healthy container.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
 
 ENTRYPOINT []
 CMD ["node", "apps/server/dist/main.js"]
