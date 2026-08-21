@@ -1,8 +1,10 @@
 name: Deploy Staging
 
+# Staging is not provisioned (no AWS account, OIDC role, or state backend).
+# Manual trigger only, so an accidental `staging` branch push cannot fire a
+# deploy into nothing. Restore the push trigger if staging is ever stood up.
 on:
-  push:
-    branches: [staging]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-staging

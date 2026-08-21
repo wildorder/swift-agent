@@ -1,4 +1,7 @@
 environment             = "prod"
+aws_region              = "us-west-2"
+state_bucket_arn        = "arn:aws:s3:::swiftagent-tf-state-548722509196"
+lock_table_arn          = "arn:aws:dynamodb:us-west-2:548722509196:table/swiftagent-terraform-locks"
 db_instance_class       = "db.t4g.medium"
 cache_node_type         = "cache.t4g.medium"
 num_cache_nodes         = 2
