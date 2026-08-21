@@ -91,6 +91,17 @@ no manual seeding:
 docker compose up
 ```
 
+The stack **pulls the published server image** from GHCR, pinned at its
+sha256 digest (see the
+[container image runbook](./docs/runbooks/container-image.md) for the
+pull/upgrade story — pulls are credential-free for everyone once the owner
+has performed the documented one-time visibility step). Contributors working
+on the server itself build from source instead:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
 The generated dev API key appears in **two places** (it is minted per checkout
 and never committed):
 

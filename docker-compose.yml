@@ -31,9 +31,14 @@ services:
   # A SINGLE public listener serves REST + WebSocket on API_PORT (see
   # apps/server/src/main.ts) — port 3000 is the only published port.
   swift-agent:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
+    # The published operator image, pinned at its sha256 MANIFEST-LIST digest
+    # (never a tag — GHCR tags are mutable; see docs/runbooks/container-image.md).
+    # Upgrade = commit a new digest from the latest publish-image.yml run.
+    # Contributors build from source instead with:
+    #   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+    # Until the owner's one-time GHCR visibility click, pulls authenticate
+    # (docker login ghcr.io with a read:packages PAT).
+    image: ghcr.io/wildorder/swift-agent@sha256:7934ac8f36fa9671c2a6384c30dea4e5008ba56df69ee7e4253619db32340a4d
     ports:
       - '3000:3000' # REST + WebSocket (unified listener)
     depends_on:
@@ -98,9 +103,9 @@ services:
   # dev API key, and fixture-backed `local-dev` agent. The raw key + runner
   # workspace id land in ./.swiftagent-local (gitignored) via the bind mount.
   bootstrap:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
+    # Same digest-pinned image as the server service (docker-compose.build.yml
+    # restores source builds for both).
+    image: ghcr.io/wildorder/swift-agent@sha256:7934ac8f36fa9671c2a6384c30dea4e5008ba56df69ee7e4253619db32340a4d
     command: ['node', 'packages/db/dist/provision-local.js']
     # Root, deliberately: on Linux the daemon creates the ./.swiftagent-local
     # bind mount root-owned, so the image's non-root user cannot write it.
